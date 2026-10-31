@@ -69,7 +69,7 @@ describe('import PDF', () => {
   })
 })
 
-import { migrate } from '../store/documents'
+import { migrate } from '../lib/migrate'
 import { docTitle } from '../lib/offers'
 
 describe('offres', () => {

@@ -127,13 +127,13 @@ export function ClaudePanel({ doc, update, request, onGoAts }: Props) {
         }
         case 'letter-json': {
           const data = extractJson<Partial<LetterDoc> & { recipient?: LetterDoc['recipient'] }>(answer)
-          const letter = newLetter(doc.templateId, false, doc, doc.job?.company ? `Lettre - ${doc.job.company}` : `Lettre - ${doc.name}`)
+          const letter = newLetter(doc.templateId, false, doc, doc.job ? [doc.job.title, doc.job.company].filter(Boolean).join(' - ') || doc.name : doc.name)
           Object.assign(letter, {
             subject: data.subject ?? letter.subject,
             salutation: data.salutation ?? letter.salutation,
             body: data.body ?? '',
             closing: data.closing ?? letter.closing,
-            job: doc.job,
+            offerId: doc.offerId,
           })
           if (data.recipient) letter.recipient = { ...letter.recipient, ...Object.fromEntries(Object.entries(data.recipient).filter(([, v]) => v)) }
           if (!letter.recipient.company && doc.job?.company) letter.recipient.company = doc.job.company

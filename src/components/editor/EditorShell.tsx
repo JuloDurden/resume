@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ChevronLeft, Download, FileJson, FileText, FileType2, Redo2, Undo2 } from 'lucide-react'
 import type { AnyDoc } from '../../types'
 import { useDocs } from '../../store/documents'
-import { docToText, download, safeFileName, toJson } from '../../lib/export'
+import { docToText, download, offersOf, safeFileName, toJson } from '../../lib/export'
 import { Menu, MenuItem, toast } from '../ui'
 
 export interface Tab {
@@ -104,7 +104,7 @@ export function EditorShell({ doc, tabs, tab, setTab, panel, preview, onPrint, e
               <MenuItem
                 icon={<FileJson size={15} />}
                 onClick={() => {
-                  download(`${base}.json`, toJson([doc]))
+                  download(`${base}.json`, toJson([doc], offersOf([doc], useDocs.getState().offers)))
                   toast.ok('Fichier JSON téléchargé')
                   close()
                 }}

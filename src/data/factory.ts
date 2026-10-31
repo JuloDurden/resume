@@ -1,8 +1,9 @@
 import { uid } from '../lib/ids'
 import { todayFr } from '../lib/dates'
-import type { Header, LetterDoc, ResumeDoc, Section, SectionItem, SectionType } from '../types'
+import type { Header, LetterDoc, LetterOptions, ResumeDoc, Section, SectionItem, SectionType } from '../types'
 import { SECTION_DEFS } from './sectionDefs'
 import { applyTemplate, templateStyle } from './templates'
+import { applyLetterTemplate } from './letterTemplates'
 
 export function makeSection(type: SectionType, items: Omit<SectionItem, 'id'>[] = [], title?: string): Section {
   const def = SECTION_DEFS[type]
@@ -137,9 +138,20 @@ export function newResume(templateId: string, sample: boolean, name = 'Mon CV'):
 }
 
 export function newLetter(templateId: string, sample: boolean, from?: ResumeDoc, name = 'Ma lettre de motivation'): LetterDoc {
+  if (!from) return applyLetterTemplate(buildLetter(templateId, sample, undefined, name), 'directe')
+  return buildLetter(templateId, sample, from, name)
+}
+
+function buildLetter(templateId: string, sample: boolean, from: ResumeDoc | undefined, name: string): LetterDoc {
   const now = Date.now()
   const style = from ? { ...from.style } : templateStyle(templateId)
   if (style.headerPlacement !== 'top') style.headerPlacement = 'top'
+  // une lettre assortie à un CV deux colonnes reprend sa colonne latérale
+  const options: Partial<LetterOptions> | undefined = from
+    ? from.layout.columns === 2
+      ? { layout: 'sidebar', sidebarPosition: from.layout.sidebarPosition, sidebarWidth: Math.min(from.layout.sidebarWidth, 33), recipientAlign: 'left', dateAlign: 'left', signatureAlign: 'left' }
+      : { layout: 'single' }
+    : undefined
   const header: Header = from
     ? { ...from.header, contacts: from.header.contacts.map((c) => ({ ...c })) }
     : sample
@@ -153,6 +165,7 @@ export function newLetter(templateId: string, sample: boolean, from?: ResumeDoc,
     updatedAt: now,
     templateId: from?.templateId ?? templateId,
     style,
+    options,
     header,
     recipient: sample
       ? { name: 'Madame, Monsieur', title: 'Service recrutement', company: 'Entreprise Cible', address: '12 rue de l\'Exemple\n34000 Montpellier' }

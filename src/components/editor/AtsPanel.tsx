@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, ExternalLink, Info, Plus, RotateCcw, Sparkles, Trash2, XCircle } from 'lucide-react'
-import type { JobStatus, JobTarget, ResumeDoc } from '../../types'
-import { JOB_STATUS, jobsOf } from '../../lib/jobs'
+import { AlertTriangle, Check, CheckCircle2, Info, Link2, Plus, RotateCcw, Sparkles, XCircle } from 'lucide-react'
+import type { JobTarget, Offer, ResumeDoc } from '../../types'
+import { JOB_STATUS, logoUrl, newOffer } from '../../lib/offers'
+import { useDocs, useOffer } from '../../store/documents'
+import { OfferFields } from '../OfferFields'
 import { matchKeywords, overallScore, parseScore, runChecks, cvStems, type CheckStatus } from '../../lib/ats'
 import { resumeToText } from '../../lib/export'
-import { Field, Select, TextArea, TextInput, confirmAction } from '../ui'
+import { TextInput } from '../ui'
 
 const STATUS_ICON: Record<CheckStatus, ReactNode> = {
   ok: <CheckCircle2 size={16} className="st-ok" />,
@@ -32,63 +34,91 @@ function Gauge({ value, label }: { value: number; label: string }) {
 }
 
 interface Props {
+  /** CV, avec `job` = offre rattachée */
   doc: ResumeDoc
   pages: number
-  setJob: (j: JobTarget) => void
-  onSelect: (id: string) => void
-  onNew: () => void
-  onDelete: (id: string) => void
-  onScore: (score: number) => void
+  onLink: (offerId: string | undefined) => void
   onDeep: (action: 'ats' | 'tailor', missing: string[]) => void
+  onImportLink: () => void
 }
 
 const fmtDate = (t?: number) => (t ? new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 
-function OffersList({ doc, onSelect, onNew, onDelete }: Pick<Props, 'doc' | 'onSelect' | 'onNew' | 'onDelete'>) {
-  const jobs = jobsOf(doc)
-  const active = doc.job?.id ?? (jobs[0]?.id === 'initial' ? 'initial' : undefined)
+export function OfferLogo({ offer, size = 28 }: { offer: Offer; size?: number }) {
+  const [broken, setBroken] = useState(false)
+  const src = logoUrl(offer)
+  const letter = (offer.company || offer.title || '?').trim().charAt(0).toUpperCase()
+  return src && !broken ? (
+    <img className="offer-logo" src={src} alt="" width={size} height={size} onError={() => setBroken(true)} />
+  ) : (
+    <span className="offer-logo fallback" style={{ width: size, height: size, fontSize: size * 0.45 }}>
+      {letter}
+    </span>
+  )
+}
+
+function OffersList({ doc, onLink, onImportLink }: Pick<Props, 'doc' | 'onLink' | 'onImportLink'>) {
+  const offersMap = useDocs((s) => s.offers)
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const offers = useMemo(() => Object.values(offersMap).sort((a, b) => b.createdAt - a.createdAt), [offersMap])
+  const [showAll, setShowAll] = useState(false)
+  const shown = showAll ? offers : offers.slice(0, 5)
   return (
     <section className="style-group">
       <div className="offers-head">
-        <h3>Mes offres ({jobs.length})</h3>
-        <button className="btn sm" onClick={onNew}>
-          <Plus size={14} /> Nouvelle offre
-        </button>
+        <h3>Offre rattachée à ce CV</h3>
+        <div className="row-gap">
+          <button className="btn sm" onClick={onImportLink} title="Lire une annonce depuis son lien, avec Claude">
+            <Link2 size={14} /> Depuis un lien
+          </button>
+          <button
+            className="btn sm"
+            onClick={() => {
+              const o = newOffer()
+              saveOffer(o)
+              onLink(o.id)
+            }}
+          >
+            <Plus size={14} /> Nouvelle
+          </button>
+        </div>
       </div>
-      {jobs.length === 0 ? (
-        <p className="muted small">Collez une offre ci-dessous : elle sera conservée ici avec son score et le suivi de votre candidature.</p>
+      {offers.length === 0 ? (
+        <p className="muted small">Aucune offre pour l'instant. Créez-en une ou collez son lien : elle sera visible dans la vue « Offres » de l'accueil, avec ce CV et la lettre associée.</p>
       ) : (
         <ul className="offers">
-          {jobs.map((j) => (
-            <li key={j.id} className={j.id === active ? 'on' : ''} onClick={() => j.id && onSelect(j.id)}>
-              <div className="offer-main">
-                <strong>{j.title || 'Offre sans titre'}</strong>
-                <span>
-                  {[j.company, fmtDate(j.createdAt)].filter(Boolean).join(' · ')}
-                </span>
-              </div>
-              <span className={`offer-status st-${j.status ?? 'todo'}`}>{JOB_STATUS[j.status ?? 'todo']}</span>
-              {j.lastScore !== undefined && <span className={`offer-score ${j.lastScore >= 75 ? 'good' : j.lastScore >= 55 ? 'mid' : 'low'}`}>{j.lastScore}</span>}
-              <button
-                className="icon-btn xs"
-                title="Supprimer cette offre"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (j.id && confirmAction(`Supprimer l'offre « ${j.title || 'sans titre'} » ?`)) onDelete(j.id)
-                }}
-              >
-                <Trash2 size={13} />
-              </button>
-            </li>
-          ))}
+          {shown.map((j) => {
+            const linked = j.id === doc.offerId
+            const score = j.scores?.[doc.id]
+            return (
+              <li key={j.id} className={linked ? 'on' : ''} onClick={() => onLink(linked ? undefined : j.id)} title={linked ? 'Cliquer pour détacher ce CV de l\'offre' : 'Rattacher ce CV à cette offre'}>
+                <OfferLogo offer={j} size={24} />
+                <div className="offer-main">
+                  <strong>{j.title || 'Offre sans titre'}</strong>
+                  <span>{[j.company, fmtDate(j.createdAt)].filter(Boolean).join(' · ')}</span>
+                </div>
+                <span className={`offer-status st-${j.status ?? 'todo'}`}>{JOB_STATUS[j.status ?? 'todo']}</span>
+                {score !== undefined && <span className={`offer-score ${score >= 75 ? 'good' : score >= 55 ? 'mid' : 'low'}`}>{score}</span>}
+                {linked && <Check size={15} className="st-ok" />}
+              </li>
+            )
+          })}
         </ul>
+      )}
+      {offers.length > 5 && (
+        <button className="btn ghost sm self-start" onClick={() => setShowAll((v) => !v)}>
+          {showAll ? 'Afficher moins' : `Afficher les ${offers.length} offres`}
+        </button>
       )}
     </section>
   )
 }
 
-export function AtsPanel({ doc, pages, setJob, onSelect, onNew, onDelete, onScore, onDeep }: Props) {
-  const job = doc.job ?? {}
+export function AtsPanel({ doc, pages, onLink, onDeep, onImportLink }: Props) {
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const offer = useOffer(doc.offerId)
+  const job: JobTarget = offer ?? {}
+  const setJob = (j: JobTarget) => offer && saveOffer({ ...offer, ...j })
   const [extra, setExtra] = useState('')
   const [showText, setShowText] = useState(false)
   const cvText = useMemo(() => resumeToText(doc), [doc])
@@ -107,54 +137,27 @@ export function AtsPanel({ doc, pages, setJob, onSelect, onNew, onDelete, onScor
   const ignored = job.ignored ?? []
 
   useEffect(() => {
-    if (match && job.lastScore !== score) onScore(score)
-  }, [score, match, job.lastScore, onScore])
+    if (offer && match && offer.scores?.[doc.id] !== score) saveOffer({ ...offer, scores: { ...offer.scores, [doc.id]: score } })
+  }, [score, match, offer, doc.id, saveOffer])
 
-  const toggleIgnore = (key: string) => setJob({ ...job, ignored: ignored.includes(key) ? ignored.filter((k) => k !== key) : [...ignored, key] })
+  const toggleIgnore = (key: string) => setJob({ ignored: ignored.includes(key) ? ignored.filter((k) => k !== key) : [...ignored, key] })
   const addExtra = () => {
     const v = extra.trim()
     if (!v || !cvStems(v).length) return
-    setJob({ ...job, extra: [...extras, v] })
+    setJob({ extra: [...extras, v] })
     setExtra('')
   }
 
   return (
     <div className="panel-content">
-      <OffersList doc={doc} onSelect={onSelect} onNew={onNew} onDelete={onDelete} />
-      <section className="style-group">
-        <h3>Offre analysée</h3>
-        <div className="form-stack">
-          <div className="grid-2">
-            <Field label="Intitulé du poste">
-              <TextInput value={job.title} onChange={(v) => setJob({ ...job, title: v })} />
-            </Field>
-            <Field label="Entreprise">
-              <TextInput value={job.company} onChange={(v) => setJob({ ...job, company: v })} />
-            </Field>
-          </div>
-          <div className="grid-2">
-            <Field label="Suivi">
-              <Select value={job.status ?? 'todo'} onChange={(v) => setJob({ ...job, status: v })} options={(Object.keys(JOB_STATUS) as JobStatus[]).map((k) => ({ value: k, label: JOB_STATUS[k] }))} />
-            </Field>
-            <Field label="Lien de l'annonce">
-              <div className="row-gap">
-                <TextInput value={job.url} onChange={(v) => setJob({ ...job, url: v })} placeholder="https://" />
-                {job.url && (
-                  <a className="icon-btn bordered" href={/^https?:/i.test(job.url) ? job.url : `https://${job.url}`} target="_blank" rel="noreferrer" title="Ouvrir l'annonce">
-                    <ExternalLink size={15} />
-                  </a>
-                )}
-              </div>
-            </Field>
-          </div>
-          <Field label="Texte de l'annonce" hint="Copiez-collez l'annonce complète : missions, profil, compétences.">
-            <TextArea value={job.description} minRows={6} onChange={(v) => setJob({ ...job, description: v })} placeholder="Collez ici le texte de l'offre..." />
-          </Field>
-          <Field label="Notes">
-            <TextArea value={job.notes} minRows={2} onChange={(v) => setJob({ ...job, notes: v })} placeholder="Contact, date d'envoi, relance..." />
-          </Field>
-        </div>
-      </section>
+      <OffersList doc={doc} onLink={onLink} onImportLink={onImportLink} />
+      {offer ? (
+        <OfferFields offer={offer} onChange={(o) => saveOffer(o)} />
+      ) : (
+        <section className="style-group">
+          <p className="muted small">Rattachez ce CV à une offre (ou créez-en une) pour mesurer la correspondance des mots-clés. Les contrôles de lisibilité ci-dessous restent valables sans offre.</p>
+        </section>
+      )}
 
       <section className="style-group">
         <div className="ats-scores">
@@ -213,7 +216,7 @@ export function AtsPanel({ doc, pages, setJob, onSelect, onNew, onDelete, onScor
             </button>
           </div>
           {ignored.length > 0 && (
-            <button className="btn ghost sm self-start" onClick={() => setJob({ ...job, ignored: [] })}>
+            <button className="btn ghost sm self-start" onClick={() => setJob({ ignored: [] })}>
               <RotateCcw size={14} /> Rétablir {ignored.length} mot(s)-clé(s) ignoré(s)
             </button>
           )}

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { del, get, set } from 'idb-keyval'
-import type { AnyDoc } from '../types'
+import type { AnyDoc, Offer } from '../types'
 import { uid } from '../lib/ids'
 
 const idbStorage: StateStorage = {
@@ -20,8 +20,11 @@ interface History {
   lastPush: number
 }
 
-interface DocsState {
+export interface DocsState {
   docs: Record<string, AnyDoc>
+  offers: Record<string, Offer>
+  /** Suppressions récentes (id -> date), utiles à la synchronisation */
+  deleted: Record<string, number>
   hydrated: boolean
   history: Record<string, History>
   lastBackup?: number
@@ -29,10 +32,14 @@ interface DocsState {
   update: <T extends AnyDoc>(id: string, fn: (d: T) => T, opts?: { coalesce?: boolean; history?: boolean }) => void
   remove: (id: string) => void
   duplicate: (id: string) => string | undefined
-  importDocs: (docs: AnyDoc[]) => number
+  importDocs: (docs: AnyDoc[], offers?: Offer[]) => number
   undo: (id: string) => void
   redo: (id: string) => void
   markBackup: () => void
+  saveOffer: (o: Offer) => void
+  removeOffer: (id: string) => void
+  /** Remplace les données par celles venues de la synchronisation (sans toucher à l'historique d'annulation) */
+  applyRemote: (docs: AnyDoc[], offers: Offer[], deleted: Record<string, number>) => void
 }
 
 const MAX_HISTORY = 80
@@ -41,6 +48,8 @@ export const useDocs = create<DocsState>()(
   persist(
     (setState, getState) => ({
       docs: {},
+      offers: {},
+      deleted: {},
       hydrated: false,
       history: {},
       add: (doc) => setState((s) => ({ docs: { ...s.docs, [doc.id]: doc } })),
@@ -63,7 +72,7 @@ export const useDocs = create<DocsState>()(
         setState((s) => {
           const docs = { ...s.docs }
           delete docs[id]
-          return { docs }
+          return { docs, deleted: { ...s.deleted, [id]: Date.now() } }
         }),
       duplicate: (id) => {
         const cur = getState().docs[id]
@@ -75,10 +84,15 @@ export const useDocs = create<DocsState>()(
         getState().add(copy)
         return copy.id
       },
-      importDocs: (docs) => {
+      importDocs: (docs, offers = []) => {
         let n = 0
         setState((s) => {
           const all = { ...s.docs }
+          const allOffers = { ...s.offers }
+          for (const o of offers) {
+            if (!o?.id) continue
+            if (!allOffers[o.id] || (allOffers[o.id].updatedAt ?? 0) < (o.updatedAt ?? 0)) allOffers[o.id] = structuredClone(o)
+          }
           for (const d of docs) {
             if (!d || (d.kind !== 'resume' && d.kind !== 'letter')) continue
             const doc = structuredClone(d)
@@ -94,7 +108,7 @@ export const useDocs = create<DocsState>()(
             all[doc.id] = doc
             n++
           }
-          return { docs: all }
+          return migrate({ docs: all, offers: allOffers })
         })
         return n
       },
@@ -103,7 +117,7 @@ export const useDocs = create<DocsState>()(
           const h = s.history[id]
           const cur = s.docs[id]
           if (!h || !h.past.length || !cur) return s
-          const prev = h.past[h.past.length - 1]
+          const prev = { ...h.past[h.past.length - 1], updatedAt: Date.now() }
           return {
             docs: { ...s.docs, [id]: prev },
             history: { ...s.history, [id]: { past: h.past.slice(0, -1), future: [cur, ...h.future], lastPush: 0 } },
@@ -114,28 +128,76 @@ export const useDocs = create<DocsState>()(
           const h = s.history[id]
           const cur = s.docs[id]
           if (!h || !h.future.length || !cur) return s
-          const nxt = h.future[0]
+          const nxt = { ...h.future[0], updatedAt: Date.now() }
           return {
             docs: { ...s.docs, [id]: nxt },
             history: { ...s.history, [id]: { past: [...h.past, cur], future: h.future.slice(1), lastPush: 0 } },
           }
         }),
       markBackup: () => setState({ lastBackup: Date.now() }),
+      saveOffer: (o) => setState((s) => ({ offers: { ...s.offers, [o.id]: { ...o, updatedAt: Date.now() } } })),
+      removeOffer: (id) =>
+        setState((s) => {
+          const offers = { ...s.offers }
+          delete offers[id]
+          const docs = Object.fromEntries(
+            Object.entries(s.docs).map(([k, d]) => [k, d.offerId === id ? ({ ...d, offerId: undefined, updatedAt: Date.now() } as AnyDoc) : d]),
+          )
+          return { offers, docs, deleted: { ...s.deleted, [id]: Date.now() } }
+        }),
+      applyRemote: (docs, offers, deleted) =>
+        setState((s) => ({
+          docs: Object.fromEntries(docs.map((d) => [d.id, d])),
+          offers: Object.fromEntries(offers.map((o) => [o.id, o])),
+          deleted: { ...s.deleted, ...deleted },
+        })),
     }),
     {
       name: 'resume-app-docs',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ docs: s.docs, lastBackup: s.lastBackup }) as unknown as DocsState,
+      partialize: (s) => ({ docs: s.docs, offers: s.offers, deleted: s.deleted, lastBackup: s.lastBackup }) as unknown as DocsState,
+      migrate: (persisted) => persisted as DocsState,
       onRehydrateStorage: () => () => {
-        useDocs.setState({ hydrated: true })
+        const s = useDocs.getState()
+        useDocs.setState({ ...migrate({ docs: s.docs, offers: s.offers ?? {} }), deleted: s.deleted ?? {}, hydrated: true })
       },
     },
   ),
 )
 
+/**
+ * Migration : les offres autrefois stockées dans chaque CV (job / jobs) ou lettre (job)
+ * deviennent des offres globales, et le document est rattaché à son offre active.
+ */
+export function migrate(state: { docs: Record<string, AnyDoc>; offers: Record<string, Offer> }) {
+  const offers = { ...state.offers }
+  const docs = { ...state.docs }
+  for (const [id, d] of Object.entries(docs)) {
+    const legacy = [...(d.kind === 'resume' ? (d.jobs ?? []) : []), ...(d.job ? [d.job] : [])].filter((j) => j && (j.title || j.description || j.company))
+    if (!legacy.length) continue
+    let activeId: string | undefined = d.offerId
+    for (const j of legacy) {
+      const oid = j.id && j.id !== 'initial' ? j.id : uid()
+      if (!offers[oid]) {
+        const { lastScore, ...rest } = j
+        offers[oid] = { ...rest, id: oid, createdAt: j.createdAt ?? d.createdAt, updatedAt: Date.now(), scores: lastScore !== undefined ? { [id]: lastScore } : {} }
+      }
+      if (d.job && (j === d.job || j.id === d.job.id)) activeId = activeId ?? oid
+    }
+    const next = { ...d, offerId: activeId, job: undefined } as AnyDoc
+    if (next.kind === 'resume') delete next.jobs
+    docs[id] = next
+  }
+  return { docs, offers }
+}
+
 export function useDoc<T extends AnyDoc>(id: string | undefined): T | undefined {
   return useDocs((s) => (id ? (s.docs[id] as T | undefined) : undefined))
+}
+
+export function useOffer(id: string | undefined): Offer | undefined {
+  return useDocs((s) => (id ? s.offers[id] : undefined))
 }
 
 if (typeof navigator !== 'undefined' && navigator.storage?.persist) {

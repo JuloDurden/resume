@@ -1,4 +1,4 @@
-import type { AnyDoc, LetterDoc, ResumeDoc, Section } from '../types'
+import type { AnyDoc, LetterDoc, Offer, ResumeDoc, Section } from '../types'
 import { formatRange } from './dates'
 import { paragraphs, stripInline } from './inline'
 import { SECTION_DEFS } from '../data/sectionDefs'
@@ -29,16 +29,25 @@ export function safeFileName(name: string) {
   )
 }
 
-export function toJson(docs: AnyDoc[]): string {
-  return JSON.stringify({ format: APP_FORMAT, version: APP_VERSION, exportedAt: new Date().toISOString(), documents: docs }, null, 2)
+export function toJson(docs: AnyDoc[], offers: Offer[] = []): string {
+  return JSON.stringify({ format: APP_FORMAT, version: APP_VERSION, exportedAt: new Date().toISOString(), documents: docs, offers }, null, 2)
 }
 
-export function parseJson(text: string): AnyDoc[] {
+/** Lit une sauvegarde : documents et offres (les anciennes sauvegardes n'ont que des documents). */
+export function parseBackup(text: string): { docs: AnyDoc[]; offers: Offer[] } {
   const data = JSON.parse(text)
-  if (Array.isArray(data)) return data
-  if (data?.documents && Array.isArray(data.documents)) return data.documents
-  if (data?.kind === 'resume' || data?.kind === 'letter') return [data]
+  const offers: Offer[] = Array.isArray(data?.offers) ? data.offers : []
+  if (Array.isArray(data)) return { docs: data, offers }
+  if (data?.documents && Array.isArray(data.documents)) return { docs: data.documents, offers }
+  if (data?.kind === 'resume' || data?.kind === 'letter') return { docs: [data], offers }
   throw new Error('Format de fichier non reconnu')
+}
+
+export const parseJson = (text: string): AnyDoc[] => parseBackup(text).docs
+
+/** Offres rattachées à une liste de documents. */
+export function offersOf(docs: AnyDoc[], all: Record<string, Offer>): Offer[] {
+  return [...new Set(docs.map((d) => d.offerId).filter(Boolean) as string[])].map((id) => all[id]).filter(Boolean)
 }
 
 /* ---------- Texte brut et Markdown ---------- */

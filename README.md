@@ -1,34 +1,42 @@
 # Resume
 
-Éditeur personnel de CV et de lettres de motivation, hébergé gratuitement sur GitHub Pages.
+Éditeur de CV et de lettres de motivation, avec suivi des candidatures. Application web sans serveur, hébergée sur GitHub Pages.
 
-**Application : https://julodurden.github.io/resume/**
+**Application et vitrine : https://julodurden.github.io/resume/**
+
+Projet conçu par Julien Clavel pour remplacer un abonnement à un service en ligne de création de CV, avec Claude comme assistant de rédaction.
 
 ## Fonctionnalités
 
-- **9 modèles** (dont « Sarcelle », reproduisant la mise en page du CV de Julien) (une ou deux colonnes, bandeau, colonne latérale colorée), changeables à tout moment sans perdre le contenu.
-- **Sections libres** : profil, expérience, formation, compétences, langues, certifications, projets, réalisations clés, centres d'intérêt, bénévolat, prix, publications, références, texte libre, section personnalisée. Renommer, masquer, dupliquer, réordonner par glisser-déposer, changer de colonne.
-- **Personnalisation** : polices (23 Google Fonts + polices système), tailles, interligne, marges, espacements, couleurs et palettes, style des titres, disposition et emplacement de l'en-tête, photo, format des dates, symbole des puces, A4 ou Letter.
-- **Aperçu paginé en direct**, identique au PDF. Cliquer sur un bloc de l'aperçu ouvre son édition.
-- **Analyse ATS** : collez l'offre, obtenez les mots-clés présents et manquants, un score, et une quinzaine de contrôles (coordonnées, dates, résultats chiffrés, verbes d'action, titres de sections standards, longueur...).
-- **Claude** : prompts prêts à l'emploi (adapter le CV à l'offre, rédiger la lettre, réécrire des puces, améliorer le résumé, traduire en anglais, préparer l'entretien). On copie le prompt dans Claude.ai, on recolle la réponse, l'application l'applique. Aucune clé d'API.
-- **Import de CV PDF** via Claude : le contenu est converti en sections modifiables.
-- **Lettres de motivation** assorties au CV (en-tête et style synchronisés).
-- **Exports** : PDF (texte sélectionnable, liens actifs), JSON réimportable, Markdown, texte brut.
-- **Annuler / rétablir** (Ctrl+Z / Ctrl+Y), sauvegarde automatique.
+**CV**
+- 9 modèles (une ou deux colonnes, bandeau, colonne latérale colorée), interchangeables sans perte de contenu.
+- 15 types de sections, à renommer, masquer, dupliquer et réordonner par glisser-déposer entre colonnes.
+- Personnalisation visuelle : couleurs, polices, tailles, interligne, marges, style des titres, en-tête, photo, intitulés des entrées, affichage des compétences.
+- Aperçu paginé en direct, identique au PDF exporté (texte sélectionnable, liens actifs).
 
-## Où sont mes données ?
+**Lettres de motivation**
+- 6 modèles, ou le style exact d'un CV pour un dossier homogène.
+- Destinataire, date, objet, paragraphes et signature réglables ; signature manuscrite en image (fond rendu transparent automatiquement).
 
-Uniquement dans le navigateur (IndexedDB), jamais sur un serveur. Conséquences :
+**Offres et candidatures**
+- Chaque offre regroupe son CV et sa lettre, avec statut de suivi, notes, contacts et logo de l'entreprise.
+- Ajout d'une offre depuis son lien : Claude lit l'annonce et en extrait le poste, l'employeur et le texte complet.
 
-- un autre navigateur ou ordinateur ne voit pas vos documents ;
-- vider les données du site efface les documents.
+**Analyse ATS**
+- Mots-clés de l'offre présents, proches ou absents (racinisation du français), contrôles de lisibilité par les logiciels de recrutement, conseils de rédaction séparés du score.
 
-Utilisez **Sauvegarder tout** sur l'accueil pour télécharger un fichier JSON, et **Importer** pour le restaurer ailleurs.
+**Claude**
+- Prompts prêts à l'emploi : adapter un CV à une offre, rédiger ou relire une lettre, réécrire des puces, traduire, préparer un entretien, importer un CV PDF. La réponse collée est appliquée automatiquement.
 
-## Export PDF
+**Données**
+- Stockage local dans le navigateur (IndexedDB).
+- Sauvegarde automatique optionnelle dans un dépôt GitHub privé (token à accès limité), pour retrouver ses documents sur n'importe quel navigateur.
+- Vitrine publique : une sélection de documents visibles par les visiteurs, sans accès aux données privées.
+- Exports PDF, JSON, Markdown et texte.
 
-Le bouton **PDF** ouvre l'impression du navigateur. Choisissez « Enregistrer au format PDF », marges « Aucune » si proposé, et cochez « Graphiques d'arrière-plan » pour garder les couleurs. Chrome ou Edge donnent le meilleur résultat.
+## Sauvegarde GitHub
+
+Accueil > **Sauvegarde GitHub** : créez un dépôt **privé** (ex. `resume-data`), puis un token « fine-grained » limité à ce dépôt avec la permission **Contents : Read and write**. Chaque modification est envoyée en un commit quelques secondes après la saisie. Le token reste dans le navigateur et n'est transmis qu'à l'API GitHub.
 
 ## Développement
 
@@ -39,6 +47,6 @@ npm test
 npm run build
 ```
 
-Chaque push sur `main` est testé, construit puis déployé par GitHub Actions (`.github/workflows/deploy.yml`).
+Chaque push sur `main` est testé, construit puis déployé par GitHub Actions.
 
-Pile : React 19, TypeScript, Vite, Zustand, idb-keyval, dnd-kit, lucide.
+Pile : React 19, TypeScript, Vite, Zustand, idb-keyval, dnd-kit, lucide, Vitest.

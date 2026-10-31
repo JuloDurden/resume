@@ -1,16 +1,20 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, DatabaseBackup, FileUp, FilePlus2, FileSignature, FileJson, MoreVertical, Pencil, Trash2, Upload } from 'lucide-react'
-import type { AnyDoc, ResumeDoc } from '../types'
+import { Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
+import type { ResumeDoc } from '../types'
 import { useDocs } from '../store/documents'
 import { TEMPLATES } from '../data/templates'
 import { newLetter, newResume } from '../data/factory'
-import { download, parseJson, safeFileName, toJson } from '../lib/export'
+import { download, parseBackup, toJson } from '../lib/export'
 import { DocThumb } from '../components/DocThumb'
+import { DocCard } from '../components/dashboard/DocCard'
+import { OffersView } from '../components/dashboard/OffersView'
 import { PdfImportModal } from '../components/PdfImportModal'
-import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput, confirmAction, toast } from '../components/ui'
+import { SyncButton, SyncModal } from '../components/SyncModal'
+import { ShowcaseGrid, ShowcaseIntro, useShowcase } from './Showcase'
+import { useSync } from '../store/sync'
+import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput, toast } from '../components/ui'
 
-const fmt = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [tpl, setTpl] = useState('epure')
@@ -96,10 +100,11 @@ function NewLetterModal({ open, onClose, resumes }: { open: boolean; onClose: ()
             onClick={() => {
               const r = resumes.find((x) => x.id === from)
               const l = newLetter(r?.templateId ?? 'epure', !r, r, name.trim() || 'Lettre de motivation')
-              if (r?.job) {
-                l.job = r.job
-                if (r.job.company) l.recipient.company = r.job.company
-                if (r.job.title) l.subject = `Candidature au poste de ${r.job.title}`
+              const of = r?.offerId ? useDocs.getState().offers[r.offerId] : undefined
+              if (of) {
+                l.offerId = of.id
+                if (of.company) l.recipient.company = of.company
+                if (of.title) l.subject = `Candidature au poste de ${of.title}`
               }
               add(l)
               onClose()
@@ -127,26 +132,30 @@ export default function Dashboard() {
   const docsMap = useDocs((s) => s.docs)
   const hydrated = useDocs((s) => s.hydrated)
   const lastBackup = useDocs((s) => s.lastBackup)
-  const { remove, duplicate, update, importDocs, markBackup } = useDocs.getState()
-  const navigate = useNavigate()
+  const { importDocs, markBackup } = useDocs.getState()
   const [filter, setFilter] = useState<'all' | 'resume' | 'letter'>('all')
-  const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | null>(null)
+  const [view, setView] = useState<'docs' | 'offers'>(() => (localStorage.getItem('resume-dash-view') === 'offers' ? 'offers' : 'docs'))
+  const offersCount = useDocs((s) => Object.keys(s.offers).length)
+  useEffect(() => localStorage.setItem('resume-dash-view', view), [view])
+  const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | 'sync' | null>(null)
+  const showcase = useShowcase()
+  const syncOn = useSync((s) => s.status !== 'off')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const docs = useMemo(() => Object.values(docsMap).sort((a, b) => b.updatedAt - a.updatedAt), [docsMap])
   const resumes = useMemo(() => docs.filter((d): d is ResumeDoc => d.kind === 'resume'), [docs])
   const shown = docs.filter((d) => filter === 'all' || d.kind === filter)
-  const needBackup = docs.length > 0 && (!lastBackup || Date.now() - lastBackup > 14 * 86400000)
+  const needBackup = !syncOn && docs.length > 0 && (!lastBackup || Date.now() - lastBackup > 14 * 86400000)
 
-  const open = (d: AnyDoc) => navigate(d.kind === 'resume' ? `/cv/${d.id}` : `/lettre/${d.id}`)
   const backup = () => {
-    download(`resume-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, toJson(docs))
+    download(`resume-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, toJson(docs, Object.values(useDocs.getState().offers)))
     markBackup()
     toast.ok(`${docs.length} document(s) sauvegardé(s)`)
   }
   const onImport = async (f: File) => {
     try {
-      const n = importDocs(parseJson(await f.text()))
+      const b = parseBackup(await f.text())
+      const n = importDocs(b.docs, b.offers)
       toast.ok(n ? `${n} document(s) importé(s)` : 'Ces documents sont déjà présents')
     } catch (e) {
       toast.error(`Import impossible : ${e instanceof Error ? e.message : 'fichier invalide'}`)
@@ -192,8 +201,9 @@ export default function Dashboard() {
               </>
             )}
           </Menu>
-          <button className="btn" onClick={backup} disabled={!docs.length}>
-            <DatabaseBackup size={16} /> Sauvegarder tout
+          <SyncButton onClick={() => setModal('sync')} />
+          <button className="btn" onClick={backup} disabled={!docs.length} title="Télécharger une sauvegarde JSON complète">
+            <DatabaseBackup size={16} /> JSON
           </button>
           <button className="btn" onClick={() => setModal('letter')}>
             <FileSignature size={16} /> Nouvelle lettre
@@ -207,13 +217,31 @@ export default function Dashboard() {
 
       {needBackup && (
         <div className="notice info">
-          Vos documents sont enregistrés uniquement dans ce navigateur. Faites une sauvegarde régulière pour ne rien perdre (et pour les retrouver sur un autre ordinateur).{' '}
+          Vos documents sont enregistrés uniquement dans ce navigateur.{' '}
+          <button className="link" onClick={() => setModal('sync')}>
+            Activez la sauvegarde automatique sur GitHub
+          </button>{' '}
+          ou{' '}
           <button className="link" onClick={backup}>
-            Sauvegarder maintenant
+            téléchargez une sauvegarde
           </button>
+          .
         </div>
       )}
 
+      <div className="dash-tabs">
+        <button className={view === 'docs' ? 'on' : ''} onClick={() => setView('docs')}>
+          <Files size={16} /> Documents
+        </button>
+        <button className={view === 'offers' ? 'on' : ''} onClick={() => setView('offers')}>
+          <Briefcase size={16} /> Offres <em>{offersCount}</em>
+        </button>
+      </div>
+
+      {view === 'offers' ? (
+        <OffersView />
+      ) : (
+        <>
       <div className="dash-filter">
         <Segmented
           value={filter}
@@ -229,8 +257,15 @@ export default function Dashboard() {
       {!hydrated ? (
         <div className="loading">Chargement...</div>
       ) : !docs.length ? (
+        <>
+        {showcase && (
+          <>
+            <ShowcaseIntro sc={showcase} />
+            <ShowcaseGrid sc={showcase} />
+          </>
+        )}
         <div className="empty-state">
-          <h2>Bienvenue</h2>
+          <h2>{showcase ? 'Votre espace' : 'Bienvenue'}</h2>
           <p>Créez votre premier CV à partir d'un modèle, importez un CV PDF existant, ou restaurez une sauvegarde.</p>
           <div className="row-gap">
             <button className="btn primary" onClick={() => setModal('resume')}>
@@ -239,82 +274,26 @@ export default function Dashboard() {
             <button className="btn" onClick={() => setModal('pdf')}>
               <FileUp size={16} /> Importer un CV PDF
             </button>
+            <button className="btn" onClick={() => setModal('sync')}>
+              <RefreshCw size={16} /> Retrouver ma sauvegarde GitHub
+            </button>
           </div>
         </div>
+        </>
       ) : (
         <div className="doc-grid">
           {shown.map((d) => (
-            <div key={d.id} className="doc-card">
-              <button className="doc-thumb" onClick={() => open(d)} aria-label={`Ouvrir ${d.name}`}>
-                <DocThumb doc={d} width={210} />
-              </button>
-              <div className="doc-meta">
-                <div>
-                  <span className={`kind-badge ${d.kind}`}>{d.kind === 'resume' ? 'CV' : 'Lettre'}</span>
-                  <strong title={d.name}>{d.name}</strong>
-                  <span className="muted small">Modifié le {fmt(d.updatedAt)}</span>
-                </div>
-                <Menu
-                  align="right"
-                  trigger={(t) => (
-                    <button className="icon-btn" onClick={t} title="Actions">
-                      <MoreVertical size={16} />
-                    </button>
-                  )}
-                >
-                  {(close) => (
-                    <>
-                      <MenuItem
-                        icon={<Pencil size={14} />}
-                        onClick={() => {
-                          close()
-                          const n = window.prompt('Nouveau nom', d.name)
-                          if (n?.trim()) update(d.id, (x) => ({ ...x, name: n.trim() }))
-                        }}
-                      >
-                        Renommer
-                      </MenuItem>
-                      <MenuItem
-                        icon={<Copy size={14} />}
-                        onClick={() => {
-                          close()
-                          duplicate(d.id)
-                          toast.ok('Document dupliqué')
-                        }}
-                      >
-                        Dupliquer
-                      </MenuItem>
-                      <MenuItem
-                        icon={<FileJson size={14} />}
-                        onClick={() => {
-                          close()
-                          download(`${safeFileName(d.name)}.json`, toJson([d]))
-                        }}
-                      >
-                        Exporter en JSON
-                      </MenuItem>
-                      <MenuItem
-                        danger
-                        icon={<Trash2 size={14} />}
-                        onClick={() => {
-                          close()
-                          if (confirmAction(`Supprimer définitivement « ${d.name} » ?`)) remove(d.id)
-                        }}
-                      >
-                        Supprimer
-                      </MenuItem>
-                    </>
-                  )}
-                </Menu>
-              </div>
-            </div>
+            <DocCard key={d.id} doc={d} />
           ))}
         </div>
+      )}
+        </>
       )}
 
       <NewResumeModal open={modal === 'resume'} onClose={() => setModal(null)} />
       {modal === 'letter' && <NewLetterModal open onClose={() => setModal(null)} resumes={resumes} />}
       <PdfImportModal open={modal === 'pdf'} onClose={() => setModal(null)} />
+      <SyncModal open={modal === 'sync'} onClose={() => setModal(null)} />
     </div>
   )
 }

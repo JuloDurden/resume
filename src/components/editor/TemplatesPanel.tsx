@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Check } from 'lucide-react'
 import type { LetterDoc, ResumeDoc } from '../../types'
-import { TEMPLATES, applyTemplate, templateStyle } from '../../data/templates'
+import { TEMPLATES, applyTemplate } from '../../data/templates'
+import { LETTER_TEMPLATES, applyLetterTemplate } from '../../data/letterTemplates'
 import { DocThumb } from '../DocThumb'
 import { Toggle } from '../ui'
 
@@ -11,12 +12,9 @@ export function TemplatesPanel({ doc, onApply }: { doc: ResumeDoc | LetterDoc; o
   const [keep, setKeep] = useState(false)
   const previews = useMemo(
     () =>
-      TEMPLATES.map((t) => {
-        if (doc.kind === 'resume') return { t, doc: applyTemplate(doc, t.id, keep) }
-        const style = { ...templateStyle(t.id), headerPlacement: 'top' as const, pageFormat: doc.style.pageFormat }
-        if (keep) Object.assign(style, { primary: doc.style.primary, accent: doc.style.accent })
-        return { t, doc: { ...doc, templateId: t.id, style } }
-      }),
+      doc.kind === 'resume'
+        ? TEMPLATES.map((t) => ({ t: t as { id: string; name: string; description: string; ats?: 'excellent' | 'bon' | 'moyen' }, doc: applyTemplate(doc, t.id, keep) as ResumeDoc | LetterDoc }))
+        : LETTER_TEMPLATES.map((t) => ({ t: t as { id: string; name: string; description: string; ats?: 'excellent' | 'bon' | 'moyen' }, doc: applyLetterTemplate(doc, t.id, keep) as ResumeDoc | LetterDoc })),
     [doc, keep],
   )
   return (
@@ -32,7 +30,7 @@ export function TemplatesPanel({ doc, onApply }: { doc: ResumeDoc | LetterDoc; o
                 {t.name} {doc.templateId === t.id && <Check size={14} />}
               </strong>
               <span>{t.description}</span>
-              <em className={`ats-${t.ats}`}>{ATS_LABEL[t.ats]}</em>
+              {t.ats && <em className={`ats-${t.ats}`}>{ATS_LABEL[t.ats]}</em>}
             </div>
           </button>
         ))}

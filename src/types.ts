@@ -152,6 +152,29 @@ export interface JobTarget {
   extra?: string[]
 }
 
+export interface OfferContact {
+  name?: string
+  role?: string
+  email?: string
+  phone?: string
+  linkedin?: string
+}
+
+/** Offre d'emploi, partagée entre les CV et lettres qui y sont rattachés. */
+export interface Offer extends JobTarget {
+  id: string
+  createdAt: number
+  updatedAt: number
+  location?: string
+  contract?: string
+  website?: string
+  logo?: string
+  contacts?: OfferContact[]
+  snapshotAt?: number
+  /** Dernier score ATS par CV analysé */
+  scores?: Record<string, number>
+}
+
 export interface ResumeDoc {
   id: string
   kind: 'resume'
@@ -165,8 +188,9 @@ export interface ResumeDoc {
   sections: Section[]
   /** Offre actuellement analysée (copie synchronisée de l'élément correspondant de `jobs`). */
   job?: JobTarget
-  /** Historique des offres liées à ce CV. */
+  /** Ancien historique des offres (migré vers les offres globales). */
   jobs?: JobTarget[]
+  offerId?: string
 }
 
 export interface Recipient {
@@ -174,6 +198,21 @@ export interface Recipient {
   title?: string
   company?: string
   address?: string
+}
+
+export interface LetterOptions {
+  layout: 'single' | 'sidebar'
+  sidebarPosition: 'left' | 'right'
+  sidebarWidth: number
+  showRecipient: boolean
+  recipientAlign: 'left' | 'right'
+  showDate: boolean
+  dateAlign: 'left' | 'right'
+  subjectStyle: 'label' | 'heading' | 'bold'
+  signatureAlign: 'left' | 'right'
+  signatureBold: boolean
+  signatureHeight: number // mm
+  paragraphSpacing: number // em
 }
 
 export interface LetterDoc {
@@ -193,8 +232,12 @@ export interface LetterDoc {
   body: string
   closing?: string
   signature?: string
+  /** Signature manuscrite (image PNG, fond transparent) */
+  signatureImage?: string
   linkedResumeId?: string
   job?: JobTarget
+  options?: Partial<LetterOptions>
+  offerId?: string
 }
 
 export type AnyDoc = ResumeDoc | LetterDoc

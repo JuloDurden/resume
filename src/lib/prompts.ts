@@ -277,3 +277,37 @@ Champs d'une entrée selon le type :
 
 Après le bloc JSON, signale en une ou deux lignes ce que tu n'as pas pu lire ou classer avec certitude.`
 }
+
+/* ---------- Import d'une offre depuis son lien ---------- */
+
+export function offerImportPrompt(url: string): string {
+  return `Ouvre et lis cette offre d'emploi : ${url}
+
+Si tu ne peux pas accéder à la page, dis-le clairement et n'invente rien : je te collerai le texte de l'annonce.
+
+Sinon, réponds uniquement avec un bloc \`\`\`json de la forme :
+{
+  "title": "intitulé exact du poste",
+  "company": "nom de l'employeur (pas le site d'annonces)",
+  "location": "ville ou lieu",
+  "contract": "CDI, CDD, alternance... si indiqué",
+  "website": "domaine du site officiel de l'employeur (ex. montpellier.fr), si tu le connais avec certitude",
+  "description": "texte complet de l'annonce : missions, profil, compétences, conditions. Recopie-le sans le résumer.",
+  "contacts": [{"name": "", "role": "", "email": "", "phone": ""}]
+}
+
+Règles :
+- Ne renseigne "contacts" qu'avec les personnes explicitement citées dans l'annonce (recruteur, responsable du recrutement). Sinon, laisse une liste vide. Ne cherche pas d'informations personnelles ailleurs.
+- Laisse vide tout champ absent de l'annonce.
+- N'écris jamais de tiret cadratin ni de tiret demi-cadratin.`
+}
+
+export interface ClaudeOffer {
+  title?: string
+  company?: string
+  location?: string
+  contract?: string
+  website?: string
+  description?: string
+  contacts?: { name?: string; role?: string; email?: string; phone?: string }[]
+}

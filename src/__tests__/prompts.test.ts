@@ -68,3 +68,24 @@ describe('import PDF', () => {
     expect(pdfImportPrompt()).not.toMatch(/[—–]/)
   })
 })
+
+import { migrate } from '../store/documents'
+import { docTitle } from '../lib/offers'
+
+describe('offres', () => {
+  it('migre les anciennes offres des CV vers des offres globales', () => {
+    const cv = newResume('epure', true)
+    cv.job = { id: 'j1', title: 'Chef de projet', company: 'ACME', description: 'texte', lastScore: 70 }
+    cv.jobs = [cv.job, { id: 'j2', title: 'PO', description: 'x' }]
+    const r = migrate({ docs: { [cv.id]: cv }, offers: {} })
+    expect(Object.keys(r.offers).sort()).toEqual(['j1', 'j2'])
+    expect(r.docs[cv.id].offerId).toBe('j1')
+    expect(r.docs[cv.id].job).toBeUndefined()
+    expect(r.offers.j1.scores?.[cv.id]).toBe(70)
+  })
+  it('découpe « Poste - Entreprise »', () => {
+    const cv = newResume('epure', true, 'Transformation Numérique - CAF de l\'Hérault')
+    expect(docTitle(cv)).toEqual({ title: 'Transformation Numérique', company: 'CAF de l\'Hérault' })
+    expect(docTitle(newResume('epure', true, 'Mon CV')).company).toBeUndefined()
+  })
+})

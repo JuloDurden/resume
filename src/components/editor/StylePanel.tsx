@@ -27,7 +27,7 @@ const PALETTES: Palette[] = [
 
 /* ---------- Briques visuelles ---------- */
 
-function Block({ title, children }: { title: ReactNode; children: ReactNode }) {
+export function Block({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <section className="sp-block">
       <h3>{title}</h3>
@@ -37,7 +37,7 @@ function Block({ title, children }: { title: ReactNode; children: ReactNode }) {
 }
 
 /** Curseur à crans nommés, à la manière d'un sélecteur de niveau. */
-function Steps({ label, values, labels, value, onChange, ends }: { label: string; values: number[]; labels: string[]; value: number; onChange: (v: number) => void; ends?: [string, string] }) {
+export function Steps({ label, values, labels, value, onChange, ends }: { label: string; values: number[]; labels: string[]; value: number; onChange: (v: number) => void; ends?: [string, string] }) {
   const idx = values.reduce((best, v, i) => (Math.abs(v - value) < Math.abs(values[best] - value) ? i : best), 0)
   const exact = Math.abs(values[idx] - value) < 0.001
   return (
@@ -69,7 +69,7 @@ function Steps({ label, values, labels, value, onChange, ends }: { label: string
   )
 }
 
-function Picto<T extends string | number>({ options, value, onChange }: { options: { value: T; label: string; art: ReactNode }[]; value: T; onChange: (v: T) => void }) {
+export function Picto<T extends string | number>({ options, value, onChange }: { options: { value: T; label: string; art: ReactNode }[]; value: T; onChange: (v: T) => void }) {
   return (
     <div className="pictos">
       {options.map((o) => (

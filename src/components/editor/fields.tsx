@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ImagePlus, Plus, Sparkles, Trash2, X } from 'lucide
 import type { DateValue } from '../../types'
 import { MONTH_OPTIONS } from '../../lib/dates'
 import { Icon, PICKABLE_ICONS } from '../../lib/icons'
-import { TextArea, toast } from '../ui'
+import { TextArea, Toggle, toast } from '../ui'
 
 export function DateInput({ value, onChange, disabled }: { value?: DateValue; onChange: (v: DateValue | undefined) => void; disabled?: boolean }) {
   return (
@@ -233,6 +233,79 @@ export function PhotoInput({ value, onChange }: { value?: string; onChange: (v: 
         <span className="field-hint">Recadrée en carré automatiquement.</span>
       </div>
       <input ref={ref} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+    </div>
+  )
+}
+
+/** Signature en image : recadrage automatique et fond blanc rendu transparent. */
+export function SignatureInput({ value, onChange }: { value?: string; onChange: (v: string | undefined) => void }) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [transparent, setTransparent] = useState(true)
+  const process = (f: File) => {
+    if (!f.type.startsWith('image/')) return toast.error('Choisissez une image (PNG, JPG).')
+    const img = new Image()
+    const url = URL.createObjectURL(f)
+    img.onload = () => {
+      const scale = Math.min(1, 900 / img.width)
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const c = document.createElement('canvas')
+      c.width = w
+      c.height = h
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(img, 0, 0, w, h)
+      const data = ctx.getImageData(0, 0, w, h)
+      const px = data.data
+      let minX = w, minY = h, maxX = 0, maxY = 0
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4
+          const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
+          if (transparent) {
+            // fond clair → transparent, avec un fondu pour garder des bords nets
+            const a = lum > 235 ? 0 : lum > 180 ? Math.round(((235 - lum) / 55) * 255) : 255
+            px[i + 3] = Math.min(px[i + 3], a)
+          }
+          if (px[i + 3] > 40) {
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+          }
+        }
+      ctx.putImageData(data, 0, 0)
+      if (maxX <= minX || maxY <= minY) {
+        URL.revokeObjectURL(url)
+        return toast.error('Signature introuvable sur cette image.')
+      }
+      const pad = 6
+      const cw = Math.min(w, maxX - minX + pad * 2)
+      const ch = Math.min(h, maxY - minY + pad * 2)
+      const out = document.createElement('canvas')
+      out.width = cw
+      out.height = ch
+      out.getContext('2d')!.drawImage(c, Math.max(0, minX - pad), Math.max(0, minY - pad), cw, ch, 0, 0, cw, ch)
+      onChange(out.toDataURL('image/png'))
+      URL.revokeObjectURL(url)
+    }
+    img.src = url
+  }
+  return (
+    <div className="signature-input">
+      {value ? <img src={value} alt="Signature" /> : <div className="signature-empty">Aucune signature</div>}
+      <div className="photo-actions">
+        <button type="button" className="btn sm" onClick={() => ref.current?.click()}>
+          <ImagePlus size={14} /> {value ? 'Changer' : 'Ajouter une image'}
+        </button>
+        {value && (
+          <button type="button" className="btn ghost sm" onClick={() => onChange(undefined)}>
+            Retirer
+          </button>
+        )}
+        <Toggle checked={transparent} onChange={setTransparent} label="Rendre le fond blanc transparent" />
+        <span className="field-hint">Une photo nette de votre signature sur papier blanc suffit : elle est recadrée automatiquement.</span>
+      </div>
+      <input ref={ref} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && process(e.target.files[0])} />
     </div>
   )
 }

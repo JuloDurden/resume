@@ -1,14 +1,19 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
-import { ClipboardCopy, ExternalLink, LayoutTemplate, Palette, PenLine, RefreshCw, Sparkles } from 'lucide-react'
+import { ClipboardCopy, ExternalLink, Link2, Plus, LayoutTemplate, Palette, PenLine, RefreshCw, Sparkles } from 'lucide-react'
 import type { LetterDoc, ResumeDoc } from '../types'
-import { useDoc, useDocs } from '../store/documents'
-import { templateStyle } from '../data/templates'
+import { useDoc, useDocs, useOffer } from '../store/documents'
+import { OfferFields } from '../components/OfferFields'
+import { OfferImportModal } from '../components/OfferImportModal'
+import { newOffer } from '../lib/offers'
+import { applyLetterTemplate } from '../data/letterTemplates'
 import { todayFr } from '../lib/dates'
 import { CLAUDE_URL, buildPrompt, copyText, extractJson } from '../lib/prompts'
 import { EditorShell, type Tab } from '../components/editor/EditorShell'
 import { HeaderForm } from '../components/editor/HeaderForm'
+import { SignatureInput } from '../components/editor/fields'
 import { StylePanel } from '../components/editor/StylePanel'
+import { LetterLayoutPanel } from '../components/editor/LetterLayoutPanel'
 import { TemplatesPanel } from '../components/editor/TemplatesPanel'
 import { ClaudeIntro } from '../components/editor/ClaudePanel'
 import { Preview, usePrint } from '../components/editor/Preview'
@@ -112,26 +117,59 @@ function LetterContent({ doc, update, active, setActive }: { doc: LetterDoc; upd
           <Field label="Formule de politesse">
             <TextArea value={doc.closing} minRows={2} onChange={(v) => set({ closing: v })} />
           </Field>
-          <Field label="Signature">
+          <Field label="Nom sous la signature">
             <TextInput value={doc.signature} onChange={(v) => set({ signature: v })} />
           </Field>
-        </div>
-      </Card>
-      <Card id="job" title="Offre d'emploi (pour Claude)" open={active} setOpen={setActive}>
-        <div className="form-stack">
-          <div className="grid-2">
-            <Field label="Intitulé">
-              <TextInput value={doc.job?.title} onChange={(v) => set({ job: { ...doc.job, title: v } })} />
-            </Field>
-            <Field label="Entreprise">
-              <TextInput value={doc.job?.company} onChange={(v) => set({ job: { ...doc.job, company: v } })} />
-            </Field>
-          </div>
-          <Field label="Texte de l'annonce">
-            <TextArea value={doc.job?.description} minRows={6} onChange={(v) => set({ job: { ...doc.job, description: v } })} />
+          <Field label="Signature manuscrite">
+            <SignatureInput value={doc.signatureImage} onChange={(v) => set({ signatureImage: v })} />
           </Field>
         </div>
       </Card>
+      <Card id="job" title="Offre d'emploi" open={active} setOpen={setActive}>
+        <LetterOfferCard doc={doc} set={set} />
+      </Card>
+    </div>
+  )
+}
+
+function LetterOfferCard({ doc, set }: { doc: LetterDoc; set: (p: Partial<LetterDoc>) => void }) {
+  const offersMap = useDocs((s) => s.offers)
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const offers = useMemo(() => Object.values(offersMap).sort((a, b) => b.createdAt - a.createdAt), [offersMap])
+  const offer = doc.offerId ? offersMap[doc.offerId] : undefined
+  const [importing, setImporting] = useState(false)
+  return (
+    <div className="form-stack">
+      <Field label="Offre rattachée" hint="La lettre apparaît avec cette offre sur l'accueil, et Claude s'en sert pour rédiger.">
+        <div className="row-gap">
+          <Select value={doc.offerId ?? ''} onChange={(v) => set({ offerId: v || undefined })} options={[{ value: '', label: 'Aucune' }, ...offers.map((o) => ({ value: o.id, label: [o.title || 'Sans titre', o.company].filter(Boolean).join(' - ') }))]} />
+          <button className="btn sm" onClick={() => setImporting(true)} title="Depuis un lien">
+            <Link2 size={14} />
+          </button>
+          <button
+            className="btn sm"
+            title="Nouvelle offre"
+            onClick={() => {
+              const o = newOffer({ company: doc.recipient.company || undefined })
+              saveOffer(o)
+              set({ offerId: o.id })
+            }}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+      </Field>
+      {offer && <OfferFields offer={offer} onChange={saveOffer} compact />}
+      <OfferImportModal
+        open={importing}
+        onClose={() => setImporting(false)}
+        onCreated={(o) => {
+          const p: Partial<LetterDoc> = { offerId: o.id }
+          if (o.company && !doc.recipient.company) p.recipient = { ...doc.recipient, company: o.company }
+          if (o.title) p.subject = `Candidature au poste de ${o.title}`
+          set(p)
+        }}
+      />
     </div>
   )
 }
@@ -140,13 +178,14 @@ function LetterClaude({ doc, update, goJob }: { doc: LetterDoc; update: (fn: (d:
   const resume = useDocs((s) => (doc.linkedResumeId ? (s.docs[doc.linkedResumeId] as ResumeDoc | undefined) : undefined))
   const [mode, setMode] = useState<'letter' | 'improve-letter'>(doc.body.trim() ? 'improve-letter' : 'letter')
   const [answer, setAnswer] = useState('')
-  const canWrite = !!resume && !!doc.job?.description?.trim()
+  const offer = useOffer(doc.offerId)
+  const canWrite = !!resume && !!offer?.description?.trim()
   const prompt =
     mode === 'letter'
       ? canWrite
-        ? buildPrompt('letter', { ...resume!, job: doc.job })
+        ? buildPrompt('letter', { ...resume!, job: offer })
         : ''
-      : buildPrompt('improve-letter', resume ?? ({ sections: [], header: doc.header, layout: { main: [], side: [] } } as unknown as ResumeDoc), { letter: doc })
+      : buildPrompt('improve-letter', resume ?? ({ sections: [], header: doc.header, layout: { main: [], side: [] } } as unknown as ResumeDoc), { letter: { ...doc, job: offer } })
   const copy = async (open: boolean) => {
     if (!(await copyText(prompt))) return toast.error('Copie impossible')
     toast.ok('Prompt copié')
@@ -251,16 +290,17 @@ function LetterEditor({ id }: { id: string | undefined }) {
           <TemplatesPanel
             doc={doc}
             onApply={(t, keep) =>
-              update((d) => {
-                const style = { ...templateStyle(t), headerPlacement: 'top' as const, pageFormat: d.style.pageFormat }
-                if (keep) Object.assign(style, { primary: d.style.primary, accent: d.style.accent })
-                return { ...d, templateId: t, style }
-              })
+              update((d) => applyLetterTemplate(d, t, keep))
             }
           />
         )
       case 'style':
-        return <StylePanel style={doc.style} hasSidebar={false} isLetter onChange={(p) => update((d) => ({ ...d, style: { ...d.style, ...p } }))} />
+        return (
+          <>
+            <LetterLayoutPanel doc={doc} onChange={(p) => update((d) => ({ ...d, options: { ...d.options, ...p } }))} />
+            <StylePanel style={doc.style} hasSidebar={doc.options?.layout === 'sidebar'} isLetter onChange={(p) => update((d) => ({ ...d, style: { ...d.style, ...p } }))} />
+          </>
+        )
       case 'claude':
         return (
           <LetterClaude

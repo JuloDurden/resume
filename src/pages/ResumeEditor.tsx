@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Columns2, FileSignature, LayoutTemplate, ListChecks, Palette, PenLine, Sparkles } from 'lucide-react'
 import type { ResumeDoc } from '../types'
-import { useDoc, useDocs } from '../store/documents'
+import { useDoc, useDocs, useOffer } from '../store/documents'
 import { applyTemplate } from '../data/templates'
 import { newLetter } from '../data/factory'
-import { deleteJob, newJob, saveJob, selectJob } from '../lib/jobs'
+import { OfferImportModal } from '../components/OfferImportModal'
 import { EditorShell, type Tab } from '../components/editor/EditorShell'
 import { ContentPanel } from '../components/editor/ContentPanel'
 import { StylePanel } from '../components/editor/StylePanel'
@@ -40,20 +40,20 @@ function ResumeEditor({ id }: { id: string | undefined }) {
   const [active, setActive] = useState<string | null>('header')
   const [pages, setPages] = useState(1)
   const [request, setRequest] = useState<ClaudeRequest | null>(null)
+  const [importing, setImporting] = useState(false)
   const { print, portal } = usePrint(doc)
+  const offer = useOffer(doc?.offerId)
+  // vue du CV avec l'offre rattachée, utilisée par l'ATS et les prompts Claude
+  const view = useMemo(() => (doc ? { ...doc, job: offer } : undefined), [doc, offer])
 
   const update = useCallback((fn: (d: ResumeDoc) => ResumeDoc) => id && updateStore<ResumeDoc>(id, fn), [id, updateStore])
-  const saveScore = useCallback(
-    (score: number) => id && updateStore<ResumeDoc>(id, (d) => (d.job ? saveJob(d, { ...d.job, lastScore: score }) : d), { history: false }),
-    [id, updateStore],
-  )
   const askClaude = useCallback((action: ClaudeRequest['action'], itemId?: string, keywords?: string[]) => {
     setRequest({ action, itemId, keywords, nonce: Date.now() })
     setTab('claude')
   }, [])
 
   if (!hydrated) return <div className="loading">Chargement...</div>
-  if (!doc || doc.kind !== 'resume') return <Navigate to="/" replace />
+  if (!doc || !view || doc.kind !== 'resume') return <Navigate to="/" replace />
 
   const panel = (() => {
     switch (tab) {
@@ -84,18 +84,15 @@ function ResumeEditor({ id }: { id: string | undefined }) {
       case 'ats':
         return (
           <AtsPanel
-            doc={doc}
+            doc={view}
             pages={pages}
-            setJob={(j) => update((d) => saveJob(d, j))}
-            onSelect={(jid) => update((d) => selectJob(d, jid))}
-            onNew={() => update((d) => newJob(d))}
-            onDelete={(jid) => update((d) => deleteJob(d, jid))}
-            onScore={saveScore}
+            onLink={(oid) => update((d) => ({ ...d, offerId: oid }))}
+            onImportLink={() => setImporting(true)}
             onDeep={(a, missing) => askClaude(a, undefined, missing)}
           />
         )
       case 'claude':
-        return <ClaudePanel doc={doc} update={update} request={request} onGoAts={() => setTab('ats')} />
+        return <ClaudePanel doc={view} update={update} request={request} onGoAts={() => setTab('ats')} />
     }
   })()
 
@@ -124,10 +121,10 @@ function ResumeEditor({ id }: { id: string | undefined }) {
             icon={<FileSignature size={15} />}
             onClick={() => {
               close()
-              const l = newLetter(doc.templateId, false, doc, `Lettre - ${doc.name}`)
-              l.job = doc.job
-              if (doc.job?.company) l.recipient.company = doc.job.company
-              if (doc.job?.title) l.subject = `Candidature au poste de ${doc.job.title}`
+              const l = newLetter(doc.templateId, false, doc, offer ? [offer.title, offer.company].filter(Boolean).join(' - ') : doc.name)
+              l.offerId = doc.offerId
+              if (offer?.company) l.recipient.company = offer.company
+              if (offer?.title) l.subject = `Candidature au poste de ${offer.title}`
               add(l)
               navigate(`/lettre/${l.id}`)
             }}
@@ -137,6 +134,7 @@ function ResumeEditor({ id }: { id: string | undefined }) {
         )}
       />
       {portal}
+      <OfferImportModal open={importing} onClose={() => setImporting(false)} onCreated={(o) => update((d) => ({ ...d, offerId: o.id }))} />
     </>
   )
 }

@@ -4,6 +4,7 @@ import { ensureFont } from '../lib/fonts'
 import { renderInline, paragraphs } from '../lib/inline'
 import { HeaderBlock, sectionBlocks } from './parts'
 import { Paginator, type Block } from './Paginator'
+import { letterOptions } from '../data/letterTemplates'
 import './cv.css'
 
 interface CommonProps {
@@ -81,17 +82,19 @@ export function ResumeView({ doc, ...rest }: { doc: ResumeDoc } & CommonProps) {
 
 export function LetterView({ doc, ...rest }: { doc: LetterDoc } & CommonProps) {
   const { style } = doc
+  const o = letterOptions(doc)
   useFonts(style.fontHeading, style.fontBody)
-  const main = useMemo(() => {
+  const sidebar = o.layout === 'sidebar'
+  const { main, side } = useMemo(() => {
     const blocks: Block[] = []
     const r = doc.recipient
     const recipientLines = [r.name, r.title, r.company, ...(r.address ?? '').split('\n')].filter((x) => x && x.trim())
-    if (recipientLines.length)
+    if (o.showRecipient && recipientLines.length)
       blocks.push({
         key: 'recipient',
         sectionId: 'recipient',
         node: (
-          <div className="lt-recipient">
+          <div className={`lt-recipient al-${o.recipientAlign}`}>
             {recipientLines.map((l, i) => (
               <div key={i} className={i === 0 ? 'strong' : ''}>
                 {l}
@@ -101,14 +104,14 @@ export function LetterView({ doc, ...rest }: { doc: LetterDoc } & CommonProps) {
         ),
       })
     const when = [doc.place, doc.date].filter(Boolean).join(', le ')
-    if (when) blocks.push({ key: 'date', sectionId: 'meta', node: <div className="lt-date">{when}</div> })
+    if (o.showDate && when) blocks.push({ key: 'date', sectionId: 'meta', node: <div className={`lt-date al-${o.dateAlign}${o.showRecipient && recipientLines.length ? '' : ' first'}`}>{when}</div> })
     if (doc.subject)
       blocks.push({
         key: 'subject',
         sectionId: 'meta',
         node: (
-          <div className="lt-subject">
-            <span>Objet : </span>
+          <div className={`lt-subject st-${o.subjectStyle}`}>
+            {o.subjectStyle === 'label' && <span>Objet : </span>}
             {renderInline(doc.subject)}
           </div>
         ),
@@ -116,17 +119,42 @@ export function LetterView({ doc, ...rest }: { doc: LetterDoc } & CommonProps) {
     if (doc.salutation) blocks.push({ key: 'salutation', sectionId: 'body', node: <div className="lt-salutation">{doc.salutation}</div> })
     paragraphs(doc.body).forEach((p, i) => blocks.push({ key: `p${i}`, sectionId: 'body', node: <p className="lt-p">{renderInline(p)}</p> }))
     if (doc.closing) blocks.push({ key: 'closing', sectionId: 'body', node: <p className="lt-p">{renderInline(doc.closing)}</p> })
-    if (doc.signature) blocks.push({ key: 'signature', sectionId: 'body', node: <div className="lt-signature">{doc.signature}</div> })
-    return blocks
-  }, [doc])
+    if (doc.signature || doc.signatureImage)
+      blocks.push({
+        key: 'signature',
+        sectionId: 'body',
+        node: (
+          <div className={`lt-signature al-${o.signatureAlign}${o.signatureBold ? ' bold' : ''}`}>
+            {doc.signatureImage && <img className="lt-sign-img" src={doc.signatureImage} alt="" style={{ height: `${o.signatureHeight}mm` }} />}
+            {doc.signature && <div>{doc.signature}</div>}
+          </div>
+        ),
+      })
+    const sideBlocks: Block[] = sidebar ? [{ key: 'header', sectionId: 'header', node: <HeaderBlock header={doc.header} style={style} where="sidebar" /> }] : []
+    return { main: blocks, side: sideBlocks }
+  }, [doc, o.showRecipient, o.recipientAlign, o.showDate, o.dateAlign, o.subjectStyle, o.signatureAlign, o.signatureBold, o.signatureHeight, sidebar, style])
 
-  const header = (
+  const header = sidebar ? null : (
     <div className={`cv-blk cv-top-header${style.headerLayout === 'banner' ? ' banner' : ''}${rest.onSectionClick ? ' cv-clickable' : ''}`} onClick={rest.onSectionClick ? () => rest.onSectionClick!('header') : undefined}>
-      <HeaderBlock header={doc.header} style={{ ...style, showPhoto: style.showPhoto }} where="top" />
+      <HeaderBlock header={doc.header} style={style} where="top" />
     </div>
   )
 
-  return <Paginator style={style} columns={1} sidebarPosition="right" sidebarWidth={30} header={header} main={main} side={[]} className="is-letter" {...rest} />
+  return (
+    <div style={{ ['--para' as string]: `${o.paragraphSpacing}em` }}>
+      <Paginator
+        style={style}
+        columns={sidebar ? 2 : 1}
+        sidebarPosition={o.sidebarPosition}
+        sidebarWidth={o.sidebarWidth}
+        header={header}
+        main={main}
+        side={side}
+        className={`is-letter${sidebar ? ' letter-sidebar' : ''}`}
+        {...rest}
+      />
+    </div>
+  )
 }
 
 export function AnyDocView({ doc, ...rest }: { doc: ResumeDoc | LetterDoc } & CommonProps) {

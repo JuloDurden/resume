@@ -297,8 +297,33 @@
   flex-wrap: wrap;
 }
 .cv-etitle {
-  font-weight: var(--item-weight);
+  font-weight: var(--head-weight);
   color: var(--c-text);
+}
+.cv-entry .cv-etitle {
+  font-weight: var(--item-weight);
+  font-size: calc(var(--fs) * var(--item-scale, 1));
+  font-family: var(--item-font, inherit);
+  line-height: 1.25;
+}
+.cv-root[data-item-color='primary'] .cv-entry .cv-etitle {
+  color: var(--c-head);
+}
+.cv-root[data-item-color='accent'] .cv-entry .cv-etitle {
+  color: var(--c-accent);
+}
+.cv-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em 0;
+}
+.cv-flow > span {
+  white-space: normal;
+}
+.cv-flow > span:not(:last-child)::after {
+  content: var(--sep);
+  color: var(--c-accent);
+  white-space: pre;
 }
 .cv-esub {
   color: var(--c-accent);

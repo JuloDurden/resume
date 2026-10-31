@@ -39,6 +39,9 @@ export const BASE_STYLE: StyleSettings = {
   nameUppercase: false,
   headingBold: true,
   itemTitleBold: true,
+  itemTitleSize: 100,
+  itemTitleFont: 'body',
+  itemTitleColor: 'text',
   photoInSidebar: false,
 }
 
@@ -82,6 +85,7 @@ export const TEMPLATES: TemplateDef[] = [
       headingUppercase: true,
       headingBold: false,
       itemTitleBold: false,
+      itemTitleSize: 110,
       nameUppercase: true,
       headerLayout: 'left',
       headerPlacement: 'main',

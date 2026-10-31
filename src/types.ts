@@ -37,7 +37,7 @@ export interface SectionItem {
   hidden?: boolean
 }
 
-export type SkillDisplay = 'tags' | 'list' | 'lines' | 'inline' | 'bars' | 'dots'
+export type SkillDisplay = 'tags' | 'flow' | 'list' | 'lines' | 'inline' | 'bars' | 'dots'
 export type LevelDisplay = 'dots' | 'bars' | 'text' | 'none'
 
 export interface SectionOptions {
@@ -122,6 +122,9 @@ export interface StyleSettings {
   nameUppercase?: boolean
   headingBold?: boolean
   itemTitleBold?: boolean
+  itemTitleSize?: number // % de la taille du texte
+  itemTitleFont?: 'heading' | 'body'
+  itemTitleColor?: 'text' | 'primary' | 'accent'
   photoInSidebar?: boolean
 }
 
@@ -133,7 +136,14 @@ export interface Layout {
   side: string[]
 }
 
+export type JobStatus = 'todo' | 'applied' | 'interview' | 'rejected' | 'offer'
+
 export interface JobTarget {
+  id?: string
+  createdAt?: number
+  status?: JobStatus
+  lastScore?: number
+  notes?: string
   title?: string
   company?: string
   url?: string
@@ -153,7 +163,10 @@ export interface ResumeDoc {
   layout: Layout
   header: Header
   sections: Section[]
+  /** Offre actuellement analysée (copie synchronisée de l'élément correspondant de `jobs`). */
   job?: JobTarget
+  /** Historique des offres liées à ce CV. */
+  jobs?: JobTarget[]
 }
 
 export interface Recipient {

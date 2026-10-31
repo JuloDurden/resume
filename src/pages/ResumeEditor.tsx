@@ -5,10 +5,11 @@ import type { ResumeDoc } from '../types'
 import { useDoc, useDocs } from '../store/documents'
 import { applyTemplate } from '../data/templates'
 import { newLetter } from '../data/factory'
+import { deleteJob, newJob, saveJob, selectJob } from '../lib/jobs'
 import { EditorShell, type Tab } from '../components/editor/EditorShell'
 import { ContentPanel } from '../components/editor/ContentPanel'
 import { StylePanel } from '../components/editor/StylePanel'
-import { LayoutPanel } from '../components/editor/LayoutPanel'
+import { LayoutPanel, setColumns } from '../components/editor/LayoutPanel'
 import { TemplatesPanel } from '../components/editor/TemplatesPanel'
 import { AtsPanel } from '../components/editor/AtsPanel'
 import { ClaudePanel, type ClaudeRequest } from '../components/editor/ClaudePanel'
@@ -42,6 +43,10 @@ function ResumeEditor({ id }: { id: string | undefined }) {
   const { print, portal } = usePrint(doc)
 
   const update = useCallback((fn: (d: ResumeDoc) => ResumeDoc) => id && updateStore<ResumeDoc>(id, fn), [id, updateStore])
+  const saveScore = useCallback(
+    (score: number) => id && updateStore<ResumeDoc>(id, (d) => (d.job ? saveJob(d, { ...d.job, lastScore: score }) : d), { history: false }),
+    [id, updateStore],
+  )
   const askClaude = useCallback((action: ClaudeRequest['action'], itemId?: string, keywords?: string[]) => {
     setRequest({ action, itemId, keywords, nonce: Date.now() })
     setTab('claude')
@@ -65,11 +70,30 @@ function ResumeEditor({ id }: { id: string | undefined }) {
           />
         )
       case 'style':
-        return <StylePanel style={doc.style} hasSidebar={doc.layout.columns === 2} onChange={(p) => update((d) => ({ ...d, style: { ...d.style, ...p } }))} />
+        return (
+          <StylePanel
+            style={doc.style}
+            hasSidebar={doc.layout.columns === 2}
+            onChange={(p) => update((d) => ({ ...d, style: { ...d.style, ...p } }))}
+            columns={{ columns: doc.layout.columns, position: doc.layout.sidebarPosition }}
+            onColumns={(c, pos) => update((d) => setColumns(d, c, pos))}
+          />
+        )
       case 'layout':
         return <LayoutPanel doc={doc} update={update} />
       case 'ats':
-        return <AtsPanel doc={doc} pages={pages} setJob={(j) => update((d) => ({ ...d, job: j }))} onDeep={(a, missing) => askClaude(a, undefined, missing)} />
+        return (
+          <AtsPanel
+            doc={doc}
+            pages={pages}
+            setJob={(j) => update((d) => saveJob(d, j))}
+            onSelect={(jid) => update((d) => selectJob(d, jid))}
+            onNew={() => update((d) => newJob(d))}
+            onDelete={(jid) => update((d) => deleteJob(d, jid))}
+            onScore={saveScore}
+            onDeep={(a, missing) => askClaude(a, undefined, missing)}
+          />
+        )
       case 'claude':
         return <ClaudePanel doc={doc} update={update} request={request} onGoAts={() => setTab('ats')} />
     }

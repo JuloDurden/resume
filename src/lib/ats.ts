@@ -14,12 +14,19 @@ interface Tok {
   afterBreak: boolean
 }
 
+// Suffixes français et anglais retirés pour rapprocher les formes d'un même mot
+// (accompagnement / accompagner, formations / former, déploiement / déployer...)
+const SUFFIXES = [
+  'issements', 'issement', 'atrices', 'ateurs', 'ations', 'atrice', 'ateur', 'ation', 'ements', 'ement', 'ments', 'ment',
+  'ances', 'ences', 'ance', 'ence', 'ités', 'ite', 'iques', 'ique', 'ables', 'able', 'istes', 'iste', 'euses', 'euse', 'eurs', 'eur',
+  'ives', 'ive', 'ifs', 'if', 'ions', 'ion', 'ees', 'ee', 'es', 'er', 'ez', 'ant', 'ing', 'ed', 'e', 's', 'x',
+]
 export function stem(t: string): string {
-  let s = t
-  if (s.length > 4 && /[sx]$/.test(s) && !/ss$/.test(s)) s = s.slice(0, -1)
-  if (s.length > 4 && s.endsWith('e')) s = s.slice(0, -1)
-  if (s.length > 5 && s.endsWith('ment')) s = s.slice(0, -4)
-  return s
+  if (t.length <= 4 || /\d|[+#.]/.test(t)) return t
+  for (const suf of SUFFIXES) {
+    if (t.endsWith(suf) && t.length - suf.length >= 4) return t.slice(0, -suf.length).replace(/(y|i)$/, 'i')
+  }
+  return t
 }
 
 export function tokenize(text: string): Tok[] {
@@ -152,8 +159,11 @@ export function countMatches(hay: string[], needle: string[]): number {
   return n
 }
 
+export type MatchKind = 'full' | 'near' | 'partial' | 'none'
 export interface KeywordResult extends Keyword {
   inCv: number
+  match: MatchKind
+  credit: number
 }
 
 export interface MatchResult {
@@ -163,8 +173,20 @@ export interface MatchResult {
   total: number
 }
 
-export function matchKeywords(cvText: string, jobText: string, ignored: string[] = [], extra: string[] = []): MatchResult {
-  const kws = extractKeywords(jobText)
+const close = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a)))
+
+function matchOne(hay: string[], set: Set<string>, k: Keyword): { inCv: number; match: MatchKind; credit: number } {
+  const exact = countMatches(hay, k.stems)
+  if (exact) return { inCv: exact, match: 'full', credit: 1 }
+  const present = k.stems.filter((s) => set.has(s) || hay.some((h) => close(h, s)))
+  if (present.length === k.stems.length) return { inCv: 1, match: 'near', credit: 0.8 }
+  if (k.stems.length > 1 && present.length / k.stems.length >= 0.5) return { inCv: 0, match: 'partial', credit: 0.4 }
+  return { inCv: 0, match: 'none', credit: 0 }
+}
+
+export function matchKeywords(cvText: string, jobText: string, ignored: string[] = [], extra: string[] = [], exclude: string[] = []): MatchResult {
+  const excluded = new Set(exclude.flatMap((e) => cvStems(e)))
+  const kws = extractKeywords(jobText).filter((k) => !k.stems.every((st) => excluded.has(st)))
   for (const e of extra) {
     const stems = cvStems(e)
     if (!stems.length) continue
@@ -172,13 +194,14 @@ export function matchKeywords(cvText: string, jobText: string, ignored: string[]
     if (!kws.find((k) => k.key === key)) kws.unshift({ key, label: e, stems, freq: 1, weight: 3 })
   }
   const hay = cvStems(cvText)
-  const list = kws.filter((k) => !ignored.includes(k.key)).map((k) => ({ ...k, inCv: countMatches(hay, k.stems) }))
+  const set = new Set(hay)
+  const list: KeywordResult[] = kws.filter((k) => !ignored.includes(k.key)).map((k) => ({ ...k, ...matchOne(hay, set, k) }))
   const total = list.reduce((a, k) => a + k.weight, 0)
-  const got = list.filter((k) => k.inCv > 0).reduce((a, k) => a + k.weight, 0)
+  const got = list.reduce((a, k) => a + k.weight * k.credit, 0)
   return {
     keywords: list,
     score: total ? Math.round((got / total) * 100) : 0,
-    matched: list.filter((k) => k.inCv > 0).length,
+    matched: list.filter((k) => k.match === 'full' || k.match === 'near').length,
     total: list.length,
   }
 }
@@ -191,7 +214,12 @@ export interface Check {
   label: string
   status: CheckStatus
   detail: string
+  /** 'ats' : affecte la lecture par un logiciel (compté dans le score). 'redaction' : conseil de rédaction (non compté). */
+  kind: 'ats' | 'redaction'
 }
+
+// Contrôles qui influencent réellement la lecture par un ATS
+const ATS_CHECKS = new Set(['contact', 'title', 'title-match', 'exp', 'exp-dates', 'exp-company', 'education', 'skills', 'headings', 'columns', 'format', 'photo'])
 
 const bulletsOf = (items: SectionItem[]) => items.flatMap((i) => (i.bullets ?? []).filter((b) => b.trim()))
 
@@ -207,7 +235,7 @@ export function runChecks(doc: ResumeDoc, pages: number): Check[] {
   const checks: Check[] = []
   const secs = orderedSections(doc)
   const of = (t: string) => secs.filter((s) => s.type === t)
-  const add = (id: string, label: string, status: CheckStatus, detail: string) => checks.push({ id, label, status, detail })
+  const add = (id: string, label: string, status: CheckStatus, detail: string) => checks.push({ id, label, status, detail, kind: ATS_CHECKS.has(id) ? 'ats' : 'redaction' })
 
   const contacts = doc.header.contacts.filter((c) => c.value.trim())
   const hasEmail = contacts.some((c) => c.kind === 'email' && /@/.test(c.value))
@@ -269,9 +297,15 @@ export function runChecks(doc: ResumeDoc, pages: number): Check[] {
   return checks
 }
 
+/** Lisibilité ATS (0-100) : uniquement les contrôles qui affectent l'analyse par un logiciel. */
+export function parseScore(checks: Check[]): number {
+  const pts = checks.filter((c) => c.kind === 'ats' && c.status !== 'info')
+  return Math.round((pts.reduce((a, c) => a + (c.status === 'ok' ? 1 : c.status === 'warn' ? 0.6 : 0), 0) / Math.max(1, pts.length)) * 100)
+}
+
+/** Score global : 75 % correspondance des mots-clés, 25 % lisibilité. Les conseils de rédaction ne comptent pas. */
 export function overallScore(match: MatchResult | null, checks: Check[]): number {
-  const pts = checks.filter((c) => c.status !== 'info')
-  const s = pts.reduce((a, c) => a + (c.status === 'ok' ? 1 : c.status === 'warn' ? 0.5 : 0), 0) / Math.max(1, pts.length)
-  if (!match || !match.total) return Math.round(s * 100)
-  return Math.round(match.score * 0.6 + s * 100 * 0.4)
+  const p = parseScore(checks)
+  if (!match || !match.total) return p
+  return Math.round(match.score * 0.75 + p * 0.25)
 }

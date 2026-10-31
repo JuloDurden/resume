@@ -65,6 +65,7 @@ export function SectionEditor({ section, onChange, onAskClaude }: { section: Sec
                 onChange={(v) => setOpt({ skillDisplay: v })}
                 options={[
                   { value: 'tags', label: 'Étiquettes' },
+                  { value: 'flow', label: 'En ligne avec puces' },
                   { value: 'inline', label: 'Texte' },
                   { value: 'list', label: 'Liste' },
                   { value: 'lines', label: 'Lignes' },

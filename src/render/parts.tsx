@@ -216,6 +216,14 @@ function skillBlocks(section: Section, style: StyleSettings): ReactNode[] {
         </div>
       )
     else if (mode === 'inline') body = <div className="cv-inline">{tags.join(', ')}</div>
+    else if (mode === 'flow')
+      body = (
+        <div className="cv-flow">
+          {tags.map((t, i) => (
+            <span key={i}>{renderInline(t)}</span>
+          ))}
+        </div>
+      )
     else if (mode === 'list')
       body = <Bullets items={tags} style={style} />
     else if (mode === 'lines')

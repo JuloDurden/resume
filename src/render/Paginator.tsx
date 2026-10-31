@@ -44,6 +44,9 @@ export function themeVars(s: StyleSettings): CSSProperties {
     ['--name-transform' as string]: s.nameUppercase ? 'uppercase' : 'none',
     ['--head-weight' as string]: s.headingBold === false ? '400' : '700',
     ['--item-weight' as string]: s.itemTitleBold === false ? '400' : '700',
+    ['--sep' as string]: `'  ${s.bullet}  '`,
+    ['--item-scale' as string]: String((s.itemTitleSize ?? 100) / 100),
+    ['--item-font' as string]: s.itemTitleFont === 'heading' ? fontStack(s.fontHeading) : 'inherit',
     ['--sub-weight' as string]: s.itemTitleBold === false ? '400' : '600',
   }
 }
@@ -178,7 +181,7 @@ export function Paginator(props: Props) {
   }
 
   return (
-    <div className={`cv-root ${props.className ?? ''}`} style={vars}>
+    <div className={`cv-root ${props.className ?? ''}`} style={vars} data-item-color={style.itemTitleColor ?? 'text'}>
       <div className="cv-measure" ref={measureRef} aria-hidden="true">
         {header && (
           <div style={{ width: W }} data-mheader="1">

@@ -26,7 +26,7 @@ interface DocsState {
   history: Record<string, History>
   lastBackup?: number
   add: (doc: AnyDoc) => void
-  update: <T extends AnyDoc>(id: string, fn: (d: T) => T, opts?: { coalesce?: boolean }) => void
+  update: <T extends AnyDoc>(id: string, fn: (d: T) => T, opts?: { coalesce?: boolean; history?: boolean }) => void
   remove: (id: string) => void
   duplicate: (id: string) => string | undefined
   importDocs: (docs: AnyDoc[]) => number
@@ -49,6 +49,7 @@ export const useDocs = create<DocsState>()(
           const cur = s.docs[id]
           if (!cur) return s
           const next = { ...(fn(cur as never) as AnyDoc), updatedAt: Date.now() }
+          if (opts?.history === false) return { docs: { ...s.docs, [id]: next } }
           const h = s.history[id] ?? { past: [], future: [], lastPush: 0 }
           const now = Date.now()
           const coalesce = opts?.coalesce !== false && now - h.lastPush < 700

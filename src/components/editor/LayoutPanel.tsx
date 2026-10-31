@@ -11,6 +11,15 @@ import { AddSectionModal, addSectionTo } from './ContentPanel'
 
 type Col = 'main' | 'side'
 
+/** Passe d'une à deux colonnes (ou l'inverse) en répartissant les sections. */
+export function setColumns(d: ResumeDoc, columns: 1 | 2, position: 'left' | 'right'): ResumeDoc {
+  if (columns === 1) return { ...d, layout: { ...d.layout, columns: 1, main: [...d.layout.main, ...d.layout.side], side: [] } }
+  if (d.layout.columns === 2) return { ...d, layout: { ...d.layout, sidebarPosition: position } }
+  const byId = new Map(d.sections.map((s) => [s.id, s]))
+  const side = d.layout.main.filter((id) => SECTION_DEFS[byId.get(id)?.type ?? 'custom'].sidebarFriendly && byId.get(id)?.type !== 'text')
+  return { ...d, layout: { ...d.layout, columns: 2, sidebarPosition: position, main: d.layout.main.filter((id) => !side.includes(id)), side } }
+}
+
 function Item({ section, overlay }: { section: Section; overlay?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id })
   return (
@@ -89,13 +98,7 @@ export function LayoutPanel({ doc, update }: { doc: ResumeDoc; update: (fn: (d: 
         <div className="form-stack">
           <Segmented
             value={layout.columns}
-            onChange={(v) =>
-              update((d) => {
-                if (v === 1) return { ...d, layout: { ...d.layout, columns: 1, main: [...d.layout.main, ...d.layout.side], side: [] } }
-                const side = d.layout.main.filter((id) => SECTION_DEFS[byId.get(id)?.type ?? 'custom'].sidebarFriendly && byId.get(id)?.type !== 'text')
-                return { ...d, layout: { ...d.layout, columns: 2, main: d.layout.main.filter((id) => !side.includes(id)), side } }
-              })
-            }
+            onChange={(v) => update((d) => setColumns(d, v, d.layout.sidebarPosition))}
             options={[
               { value: 1, label: 'Une colonne' },
               { value: 2, label: 'Deux colonnes' },

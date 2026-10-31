@@ -12,6 +12,7 @@ const KINDS: { value: ContactLink['kind']; label: string }[] = [
   { value: 'website', label: 'Site web' },
   { value: 'github', label: 'GitHub' },
   { value: 'other', label: 'Autre lien' },
+  { value: 'info', label: 'Information (sans lien)' },
 ]
 
 export function HeaderForm({ header, onChange, showPhoto = true }: { header: Header; onChange: (h: Header) => void; showPhoto?: boolean }) {

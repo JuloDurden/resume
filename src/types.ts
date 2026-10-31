@@ -37,7 +37,7 @@ export interface SectionItem {
   hidden?: boolean
 }
 
-export type SkillDisplay = 'tags' | 'list' | 'inline' | 'bars' | 'dots'
+export type SkillDisplay = 'tags' | 'list' | 'lines' | 'inline' | 'bars' | 'dots'
 export type LevelDisplay = 'dots' | 'bars' | 'text' | 'none'
 
 export interface SectionOptions {
@@ -64,7 +64,7 @@ export interface Section {
 
 export interface ContactLink {
   id: string
-  kind: 'email' | 'phone' | 'location' | 'linkedin' | 'website' | 'github' | 'other'
+  kind: 'email' | 'phone' | 'location' | 'linkedin' | 'website' | 'github' | 'other' | 'info'
   value: string
   label?: string
 }
@@ -78,7 +78,7 @@ export interface Header {
 
 export type HeaderLayout = 'left' | 'center' | 'split' | 'banner'
 export type HeaderPlacement = 'top' | 'main' | 'sidebar'
-export type HeadingStyle = 'underline' | 'bar' | 'plain' | 'boxed' | 'leftbar' | 'dotted'
+export type HeadingStyle = 'underline' | 'bar' | 'plain' | 'boxed' | 'leftbar' | 'dotted' | 'rule'
 export type DateFormat = 'MM/YYYY' | 'MMM YYYY' | 'MMMM YYYY' | 'YYYY'
 export type PageFormat = 'A4' | 'Letter'
 export type PhotoShape = 'circle' | 'rounded' | 'square'
@@ -119,6 +119,10 @@ export interface StyleSettings {
   bullet: string
   pageFormat: PageFormat
   justify: boolean
+  nameUppercase?: boolean
+  headingBold?: boolean
+  itemTitleBold?: boolean
+  photoInSidebar?: boolean
 }
 
 export interface Layout {

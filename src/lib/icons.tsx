@@ -15,6 +15,7 @@ import {
   Dumbbell,
   FolderKanban,
   Gamepad2,
+  Gem,
   Globe,
   GraduationCap,
   HandHeart,
@@ -95,6 +96,7 @@ export const ICONS: Record<string, LucideIcon> = {
   handshake: Handshake,
   medal: Medal,
   sparkles: Sparkles,
+  gem: Gem,
   puzzle: Puzzle,
   code: Code,
   compass: Compass,
@@ -120,7 +122,7 @@ export const ICONS: Record<string, LucideIcon> = {
 }
 
 export const PICKABLE_ICONS = [
-  'star', 'trophy', 'target', 'rocket', 'users', 'lightbulb', 'zap', 'shield', 'chart-line', 'handshake', 'medal',
+  'star', 'gem', 'trophy', 'target', 'rocket', 'users', 'lightbulb', 'zap', 'shield', 'chart-line', 'handshake', 'medal',
   'sparkles', 'puzzle', 'code', 'compass', 'briefcase', 'graduation-cap', 'heart', 'music', 'gamepad-2', 'bike',
   'camera', 'plane', 'coffee', 'mountain', 'dumbbell', 'palette', 'chef-hat', 'leaf', 'waves', 'globe', 'book-open',
 ]

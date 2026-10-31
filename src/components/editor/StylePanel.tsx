@@ -110,12 +110,15 @@ export function StylePanel({ style, onChange, hasSidebar, isLetter }: { style: S
               { value: 'leftbar', label: 'Barre' },
               { value: 'boxed', label: 'Encadré' },
               { value: 'dotted', label: 'Pointillé' },
+              { value: 'rule', label: 'Filet fin' },
               { value: 'plain', label: 'Simple' },
             ]}
           />
           <div className="toggles">
             <Toggle label="Majuscules" checked={style.headingUppercase} onChange={(v) => onChange({ headingUppercase: v })} />
             <Toggle label="Icônes" checked={style.headingIcons} onChange={(v) => onChange({ headingIcons: v })} />
+            <Toggle label="Titres en gras" checked={style.headingBold !== false} onChange={(v) => onChange({ headingBold: v })} />
+            <Toggle label="Intitulés des entrées en gras" checked={style.itemTitleBold !== false} onChange={(v) => onChange({ itemTitleBold: v })} />
           </div>
         </Group>
       )}
@@ -149,6 +152,10 @@ export function StylePanel({ style, onChange, hasSidebar, isLetter }: { style: S
         <div className="toggles">
           <Toggle label="Afficher la photo" checked={style.showPhoto} onChange={(v) => onChange({ showPhoto: v })} />
           <Toggle label="Icônes des coordonnées" checked={style.contactIcons} onChange={(v) => onChange({ contactIcons: v })} />
+          <Toggle label="Nom en majuscules" checked={!!style.nameUppercase} onChange={(v) => onChange({ nameUppercase: v })} />
+          {hasSidebar && !isLetter && style.showPhoto && style.headerPlacement !== 'sidebar' && (
+            <Toggle label="Photo dans la colonne latérale" checked={!!style.photoInSidebar} onChange={(v) => onChange({ photoInSidebar: v })} />
+          )}
         </div>
         {style.showPhoto && (
           <>

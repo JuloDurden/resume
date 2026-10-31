@@ -67,6 +67,7 @@ export function SectionEditor({ section, onChange, onAskClaude }: { section: Sec
                   { value: 'tags', label: 'Étiquettes' },
                   { value: 'inline', label: 'Texte' },
                   { value: 'list', label: 'Liste' },
+                  { value: 'lines', label: 'Lignes' },
                   { value: 'bars', label: 'Barres' },
                   { value: 'dots', label: 'Points' },
                 ]}

@@ -41,6 +41,10 @@ export function themeVars(s: StyleSettings): CSSProperties {
     ['--justify' as string]: s.justify ? 'justify' : 'left',
     ['--head-transform' as string]: s.headingUppercase ? 'uppercase' : 'none',
     ['--head-spacing' as string]: s.headingUppercase ? '0.06em' : '0',
+    ['--name-transform' as string]: s.nameUppercase ? 'uppercase' : 'none',
+    ['--head-weight' as string]: s.headingBold === false ? '400' : '700',
+    ['--item-weight' as string]: s.itemTitleBold === false ? '400' : '700',
+    ['--sub-weight' as string]: s.itemTitleBold === false ? '400' : '600',
   }
 }
 

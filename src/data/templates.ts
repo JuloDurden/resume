@@ -36,6 +36,10 @@ export const BASE_STYLE: StyleSettings = {
   bullet: '•',
   pageFormat: 'A4',
   justify: false,
+  nameUppercase: false,
+  headingBold: true,
+  itemTitleBold: true,
+  photoInSidebar: false,
 }
 
 export interface TemplateDef {
@@ -51,6 +55,46 @@ export interface TemplateDef {
 const SIDE_DEFAULT: SectionType[] = ['skills', 'languages', 'certifications', 'achievements', 'interests', 'awards', 'references']
 
 export const TEMPLATES: TemplateDef[] = [
+  {
+    id: 'sarcelle',
+    name: 'Sarcelle',
+    description: 'Colonne latérale sarcelle avec photo, titres fins en majuscules. D\'après le CV de Julien.',
+    ats: 'bon',
+    style: {
+      fontHeading: 'Rubik',
+      fontBody: 'Inter',
+      fontSize: 8,
+      nameSize: 18,
+      headingSize: 10.5,
+      lineHeight: 1.28,
+      margin: 8.5,
+      sectionSpacing: 5,
+      itemSpacing: 2.2,
+      columnGap: 10,
+      primary: '#2b2f33',
+      accent: '#139c9e',
+      text: '#2b2f33',
+      muted: '#4b5258',
+      sidebarBg: '#006666',
+      sidebarText: '#ffffff',
+      sidebarAccent: '#ffffff',
+      headingStyle: 'rule',
+      headingUppercase: true,
+      headingBold: false,
+      itemTitleBold: false,
+      nameUppercase: true,
+      headerLayout: 'left',
+      headerPlacement: 'main',
+      showPhoto: true,
+      photoInSidebar: true,
+      photoShape: 'circle',
+      photoSize: 30,
+      contactIcons: true,
+      currentLabel: 'Présent',
+    },
+    layout: { columns: 2, sidebarPosition: 'left', sidebarWidth: 35 },
+    sidebarTypes: ['achievements', 'skills', 'languages', 'interests'],
+  },
   {
     id: 'epure',
     name: 'Épure',

@@ -1,4 +1,5 @@
-import type { JobTarget, LetterDoc, ResumeDoc, Section, SectionItem, SectionType } from '../types'
+import type { ContactLink, DateValue, JobTarget, LetterDoc, ResumeDoc, Section, SectionItem, SectionType } from '../types'
+import { ICONS, PICKABLE_ICONS } from './icons'
 import { resumeContentJson } from './export'
 import { uid } from './ids'
 import { SECTION_DEFS } from '../data/sectionDefs'
@@ -143,6 +144,45 @@ interface ClaudeResume {
   sections?: { type?: string; title?: string; items?: Partial<SectionItem>[] }[]
 }
 
+const CONTACT_KINDS: ContactLink['kind'][] = ['email', 'phone', 'location', 'linkedin', 'website', 'github', 'other', 'info']
+
+const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+const strList = (v: unknown) => (Array.isArray(v) ? v.map(str).filter((x): x is string => !!x) : undefined)
+
+function cleanDate(v: unknown): DateValue | undefined {
+  if (!v) return
+  if (typeof v === 'string' || typeof v === 'number') {
+    const m = /(?:(\d{1,2})[/.-])?(\d{4})/.exec(String(v))
+    return m ? { year: Number(m[2]), month: m[1] ? Number(m[1]) : undefined } : undefined
+  }
+  const o = v as DateValue
+  const year = Number(o.year)
+  if (!year || year < 1950 || year > 2100) return
+  const month = Number(o.month)
+  return { year, month: month >= 1 && month <= 12 ? month : undefined }
+}
+
+/** Nettoie une entrée renvoyée par Claude pour qu'elle respecte le format de l'application. */
+export function cleanItem(raw: Partial<SectionItem> | undefined): SectionItem {
+  const it = (raw ?? {}) as Record<string, unknown>
+  const level = Number(it.level)
+  return {
+    id: uid(),
+    title: str(it.title),
+    subtitle: str(it.subtitle),
+    location: str(it.location),
+    start: cleanDate(it.start),
+    end: cleanDate(it.end),
+    current: it.current === true || undefined,
+    description: str(it.description),
+    bullets: strList(it.bullets),
+    link: str(it.link),
+    level: Number.isFinite(level) ? Math.max(0, Math.min(5, Math.round(level))) : undefined,
+    tags: strList(it.tags),
+    icon: typeof it.icon === 'string' && it.icon in ICONS ? it.icon : undefined,
+  }
+}
+
 /** Construit un nouveau CV à partir de la réponse JSON de Claude, en gardant le style et la disposition du CV source. */
 export function resumeFromClaude(src: ResumeDoc, data: ClaudeResume, name: string): ResumeDoc {
   if (!data || !Array.isArray(data.sections)) throw new Error('Le JSON ne contient pas de liste "sections".')
@@ -155,13 +195,13 @@ export function resumeFromClaude(src: ResumeDoc, data: ClaudeResume, name: strin
       type,
       title: s.title || SECTION_DEFS[type].defaultTitle,
       options: prev ? { ...prev.options } : { ...SECTION_DEFS[type].defaults },
-      items: (s.items ?? []).map((it) => ({ ...it, id: uid() }) as SectionItem),
+      items: (Array.isArray(s.items) ? s.items : []).map((it) => cleanItem(it)),
     }
   })
   const side = src.layout.columns === 2 ? sections.filter((s) => sideTypes.has(s.type)).map((s) => s.id) : []
   const main = sections.filter((s) => !side.includes(s.id)).map((s) => s.id)
   const contacts = Array.isArray(data.header?.contacts)
-    ? data.header!.contacts!.filter((c) => c.value).map((c) => ({ id: uid(), kind: (c.kind ?? 'other') as never, value: c.value! }))
+    ? data.header!.contacts!.filter((c) => c && typeof c.value === 'string' && c.value.trim()).map((c) => ({ id: uid(), kind: (CONTACT_KINDS.includes(c.kind as never) ? c.kind : 'other') as ContactLink['kind'], value: c.value!.trim() }))
     : src.header.contacts
   const now = Date.now()
   return {
@@ -193,4 +233,47 @@ export async function copyText(text: string): Promise<boolean> {
     ta.remove()
     return ok
   }
+}
+
+/* ---------- Import d'un CV PDF ---------- */
+
+export function pdfImportPrompt(): string {
+  const types = Object.values(SECTION_DEFS)
+    .map((d) => `- "${d.type}" : ${d.label}`)
+    .join('\n')
+  return `Je te joins mon CV au format PDF. Convertis-le fidèlement en JSON pour que je puisse l'importer dans mon éditeur de CV.
+
+Règles impératives :
+- Recopie le texte tel quel : ne reformule pas, ne corrige pas, n'ajoute ni ne supprime aucune information.
+- Respecte l'ordre des sections et des entrées du PDF. Si le CV a deux colonnes, traite chaque section entièrement avant de passer à la suivante.
+- Une entrée par poste, diplôme, certification, langue, etc. Chaque ligne à puce devient un élément de "bullets", sans le symbole de puce.
+- Dates au format {"month": 1 à 12, "year": AAAA} ; omets "month" s'il n'est pas indiqué. Pour un poste en cours, mets "current": true sans "end".
+- Garde le **gras** présent dans les puces en l'entourant de deux astérisques.
+- N'écris jamais de tiret cadratin ni de tiret demi-cadratin.
+
+Format attendu, un seul bloc \`\`\`json :
+{
+  "header": {
+    "name": "Prénom Nom",
+    "title": "Titre sous le nom",
+    "contacts": [{"kind": "email | phone | location | linkedin | website | github | other | info (texte sans lien, ex. permis)", "value": "..."}]
+  },
+  "sections": [
+    {"type": "...", "title": "titre de la section tel qu'il apparaît", "items": [ ... ]}
+  ]
+}
+
+Types de section disponibles (choisis le plus proche, sinon "custom") :
+${types}
+
+Champs d'une entrée selon le type :
+- summary, text : {"description": "texte, paragraphes séparés par une ligne vide"}
+- experience, education, projects, volunteering, custom : {"title": "poste ou diplôme", "subtitle": "entreprise ou école", "location": "ville", "start": {...}, "end": {...}, "current": false, "description": "contexte éventuel", "bullets": ["..."], "link": "url éventuelle"}
+- certifications, awards, publications : {"title", "subtitle": "organisme", "end": {"year": AAAA}, "description"}
+- skills : une entrée par groupe {"title": "nom du groupe ou vide", "tags": ["compétence 1", "compétence 2"], "level": 0 à 5 si une jauge est affichée}
+- languages : {"title": "Anglais", "subtitle": "niveau écrit (ex. C1, courant)", "level": 0 à 5}
+- achievements, interests : {"icon": un nom parmi ${PICKABLE_ICONS.join(', ')}, "title", "description"}
+- references : {"title": "nom", "subtitle": "poste, entreprise", "description": "coordonnées"}
+
+Après le bloc JSON, signale en une ou deux lignes ce que tu n'as pas pu lire ou classer avec certitude.`
 }

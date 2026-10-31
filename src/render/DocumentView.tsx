@@ -26,6 +26,9 @@ export function ResumeView({ doc, ...rest }: { doc: ResumeDoc } & CommonProps) {
   useFonts(style.fontHeading, style.fontBody)
   const two = layout.columns === 2
   const placement = !two && style.headerPlacement === 'sidebar' ? 'top' : style.headerPlacement
+  // photo seule en haut de la colonne latérale, le reste de l'en-tête restant à sa place
+  const sidePhoto = two && !!style.photoInSidebar && style.showPhoto && !!doc.header.photo && placement !== 'sidebar'
+  const headerStyle = sidePhoto ? { ...style, showPhoto: false } : style
 
   const { main, side } = useMemo(() => {
     const byId = new Map(doc.sections.map((s) => [s.id, s]))
@@ -36,16 +39,29 @@ export function ResumeView({ doc, ...rest }: { doc: ResumeDoc } & CommonProps) {
         .flatMap((s) => sectionBlocks(s, style))
     let mainB: Block[] = build(two ? layout.main : [...layout.main, ...layout.side])
     let sideB: Block[] = two ? build(layout.side) : []
-    const headerBlock: Block = { key: 'header', sectionId: 'header', node: <HeaderBlock header={doc.header} style={style} where={placement === 'sidebar' ? 'sidebar' : 'main'} /> }
+    const headerBlock: Block = { key: 'header', sectionId: 'header', node: <HeaderBlock header={doc.header} style={headerStyle} where={placement === 'sidebar' ? 'sidebar' : 'main'} /> }
     if (placement === 'main') mainB = [headerBlock, ...mainB]
     if (placement === 'sidebar') sideB = [headerBlock, ...sideB]
+    if (sidePhoto)
+      sideB = [
+        {
+          key: 'side-photo',
+          sectionId: 'header',
+          node: (
+            <div className="cv-side-photo">
+              <img className={`cv-photo shape-${style.photoShape}`} src={doc.header.photo} alt="" />
+            </div>
+          ),
+        },
+        ...sideB,
+      ]
     return { main: mainB, side: sideB }
-  }, [doc, style, layout, two, placement])
+  }, [doc, style, headerStyle, layout, two, placement, sidePhoto])
 
   const header =
     placement === 'top' ? (
       <div className={`cv-blk cv-top-header${style.headerLayout === 'banner' ? ' banner' : ''}${rest.onSectionClick ? ' cv-clickable' : ''}`} onClick={rest.onSectionClick ? () => rest.onSectionClick!('header') : undefined}>
-        <HeaderBlock header={doc.header} style={style} where="top" />
+        <HeaderBlock header={doc.header} style={headerStyle} where="top" />
       </div>
     ) : null
 

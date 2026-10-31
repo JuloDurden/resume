@@ -14,6 +14,7 @@ const CONTACT_ICON: Record<ContactLink['kind'], string> = {
   website: 'globe',
   github: 'github',
   other: 'link',
+  info: 'star',
 }
 
 export function contactHref(c: ContactLink): string | undefined {
@@ -25,6 +26,7 @@ export function contactHref(c: ContactLink): string | undefined {
     case 'phone':
       return `tel:${v.replace(/[^\d+]/g, '')}`
     case 'location':
+    case 'info':
       return undefined
     default:
       return /^https?:\/\//i.test(v) ? v : `https://${v}`
@@ -179,12 +181,13 @@ function entryBlocks(section: Section, item: SectionItem, style: StyleSettings, 
           {loc && <span className="cv-eloc">{loc}</span>}
         </div>
       )}
+      {desc && <div className="cv-edesc">{renderInline(desc)}</div>}
       {link && (
         <a className="cv-elink" href={/^https?:/i.test(link) ? link : `https://${link}`} target="_blank" rel="noreferrer">
+          <Icon name="link" size={10} />
           {link.replace(/^https?:\/\//i, '')}
         </a>
       )}
-      {desc && <div className="cv-edesc">{renderInline(desc)}</div>}
       <Bullets items={bullets.slice(0, keep)} style={style} />
     </div>
   )
@@ -215,6 +218,14 @@ function skillBlocks(section: Section, style: StyleSettings): ReactNode[] {
     else if (mode === 'inline') body = <div className="cv-inline">{tags.join(', ')}</div>
     else if (mode === 'list')
       body = <Bullets items={tags} style={style} />
+    else if (mode === 'lines')
+      body = (
+        <div className="cv-lines">
+          {tags.map((t, i) => (
+            <div key={i}>{renderInline(t)}</div>
+          ))}
+        </div>
+      )
     else
       body = (
         <div className="cv-skill-level">

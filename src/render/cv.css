@@ -120,6 +120,7 @@
   line-height: 1.1;
   color: var(--c-head);
   letter-spacing: -0.01em;
+  text-transform: var(--name-transform);
 }
 .cv-title {
   font-family: var(--fh);
@@ -212,7 +213,7 @@
 .cv-heading {
   font-family: var(--fh);
   font-size: var(--hs);
-  font-weight: 700;
+  font-weight: var(--head-weight);
   color: var(--c-head);
   text-transform: var(--head-transform);
   letter-spacing: var(--head-spacing);
@@ -229,6 +230,11 @@
 .h-underline {
   border-bottom: 1.2px solid var(--c-head);
   padding-bottom: 0.2em;
+}
+.h-rule {
+  border-bottom: 1px solid color-mix(in srgb, var(--c-text) 28%, transparent);
+  padding-bottom: 0.3em;
+  margin-bottom: 0.7em;
 }
 .h-dotted {
   border-bottom: 1.5px dotted color-mix(in srgb, var(--c-head) 70%, transparent);
@@ -282,15 +288,21 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 0.2em 1em;
+}
+.cv-erow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.cv-side .cv-erow {
   flex-wrap: wrap;
 }
 .cv-etitle {
-  font-weight: 700;
+  font-weight: var(--item-weight);
   color: var(--c-text);
 }
 .cv-esub {
   color: var(--c-accent);
-  font-weight: 600;
+  font-weight: var(--sub-weight);
 }
 .cv-edates,
 .cv-eloc {
@@ -302,13 +314,17 @@
   white-space: normal;
 }
 .cv-elink {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-top: 0.15em;
   color: var(--c-accent);
   font-size: calc(var(--fs) * 0.92);
   text-decoration: none;
 }
 .cv-edesc {
   margin-top: 0.2em;
+  white-space: pre-line;
   text-align: var(--justify);
 }
 .cv-edesc.pre {
@@ -387,7 +403,17 @@
 }
 .cv-lang-text {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.8em;
+  flex: 1;
+  min-width: 0;
+}
+.cv-lines > div {
+  padding-top: 0.45em;
+}
+.cv-lines > div:first-child {
+  padding-top: 0;
 }
 .cv-lang-text .cv-esub {
   font-weight: 400;
@@ -481,4 +507,10 @@
   padding-top: calc(var(--sec) * 1.6);
   font-weight: 700;
   font-family: var(--fh);
+}
+
+.cv-side-photo {
+  display: flex;
+  justify-content: center;
+  padding-bottom: calc(var(--sec) * 0.6);
 }

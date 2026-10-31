@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, DatabaseBackup, FilePlus2, FileSignature, FileJson, MoreVertical, Pencil, Trash2, Upload } from 'lucide-react'
+import { Copy, DatabaseBackup, FileUp, FilePlus2, FileSignature, FileJson, MoreVertical, Pencil, Trash2, Upload } from 'lucide-react'
 import type { AnyDoc, ResumeDoc } from '../types'
 import { useDocs } from '../store/documents'
 import { TEMPLATES } from '../data/templates'
 import { newLetter, newResume } from '../data/factory'
 import { download, parseJson, safeFileName, toJson } from '../lib/export'
 import { DocThumb } from '../components/DocThumb'
+import { PdfImportModal } from '../components/PdfImportModal'
 import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput, confirmAction, toast } from '../components/ui'
 
 const fmt = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -129,7 +130,7 @@ export default function Dashboard() {
   const { remove, duplicate, update, importDocs, markBackup } = useDocs.getState()
   const navigate = useNavigate()
   const [filter, setFilter] = useState<'all' | 'resume' | 'letter'>('all')
-  const [modal, setModal] = useState<'resume' | 'letter' | null>(null)
+  const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const docs = useMemo(() => Object.values(docsMap).sort((a, b) => b.updatedAt - a.updatedAt), [docsMap])
@@ -160,9 +161,37 @@ export default function Dashboard() {
           <span>Resume</span>
         </div>
         <div className="dash-actions">
-          <button className="btn" onClick={() => fileRef.current?.click()}>
-            <Upload size={16} /> Importer
-          </button>
+          <Menu
+            align="right"
+            trigger={(t) => (
+              <button className="btn" onClick={t}>
+                <Upload size={16} /> Importer
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                <MenuItem
+                  icon={<FileUp size={15} />}
+                  onClick={() => {
+                    close()
+                    setModal('pdf')
+                  }}
+                >
+                  Un CV PDF (avec Claude)
+                </MenuItem>
+                <MenuItem
+                  icon={<FileJson size={15} />}
+                  onClick={() => {
+                    close()
+                    fileRef.current?.click()
+                  }}
+                >
+                  Une sauvegarde JSON
+                </MenuItem>
+              </>
+            )}
+          </Menu>
           <button className="btn" onClick={backup} disabled={!docs.length}>
             <DatabaseBackup size={16} /> Sauvegarder tout
           </button>
@@ -202,10 +231,15 @@ export default function Dashboard() {
       ) : !docs.length ? (
         <div className="empty-state">
           <h2>Bienvenue</h2>
-          <p>Créez votre premier CV à partir d'un modèle, ou importez une sauvegarde.</p>
-          <button className="btn primary" onClick={() => setModal('resume')}>
-            <FilePlus2 size={16} /> Créer un CV
-          </button>
+          <p>Créez votre premier CV à partir d'un modèle, importez un CV PDF existant, ou restaurez une sauvegarde.</p>
+          <div className="row-gap">
+            <button className="btn primary" onClick={() => setModal('resume')}>
+              <FilePlus2 size={16} /> Créer un CV
+            </button>
+            <button className="btn" onClick={() => setModal('pdf')}>
+              <FileUp size={16} /> Importer un CV PDF
+            </button>
+          </div>
         </div>
       ) : (
         <div className="doc-grid">
@@ -280,6 +314,7 @@ export default function Dashboard() {
 
       <NewResumeModal open={modal === 'resume'} onClose={() => setModal(null)} />
       {modal === 'letter' && <NewLetterModal open onClose={() => setModal(null)} resumes={resumes} />}
+      <PdfImportModal open={modal === 'pdf'} onClose={() => setModal(null)} />
     </div>
   )
 }

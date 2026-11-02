@@ -173,9 +173,56 @@ function ShowcasePublisher({ cfg }: { cfg: SyncConfig }) {
   )
 }
 
+/** Remplace le token (permissions modifiées, token expiré) sans toucher aux données. */
+function ReplaceToken({ cfg, onDone }: { cfg: SyncConfig; onDone: () => void }) {
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const run = useSync((s) => s.run)
+  const save = async () => {
+    setBusy(true)
+    try {
+      const owner = await whoAmI(token.trim())
+      const next: SyncConfig = { ...cfg, token: token.trim(), owner }
+      if ((await checkRepo(next)) === 'missing') throw new Error(`Ce token n'a pas accès au dépôt ${cfg.repo}.`)
+      saveConfig(next)
+      toast.ok('Token remplacé')
+      await run()
+      onDone()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Token refusé')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="step">
+      <span className="step-n">
+        <KeyRound size={13} />
+      </span>
+      <div className="step-body">
+        <strong>Nouveau token</strong>
+        <span className="muted small">
+          Inutile si vous avez seulement ajouté des permissions à votre token existant sur GitHub : il garde la même valeur. Pour un nouveau token, créez-le sur{' '}
+          <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noreferrer">
+            github.com/settings/personal-access-tokens
+          </a>
+          .
+        </span>
+        <div className="row-gap">
+          <TextInput type="password" value={token} onChange={setToken} placeholder="github_pat_..." />
+          <button className="btn primary" disabled={!token.trim() || busy} onClick={save}>
+            {busy ? 'Vérification...' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function SyncModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { status, message, lastSync, run } = useSync()
   const [, force] = useState(0)
+  const [replacing, setReplacing] = useState(false)
   const cfg = loadConfig()
   return (
     <Modal open={open} onClose={onClose} title="Sauvegarde automatique sur GitHub" wide>
@@ -196,6 +243,9 @@ export function SyncModal({ open, onClose }: { open: boolean; onClose: () => voi
             <button className="btn sm" onClick={() => run()} disabled={status === 'syncing'}>
               <RefreshCw size={14} /> Synchroniser
             </button>
+            <button className="btn sm" onClick={() => setReplacing((v) => !v)}>
+              <KeyRound size={14} /> Changer le token
+            </button>
             <button
               className="btn sm ghost"
               onClick={() => {
@@ -208,6 +258,7 @@ export function SyncModal({ open, onClose }: { open: boolean; onClose: () => voi
               <LogOut size={14} /> Déconnecter
             </button>
           </div>
+          {replacing && <ReplaceToken cfg={cfg} onDone={() => setReplacing(false)} />}
           <p className="muted small">Chaque modification est envoyée quelques secondes après la saisie. Les autres navigateurs connectés la récupèrent à leur prochaine ouverture ou toutes les 3 minutes. En cas de modification au même moment sur deux navigateurs, la plus récente l'emporte.</p>
           <ShowcasePublisher cfg={cfg} />
         </div>

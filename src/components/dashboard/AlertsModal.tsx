@@ -53,8 +53,8 @@ function AlertCard({ alert, onChange, onDelete }: { alert: Alert; onChange: (p: 
   return (
     <div className={`alert-card${alert.active === false ? ' off' : ''}`}>
       <div className="grid-2">
-        <Field label="Métier ou mots-clés">
-          <TextInput value={alert.keywords} onChange={(v) => onChange({ keywords: v })} placeholder="ex. chef de projet digital" />
+        <Field label="Métier ou mots-clés" hint="Plusieurs intitulés possibles, séparés par des virgules">
+          <TextInput value={alert.keywords} onChange={(v) => onChange({ keywords: v })} placeholder="ex. product owner, chef de projet SI, product manager" />
         </Field>
         <Field label="Lieu">
           <CommuneInput alert={alert} onChange={onChange} />

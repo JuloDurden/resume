@@ -21,7 +21,7 @@ export interface SearchLink {
 }
 
 export function searchLinks(a: Alert): SearchLink[] {
-  const q = encodeURIComponent(a.keywords.trim())
+  const q = encodeURIComponent(a.keywords.split(/,|;|\||\s+ou\s+/i)[0].trim())
   const place = encodeURIComponent(a.commune ?? '')
   const radius = a.distance ?? 30
   return [

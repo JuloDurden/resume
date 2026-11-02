@@ -46,6 +46,12 @@ const norm = (s) =>
 const words = (s) => norm(s).split(/[^a-z0-9]+/).filter((w) => w && !STOP.has(w))
 /** Racine tolérante : « chargée », « chargés », « chargé » donnent « charg ». */
 const stem = (w) => (w.length <= 4 ? w : w.replace(/(euses|euse|eurs|eur|rices|rice|ees|ee|es|e|s|x)$/, '').slice(0, Math.max(4, w.length - 3)))
+/** Variantes d'une alerte : « product owner, chef de projet SI » ou « product owner OU chef de projet ». */
+const variants = (s) =>
+  (s ?? '')
+    .split(/,|;|\||\s+ou\s+|\s+or\s+/i)
+    .map((x) => x.trim())
+    .filter(Boolean)
 const cleanKeywords = (s) => words(s).filter((w) => w.length >= 2).join(',')
 
 /** Code INSEE et département d'une commune à partir de son nom, si l'application ne les a pas fournis. */
@@ -151,12 +157,15 @@ async function csp(add) {
   for (const a of alerts) {
     let dep = a.departement
     if (!dep && a.commune) dep = (await commune(a.commune)).departement
-    matchers.push({ a, stems: [...new Set(words(a.keywords).map(stem))], dep, found: [] })
+    const groups = variants(a.keywords)
+      .map((v) => [...new Set(words(v).map((w) => (w.length <= 3 ? `${w} ` : stem(w))))])
+      .filter((g) => g.length)
+    matchers.push({ a, groups, dep, found: [] })
   }
   const today = new Date().toISOString().slice(0, 10)
   let head = null
   let rows = 0
-  const hay = (s) => ` ${words(s).join(' ')}`
+  const hay = (s) => ` ${words(s).join(' ')} `
   for await (const row of csvRows(textChunks())) {
     if (!head) {
       head = Object.fromEntries(row.map((h, i) => [h.replace(/^﻿/, '').trim(), i]))
@@ -165,13 +174,14 @@ async function csp(add) {
     }
     rows++
     const g = (k) => (row[head[k]] ?? '').trim()
-    const end = isoDate(g('Date de fin de publication par défaut'))
+    let end = isoDate(g('Date de fin de publication par défaut'))
     if (end && end < today) continue
+    if (end && end > '2100') end = undefined
     const text = hay(`${g('Intitulé du poste')} ${g('Métier')} ${g('Spécialisation')}`)
     const loc = g('Localisation du poste')
     for (const m of matchers) {
       if (m.dep && !loc.includes(`(${m.dep})`)) continue
-      if (!m.stems.every((s) => text.includes(` ${s}`))) continue
+      if (!m.groups.some((g) => g.every((s) => text.includes(` ${s}`)))) continue
       m.found.push({ row: [...row], end })
     }
   }
@@ -223,7 +233,7 @@ async function csp(add) {
 const strip = (h) => (h ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
 
 async function jooble(a, add) {
-  const body = JSON.stringify({ keywords: a.keywords.trim(), location: a.commune ?? '', radius: String(a.distance ?? 30), page: '1', ResultOnPage: '50' })
+  const body = JSON.stringify({ keywords: variants(a.keywords)[0], location: a.commune ?? '', radius: String(a.distance ?? 30), page: '1', ResultOnPage: '50' })
   let r
   for (const host of [process.env.JOOBLE_HOST || 'fr.jooble.org', 'jooble.org']) {
     r = await fetch(`https://${host}/api/${process.env.JOOBLE_KEY}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
@@ -290,7 +300,7 @@ function ftItem(o) {
 }
 
 async function franceTravail(tk, a, firstRun, add) {
-  const params = new URLSearchParams({ motsCles: cleanKeywords(a.keywords), sort: '1', range: '0-149', publieeDepuis: firstRun ? '31' : '14' })
+  const params = new URLSearchParams({ motsCles: cleanKeywords(variants(a.keywords)[0]), sort: '1', range: '0-149', publieeDepuis: firstRun ? '31' : '14' })
   let code = a.communeCode
   if (!code && a.commune) code = (await commune(a.commune)).code
   if (code) {
@@ -326,7 +336,15 @@ else {
   } catch (e) {
     errors.push(`Choisir le Service Public : ${e.message}`)
   }
-  if (process.env.JOOBLE_KEY)
+  // Jooble : quota limité (environ 500 requêtes), donc une seule interrogation par alerte et par jour par défaut
+  const every = Number(process.env.JOOBLE_EVERY_HOURS || 24) * 3600000
+  const joobleDue = process.env.JOOBLE_KEY && Date.now() - new Date(sources.jooble?.at ?? 0).getTime() >= every - 600000
+  if (process.env.JOOBLE_KEY && !joobleDue) notes.push(`Jooble : prochain passage ${new Date(new Date(sources.jooble.at).getTime() + every).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}.`)
+  if (joobleDue) {
+    sources.jooble = { at: new Date().toISOString(), requests: (sources.jooble?.requests ?? 0) + alerts.length }
+    notes.push(`Jooble : ${sources.jooble.requests} requête(s) utilisée(s) depuis l'installation.`)
+  }
+  if (joobleDue)
     for (const a of alerts) {
       try {
         await jooble(a, add)

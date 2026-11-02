@@ -4,7 +4,7 @@
 
 **Application et vitrine : https://julodurden.github.io/resume/**
 
-Projet conçu par Julien Clavel pour remplacer un abonnement à un service en ligne de création de CV, avec Claude comme assistant de rédaction.
+Projet conçu par Julien Clavel avec Claude comme assistant de rédaction.
 
 ## Fonctionnalités
 

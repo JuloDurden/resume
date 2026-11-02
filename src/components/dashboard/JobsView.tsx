@@ -22,6 +22,7 @@ function JobCard({ item, mark, alertNames, onApply, isNew }: { item: FeedItem; m
         <div className="jc-title">
           <strong>
             {isNew && <span className="new-dot" title="Nouvelle depuis votre dernière visite" />}
+            {item.closed && <span className="jc-closed">Expirée</span>}
             {item.title}
           </strong>
           <span>{item.company ?? 'Entreprise non communiquée'}</span>
@@ -133,7 +134,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
 
   const items = feed?.items ?? []
   const markOf = (id: string): MarkState => watch.marks[id]?.s ?? 'none'
-  const names = useMemo(() => Object.fromEntries(watch.alerts.map((a) => [a.id, a.keywords])), [watch.alerts])
+  const names = useMemo<Record<string, string>>(() => ({ email: 'Alerte email', ...Object.fromEntries(watch.alerts.map((a) => [a.id, a.keywords])) }), [watch.alerts])
   const counts = useMemo(() => {
     const c = { new: 0, fav: 0, applied: 0, hidden: 0 }
     for (const i of items) {
@@ -202,6 +203,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
             </div>
             <select className="input select alert-select" value={alert} onChange={(e) => setAlert(e.target.value)}>
               <option value="all">Toutes les alertes</option>
+              {items.some((i) => i.alerts.includes('email')) && <option value="email">Alertes email</option>}
               {watch.alerts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.keywords || 'Sans titre'}

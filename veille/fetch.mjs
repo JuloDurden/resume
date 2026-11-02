@@ -3,8 +3,10 @@
 //  - Choisir le Service Public (données ouvertes data.gouv.fr, sans clé) : offres de la fonction publique
 //  - Jooble (agrégateur, clé gratuite sur demande) : secret JOOBLE_KEY
 //  - France Travail « Offres d'emploi v2 » (accès sur demande) : secrets FT_CLIENT_ID et FT_CLIENT_SECRET
-// Lancé par GitHub Actions (.github/workflows/veille.yml) dans le dépôt privé de sauvegarde.
-// Aucune dépendance : Node 20 ou plus.
+//  - Alertes emploi reçues dans Gmail (LinkedIn, Hellowork, Indeed, APEC...) : secrets GMAIL_USER et
+//    GMAIL_APP_PASSWORD, lecture seule (veille/mail.mjs, modules imapflow et mailparser)
+// Puis vérifie que les annonces existent toujours et retire celles qui ont été supprimées.
+// Lancé par GitHub Actions (.github/workflows/veille.yml) dans le dépôt privé de sauvegarde. Node 20 ou plus.
 import { createReadStream } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 
@@ -322,11 +324,23 @@ async function franceTravail(tk, a, firstRun, add) {
 const known = new Map((prev.items ?? []).map((i) => [i.id, i]))
 const firstRun = !prev.updatedAt
 let fetched = 0
+const MAIL_ALERT = 'email'
 const add = (item, alertId) => {
   fetched++
   const cur = known.get(item.id)
   if (cur) Object.assign(cur, item, { alerts: [...new Set([...(cur.alerts ?? []), alertId])], firstSeen: cur.firstSeen })
   else known.set(item.id, { ...item, alerts: [alertId], firstSeen: new Date().toISOString() })
+}
+
+const hasMail = !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+if (hasMail) {
+  try {
+    const { readMailAlerts } = await import('./mail.mjs')
+    await readMailAlerts({ user: process.env.GMAIL_USER.trim(), password: process.env.GMAIL_APP_PASSWORD.replace(/\s+/g, ''), days: firstRun || !sources.mail ? 14 : 3, add: (i) => add(i, MAIL_ALERT), notes })
+    sources.mail = { at: new Date().toISOString() }
+  } catch (e) {
+    errors.push(/auth|credentials|invalid/i.test(`${e.message} ${e.responseText ?? ''}`) ? 'Gmail : connexion refusée. Vérifiez GMAIL_USER (adresse complète) et le mot de passe d\'application (16 lettres).' : `Gmail : ${e.message}`)
+  }
 }
 
 if (!alerts.length) notes.push('Aucune alerte active.')
@@ -368,7 +382,7 @@ else {
 
 const now = new Date().toISOString().slice(0, 10)
 const limit = Date.now() - KEEP_DAYS * 86400000
-const active = new Set(alerts.map((a) => a.id))
+const active = new Set([...alerts.map((a) => a.id), ...(hasMail ? [MAIL_ALERT] : [])])
 // les annonces en favori ou en candidature restent, même si leur alerte a été supprimée
 const marked = (id) => ['fav', 'applied'].includes(watch.marks?.[id]?.s)
 const items = [...known.values()]
@@ -376,5 +390,55 @@ const items = [...known.values()]
   .filter((i) => (i.alerts.length || marked(i.id)) && (i.until ? i.until >= now : new Date(i.date ?? i.firstSeen).getTime() >= limit))
   .sort((x, y) => (y.date ?? '').localeCompare(x.date ?? ''))
   .slice(0, MAX_ITEMS)
+
+/* ---------- annonces supprimées ---------- */
+
+// Signes qu'une annonce n'est plus en ligne, par site (vérification une fois par jour et par annonce).
+const GONE = /n['’]est plus (disponible|en ligne|active|accessible)|n['’]existe plus|a été (pourvue|supprimée|retirée|clôturée)|offre (expirée|clôturée|pourvue|dépubliée)|plus d['’]acceptation de candidatures|n['’]accepte plus de candidatures|no longer accepting applications|this job is no longer available|page (introuvable|non trouvée)/i
+const CHECKABLE = /choisirleservicepublic|francetravail|hellowork|linkedin|welcometothejungle|cadremploi/
+
+async function stillOnline(i) {
+  const ctl = new AbortController()
+  const t = setTimeout(() => ctl.abort(), 12000)
+  try {
+    const r = await fetch(i.url, { redirect: 'follow', signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (veille Resume)', 'Accept-Language': 'fr-FR,fr' } })
+    if (r.status === 404 || r.status === 410) return false
+    if (!r.ok) return undefined // bloqué ou indisponible : on ne conclut pas
+    const final = r.url
+    // redirigé vers une page de recherche : l'annonce a disparu
+    if (/choisirleservicepublic/.test(i.url) && !/offre-emploi/.test(final)) return false
+    if (/hellowork/.test(i.url) && !/emplois\/\d+/.test(final)) return false
+    if (/francetravail/.test(i.url) && !/detail/.test(final)) return false
+    const html = (await r.text()).slice(0, 400000)
+    return !GONE.test(html)
+  } catch {
+    return undefined
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+{
+  const day = Date.now() - 20 * 3600000
+  const todo = items.filter((i) => CHECKABLE.test(i.url ?? '') && !i.closed && new Date(i.checkedAt ?? 0).getTime() < day).slice(0, 120)
+  let gone = 0
+  for (let k = 0; k < todo.length; k += 4) {
+    await Promise.all(
+      todo.slice(k, k + 4).map(async (i) => {
+        const ok = await stillOnline(i)
+        if (ok === undefined) return
+        i.checkedAt = new Date().toISOString()
+        if (!ok) {
+          i.closed = true
+          gone++
+        }
+      }),
+    )
+  }
+  if (todo.length) notes.push(`Vérification : ${todo.length} lien(s) contrôlé(s), ${gone} annonce(s) retirée(s).`)
+}
+// les annonces retirées ne restent que si elles sont en favori ou en candidature (signalées « expirée »)
+for (let k = items.length - 1; k >= 0; k--) if (items[k].closed && !marked(items[k].id)) items.splice(k, 1)
+
 // en erreur seulement si aucune source n'a répondu
 await save(errors.length && !fetched && !notes.some((n) => n.includes('déjà lu')) ? 'error' : 'ok', items)

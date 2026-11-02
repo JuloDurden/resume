@@ -293,6 +293,9 @@ export interface FeedItem {
   firstSeen?: string
   /** date limite de candidature (aaaa-mm-jj) */
   until?: string
+  /** l'annonce n'est plus en ligne */
+  closed?: boolean
+  checkedAt?: string
   url: string
   source: string
   contact?: { name?: string; email?: string }

@@ -3,6 +3,7 @@ import { GitHubError, type SyncConfig } from './github'
 import { newOffer } from './offers'
 import fetchScript from '../../veille/fetch.mjs?raw'
 import workflow from '../../veille/veille.yml?raw'
+import mailScript from '../../veille/mail.mjs?raw'
 
 /** Types de contrat de l'API France Travail. */
 export const CONTRACTS: { value: string; label: string }[] = [
@@ -97,8 +98,9 @@ async function putFile(c: SyncConfig, path: string, content: string, message: st
 /** Installe (ou met à jour) le script et la tâche programmée dans le dépôt de sauvegarde. */
 export async function installWatch(c: SyncConfig): Promise<boolean> {
   const a = await putFile(c, 'veille/fetch.mjs', fetchScript, 'Veille : script de récupération des annonces')
+  const m = await putFile(c, 'veille/mail.mjs', mailScript, 'Veille : lecture des alertes email')
   const b = await putFile(c, '.github/workflows/veille.yml', workflow, 'Veille : tâche programmée')
-  return a || b
+  return a || m || b
 }
 
 export async function watchInstalled(c: SyncConfig): Promise<boolean> {

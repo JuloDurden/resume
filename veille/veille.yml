@@ -1,6 +1,6 @@
 # Veille d'annonces de Resume : récupère les nouvelles offres toutes les 3 heures.
 # Installée par l'application Resume. Source sans clé : Choisir le Service Public (data.gouv.fr).
-# Secrets facultatifs : JOOBLE_KEY (clé gratuite sur demande), FT_CLIENT_ID et FT_CLIENT_SECRET (accès sur demande).
+# Secrets facultatifs : GMAIL_USER et GMAIL_APP_PASSWORD (alertes email), JOOBLE_KEY (clé gratuite sur demande), FT_CLIENT_ID et FT_CLIENT_SECRET (accès sur demande).
 name: Veille annonces
 
 on:
@@ -24,9 +24,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Modules de lecture des emails
+        run: npm install --no-save --no-package-lock --no-audit --no-fund imapflow@1 mailparser@3
       - name: Récupérer les annonces
         run: node veille/fetch.mjs
         env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           JOOBLE_KEY: ${{ secrets.JOOBLE_KEY }}
           FT_CLIENT_ID: ${{ secrets.FT_CLIENT_ID }}
           FT_CLIENT_SECRET: ${{ secrets.FT_CLIENT_SECRET }}

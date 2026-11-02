@@ -190,7 +190,31 @@ function Setup() {
           )}
         </div>
       </Step>
-      <Step n={2} title="Facultatif : ajoutez le secteur privé avec Jooble" done={!!feed?.items.some((i) => i.source.includes('Jooble'))}>
+      <Step n={2} title="Recommandé : vos alertes email (LinkedIn, Hellowork, Indeed, APEC...)" done={!!feed?.items.some((i) => i.alerts.includes('email'))}>
+        <span className="muted small">
+          La veille lit, <strong>en lecture seule</strong>, les alertes emploi reçues dans Gmail et en extrait chaque annonce. Aucun email n'est modifié, seuls ceux des sites d'emploi sont ouverts.
+        </span>
+        <ol className="small muted steps-list">
+          <li>Créez vos alertes sur les sites (LinkedIn, Hellowork, Indeed, APEC, France Travail, Welcome to the Jungle...) avec votre adresse Gmail, en envoi quotidien.</li>
+          <li>
+            Activez la validation en deux étapes de votre compte Google si ce n'est pas fait, puis créez un <strong>mot de passe d'application</strong> nommé « Resume veille » : Google affiche 16 lettres.
+          </li>
+          <li>
+            Ajoutez deux secrets au dépôt <strong>{cfg.repo}</strong> : <code>GMAIL_USER</code> (votre adresse Gmail) et <code>GMAIL_APP_PASSWORD</code> (les 16 lettres). Ils restent chiffrés chez GitHub.
+          </li>
+          <li>Cliquez sur « Mettre à jour la tâche », puis « Lancer maintenant ».</li>
+        </ol>
+        <div className="row-gap">
+          <a className="btn sm" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
+            <ExternalLink size={14} /> Mot de passe d'application
+          </a>
+          <a className="btn sm" href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
+            <KeyRound size={14} /> Ajouter un secret
+          </a>
+        </div>
+        <span className="muted small">Vous pouvez révoquer ce mot de passe à tout moment depuis votre compte Google : la veille s'arrête alors simplement de lire les emails.</span>
+      </Step>
+      <Step n={3} title="Facultatif : ajoutez le secteur privé avec Jooble" done={!!feed?.items.some((i) => i.source.includes('Jooble'))}>
         <span className="muted small">
           Jooble regroupe les annonces de nombreux sites d'emploi (dont des offres du privé). Sa clé est <strong>gratuite</strong>, mais attribuée sur demande : remplissez le formulaire de Jooble (nom du projet : « Resume, usage personnel »), la clé arrive par email. Enregistrez-la ensuite comme secret <code>JOOBLE_KEY</code> du dépôt <strong>{cfg.repo}</strong>. Elle reste chiffrée chez GitHub : ni Resume ni le navigateur n'y ont accès.
         </span>
@@ -214,6 +238,7 @@ function Setup() {
           feed.status === 'ok' ? (
             <>
               <CheckCircle2 size={16} /> Dernière veille le {new Date(feed.updatedAt).toLocaleString('fr-FR')} : {feed.items.length} annonce(s).
+              {feed.notes?.length ? <span className="small"> {feed.notes.join(' ')}</span> : null}
               {feed.errors?.length ? <span className="small"> Avertissement : {feed.errors.join(' ')}</span> : null}
             </>
           ) : (

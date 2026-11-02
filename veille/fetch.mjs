@@ -1,5 +1,7 @@
-// Veille d'annonces de Resume : interroge l'API « Offres d'emploi v2 » de France Travail
-// pour chaque alerte de data/watch.json et écrit les annonces dans data/feed.json.
+// Veille d'annonces de Resume : pour chaque alerte de data/watch.json, interroge les sources
+// configurées et écrit les annonces dans data/feed.json.
+//  - Adzuna (agrégateur, clé gratuite) : secrets ADZUNA_APP_ID et ADZUNA_APP_KEY
+//  - France Travail « Offres d'emploi v2 » (accès sur demande) : secrets FT_CLIENT_ID et FT_CLIENT_SECRET
 // Lancé par GitHub Actions (.github/workflows/veille.yml) dans le dépôt privé de sauvegarde.
 // Aucune dépendance : Node 20 ou plus.
 import { readFile, writeFile } from 'node:fs/promises'
@@ -30,8 +32,10 @@ async function save(status, items) {
   for (const e of errors) console.log(' -', e)
 }
 
-if (!process.env.FT_CLIENT_ID || !process.env.FT_CLIENT_SECRET) {
-  errors.push('Secrets FT_CLIENT_ID et FT_CLIENT_SECRET absents du dépôt (Settings > Secrets and variables > Actions).')
+const hasFT = !!(process.env.FT_CLIENT_ID && process.env.FT_CLIENT_SECRET)
+const hasAZ = !!(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY)
+if (!hasFT && !hasAZ) {
+  errors.push('Aucune source configurée : ajoutez les secrets ADZUNA_APP_ID et ADZUNA_APP_KEY (ou FT_CLIENT_ID et FT_CLIENT_SECRET) au dépôt.')
   await save('error', prev.items ?? [])
   process.exit(0)
 }
@@ -44,7 +48,7 @@ async function token() {
     scope: 'api_offresdemploiv2 o2dsoffre',
   })
   const r = await fetch(TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })
-  if (!r.ok) throw new Error(`Authentification France Travail refusée (${r.status}) : vérifiez l'identifiant, la clé secrète et l'abonnement à l'API « Offres d'emploi v2 ».`)
+  if (!r.ok) throw new Error(`Authentification France Travail refusée (${r.status}) : vérifiez l'identifiant, la clé secrète et l'accès à l'API « Offres d'emploi v2 ».`)
   return (await r.json()).access_token
 }
 
@@ -93,11 +97,72 @@ function toItem(o, alertId) {
   }
 }
 
+/* ---------- Adzuna ---------- */
+
+const AZ_URL = 'https://api.adzuna.com/v1/api/jobs/fr/search/1'
+const strip = (h) => (h ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+async function adzuna(a, firstRun, add) {
+  const p = new URLSearchParams({
+    app_id: process.env.ADZUNA_APP_ID,
+    app_key: process.env.ADZUNA_APP_KEY,
+    what: a.keywords.trim(),
+    results_per_page: '50',
+    sort_by: 'date',
+    max_days_old: firstRun ? '31' : '14',
+    'content-type': 'application/json',
+  })
+  if (a.commune) {
+    p.set('where', a.commune)
+    p.set('distance', String(a.distance ?? 30))
+  }
+  // contrats : Adzuna ne distingue que CDI (permanent) et contrat à durée limitée
+  const c = a.contracts ?? []
+  if (c.length && c.every((x) => x === 'CDI')) p.set('permanent', '1')
+  else if (c.length && !c.includes('CDI')) p.set('contract', '1')
+  const r = await fetch(`${AZ_URL}?${p}`)
+  if (!r.ok) {
+    errors.push(`Adzuna, alerte « ${a.keywords} » : erreur ${r.status} ${(await r.text()).slice(0, 160)}`)
+    return
+  }
+  for (const o of (await r.json()).results ?? []) {
+    const sal = o.salary_min ? `${Math.round(o.salary_min)}${o.salary_max && o.salary_max !== o.salary_min ? ` à ${Math.round(o.salary_max)}` : ''} € par an${o.salary_is_predicted === '1' ? ' (estimation)' : ''}` : undefined
+    add(
+      {
+        id: `az-${o.id}`,
+        title: strip(o.title),
+        company: o.company?.display_name,
+        location: o.location?.display_name,
+        contract: o.contract_type === 'permanent' ? 'CDI' : o.contract_type === 'contract' ? 'CDD / contrat' : undefined,
+        worktime: o.contract_time === 'full_time' ? 'Temps plein' : o.contract_time === 'part_time' ? 'Temps partiel' : undefined,
+        salary: sal,
+        date: o.created,
+        url: o.redirect_url,
+        source: 'Adzuna',
+        description: strip(o.description),
+      },
+      a.id,
+    )
+  }
+}
+
 try {
-  const tk = await token()
+  const tk = hasFT ? await token() : null
   const known = new Map((prev.items ?? []).map((i) => [i.id, i]))
   const firstRun = !prev.updatedAt
+  let fetched = 0
+  const add = (item, alertId) => {
+    fetched++
+    const cur = known.get(item.id)
+    if (cur) cur.alerts = [...new Set([...(cur.alerts ?? []), alertId])]
+    else known.set(item.id, { ...item, alerts: [alertId], firstSeen: new Date().toISOString() })
+  }
   for (const a of alerts) {
+    if (hasAZ) {
+      await adzuna(a, firstRun, add)
+      await sleep(400)
+    }
+    if (!tk) continue
     const params = new URLSearchParams({ motsCles: cleanKeywords(a.keywords), sort: '1', range: '0-149', publieeDepuis: firstRun ? '31' : '14' })
     let code = a.communeCode
     if (!code && a.commune) code = await communeCode(a.commune)
@@ -113,11 +178,7 @@ try {
       errors.push(`Alerte « ${a.keywords} » : erreur ${r.status} ${(await r.text()).slice(0, 200)}`)
       continue
     }
-    for (const o of (await r.json()).resultats ?? []) {
-      const cur = known.get(o.id)
-      if (cur) cur.alerts = [...new Set([...(cur.alerts ?? []), a.id])]
-      else known.set(o.id, { ...toItem(o, a.id), firstSeen: new Date().toISOString() })
-    }
+    for (const o of (await r.json()).resultats ?? []) add(toItem(o, a.id), a.id)
     await sleep(250) // limite : 10 appels par seconde
   }
   const limit = Date.now() - KEEP_DAYS * 86400000
@@ -125,7 +186,8 @@ try {
     .filter((i) => new Date(i.date ?? i.firstSeen).getTime() >= limit)
     .sort((x, y) => (y.date ?? '').localeCompare(x.date ?? ''))
     .slice(0, MAX_ITEMS)
-  await save(errors.length && !items.length ? 'error' : 'ok', items)
+  // en erreur seulement si aucune source n'a répondu
+  await save(errors.length && !fetched ? 'error' : 'ok', items)
 } catch (e) {
   errors.push(e.message)
   await save('error', prev.items ?? [])

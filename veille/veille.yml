@@ -1,5 +1,5 @@
-# Veille d'annonces de Resume : récupère les nouvelles offres France Travail toutes les 3 heures.
-# Installée par l'application Resume. Secrets requis : FT_CLIENT_ID et FT_CLIENT_SECRET.
+# Veille d'annonces de Resume : récupère les nouvelles offres toutes les 3 heures.
+# Installée par l'application Resume. Secrets : ADZUNA_APP_ID et ADZUNA_APP_KEY, et/ou FT_CLIENT_ID et FT_CLIENT_SECRET.
 name: Veille annonces
 
 on:
@@ -26,6 +26,8 @@ jobs:
       - name: Récupérer les annonces
         run: node veille/fetch.mjs
         env:
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           FT_CLIENT_ID: ${{ secrets.FT_CLIENT_ID }}
           FT_CLIENT_SECRET: ${{ secrets.FT_CLIENT_SECRET }}
       - name: Enregistrer

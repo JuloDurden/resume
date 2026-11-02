@@ -183,7 +183,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
         <div className="empty-state">
           <BellRing size={28} className="muted" />
           <h2>Créez votre première alerte</h2>
-          <p>Indiquez le métier recherché et la ville. Resume récupère les nouvelles annonces France Travail (et de ses sites partenaires) toutes les 3 heures, et vous donne des liens vers LinkedIn, Hellowork, Indeed et APEC.</p>
+          <p>Indiquez le métier recherché et la ville. Resume récupère les nouvelles annonces toutes les 3 heures (Adzuna, et France Travail si vous y avez accès) et vous donne des liens vers LinkedIn, Hellowork, Indeed et APEC.</p>
           <button className="btn primary" onClick={() => setSettings(true)}>
             <BellRing size={16} /> Créer une alerte
           </button>
@@ -222,9 +222,16 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
                 </a>
               ))}
           </div>
+          {feed?.items.some((i) => i.source === 'Adzuna') && (
+            <p className="adzuna-credit">
+              <a href="https://www.adzuna.fr" target="_blank" rel="noreferrer">
+                Jobs by Adzuna
+              </a>
+            </p>
+          )}
           {!feed ? (
             <div className="empty-state">
-              <p>Les annonces France Travail apparaîtront ici une fois la veille automatique activée.</p>
+              <p>Les annonces apparaîtront ici une fois la veille automatique activée.</p>
               <button className="btn" onClick={() => setSettings(true)}>
                 <Settings2 size={16} /> Activer la veille
               </button>

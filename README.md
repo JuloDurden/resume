@@ -24,7 +24,7 @@ Projet conçu par Julien Clavel avec Claude comme assistant de rédaction.
 
 **Veille d'annonces**
 - Alertes par métier, lieu, rayon et type de contrat.
-- Nouvelles offres France Travail (et de ses sites partenaires) récupérées toutes les 3 heures par une tâche GitHub Actions dans le dépôt privé de sauvegarde (API « Offres d'emploi v2 », clés stockées en secrets GitHub).
+- Nouvelles offres récupérées toutes les 3 heures par une tâche GitHub Actions dans le dépôt privé de sauvegarde : API Adzuna (clé gratuite) et, si l'accès est accordé, API France Travail « Offres d'emploi v2 ». Clés stockées en secrets GitHub.
 - Tri des annonces : favoris, masquées, création de la candidature en un clic.
 - Liens de recherche enregistrés vers LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle.
 

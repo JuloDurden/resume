@@ -131,17 +131,23 @@ function Setup() {
   const ok = feed?.status === 'ok'
   return (
     <div className="form-stack">
-      <Step n={1} title="Créez un accès gratuit à l'API France Travail" done={ok}>
+      <Step n={1} title="Créez une clé Adzuna (gratuite)" done={ok}>
         <span className="muted small">
-          Sur francetravail.io : créez un compte, puis « Mes applications » &gt; « Créer une application ». Abonnez-la à l'API <strong>Offres d'emploi v2</strong>. Notez l'identifiant client et la clé secrète.
+          Adzuna regroupe les annonces de nombreux sites d'emploi français. Inscrivez-vous sur le portail développeur, puis notez l'<strong>Application ID</strong> et l'<strong>Application Key</strong> affichés dans votre tableau de bord.
         </span>
-        <a className="btn sm self-start" href="https://francetravail.io/" target="_blank" rel="noreferrer">
-          <ExternalLink size={14} /> Ouvrir francetravail.io
+        <a className="btn sm self-start" href="https://developer.adzuna.com/signup" target="_blank" rel="noreferrer">
+          <ExternalLink size={14} /> Créer un compte Adzuna
         </a>
+        <details className="small">
+          <summary>Et France Travail ?</summary>
+          <p className="muted">
+            Depuis octobre 2026, France Travail a retiré son API « Offres d'emploi » du catalogue francetravail.io : elle n'est plus accessible que sur demande motivée (formulaire de contact du site). Si votre demande est acceptée, ajoutez aussi les secrets <code>FT_CLIENT_ID</code> et <code>FT_CLIENT_SECRET</code> : la veille interrogera alors les deux sources, sans doublon.
+          </p>
+        </details>
       </Step>
-      <Step n={2} title="Enregistrez-les comme secrets du dépôt privé" done={ok}>
+      <Step n={2} title="Enregistrez la clé comme secrets du dépôt privé" done={ok}>
         <span className="muted small">
-          Deux secrets dans <strong>{cfg.repo}</strong> : <code>FT_CLIENT_ID</code> (identifiant) et <code>FT_CLIENT_SECRET</code> (clé secrète). Ils restent chiffrés chez GitHub : ni Resume ni le navigateur n'y ont accès.
+          Deux secrets dans <strong>{cfg.repo}</strong> : <code>ADZUNA_APP_ID</code> et <code>ADZUNA_APP_KEY</code>. Ils restent chiffrés chez GitHub : ni Resume ni le navigateur n'y ont accès.
         </span>
         <a className="btn sm self-start" href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
           <KeyRound size={14} /> Ajouter un secret
@@ -232,10 +238,10 @@ export function AlertsModal({ open, onClose }: { open: boolean; onClose: () => v
           <button className="btn sm self-start" onClick={() => setAlerts([...alerts, { id: uid(), keywords: '', distance: 30, active: true, commune: alerts[0]?.commune, communeCode: alerts[0]?.communeCode }])}>
             <Plus size={14} /> Ajouter une alerte
           </button>
-          <p className="muted small">LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle n'offrent pas d'accès automatisé : les liens ouvrent votre recherche sur chaque site, triée par date. Une annonce intéressante s'ajoute ensuite avec « Offre depuis un lien ». L'API France Travail inclut aussi des offres de nombreux sites partenaires.</p>
+          <p className="muted small">LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle n'offrent pas d'accès automatisé : les liens ouvrent votre recherche sur chaque site, triée par date. Une annonce intéressante s'ajoute ensuite avec « Offre depuis un lien ». Adzuna regroupe aussi des annonces de nombreux sites.</p>
         </section>
         <section className="form-stack">
-          <h3 className="modal-h3">Veille automatique France Travail</h3>
+          <h3 className="modal-h3">Veille automatique</h3>
           <Setup />
         </section>
       </div>

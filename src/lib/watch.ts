@@ -30,6 +30,7 @@ export function searchLinks(a: Alert): SearchLink[] {
     { site: 'LinkedIn', url: `https://www.linkedin.com/jobs/search/?keywords=${q}${place ? `&location=${place}` : ''}&sortBy=DD` },
     { site: 'Indeed', url: `https://fr.indeed.com/jobs?q=${q}${place ? `&l=${place}&radius=${radius}` : ''}&sort=date` },
     { site: 'APEC', url: `https://www.apec.fr/candidat/recherche-emploi.html/emploi?motsCles=${q}` },
+    { site: 'Service public', url: `https://choisirleservicepublic.gouv.fr/nos-offres/filtres/mot-cles/${q}/` },
     { site: 'Welcome to the Jungle', url: `https://www.welcometothejungle.com/fr/jobs?query=${q}${place ? `&aroundQuery=${place}` : ''}` },
   ]
 }

@@ -24,9 +24,10 @@ Projet conçu par Julien Clavel avec Claude comme assistant de rédaction.
 
 **Veille d'annonces**
 - Alertes par métier, lieu, rayon et type de contrat.
-- Nouvelles offres récupérées toutes les 3 heures par une tâche GitHub Actions dans le dépôt privé de sauvegarde : API Adzuna (clé gratuite) et, si l'accès est accordé, API France Travail « Offres d'emploi v2 ». Clés stockées en secrets GitHub.
+- Nouvelles offres récupérées par une tâche GitHub Actions dans le dépôt privé de sauvegarde, sans clé ni abonnement : offres de la fonction publique publiées chaque semaine par Choisir le Service Public en données ouvertes (data.gouv.fr, Licence Ouverte).
+- Sources facultatives : Jooble (clé gratuite sur demande, secret `JOOBLE_KEY`) et API France Travail « Offres d'emploi v2 » (accès sur demande, secrets `FT_CLIENT_ID` et `FT_CLIENT_SECRET`).
 - Tri des annonces : favoris, masquées, création de la candidature en un clic.
-- Liens de recherche enregistrés vers LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle.
+- Liens de recherche enregistrés vers France Travail, LinkedIn, Hellowork, Indeed, APEC, Choisir le Service Public et Welcome to the Jungle.
 
 **Fiches métiers**
 - Référentiel officiel ROME 4.0 intégré : intitulés équivalents d'un poste (variantes à choisir selon l'offre), définition, compétences, contextes de travail, métiers proches, lien vers MétierScope.

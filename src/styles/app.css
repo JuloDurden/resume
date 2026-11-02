@@ -2888,13 +2888,8 @@ a.brand {
   color: #8a2b20;
 }
 
-.adzuna-credit {
-  margin: 0;
-  font-size: 11.5px;
-  text-align: right;
-}
-.adzuna-credit a {
-  color: var(--ink-3);
+.jc-until {
+  color: var(--warn, #b45309);
 }
 
 /* ---------- Impression ---------- */

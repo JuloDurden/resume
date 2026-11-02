@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BellRing, BookOpen, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import { BellRing, BookOpen, CalendarClock, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, MarkState } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -50,6 +50,11 @@ function JobCard({ item, mark, alertNames, onApply, isNew }: { item: FeedItem; m
         <span>
           <Clock size={12} /> {ago(item.date)}
         </span>
+        {item.until && (
+          <span className={new Date(item.until).getTime() - Date.now() < 7 * 86400000 ? 'jc-until' : undefined}>
+            <CalendarClock size={12} /> jusqu'au {new Date(item.until).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+          </span>
+        )}
       </div>
       <div className="jc-tags">
         <span className="jc-source">{item.source}</span>
@@ -59,7 +64,7 @@ function JobCard({ item, mark, alertNames, onApply, isNew }: { item: FeedItem; m
           </span>
         ))}
       </div>
-      {open && item.description && <p className="jc-desc">{item.description}</p>}
+      {open && item.description && <p className="jc-desc" style={{ whiteSpace: 'pre-line' }}>{item.description}</p>}
       <div className="jc-actions">
         {mark === 'applied' ? (
           <span className="applied-badge">Candidature créée</span>
@@ -183,7 +188,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
         <div className="empty-state">
           <BellRing size={28} className="muted" />
           <h2>Créez votre première alerte</h2>
-          <p>Indiquez le métier recherché et la ville. Resume récupère les nouvelles annonces toutes les 3 heures (Adzuna, et France Travail si vous y avez accès) et vous donne des liens vers LinkedIn, Hellowork, Indeed et APEC.</p>
+          <p>Indiquez le métier recherché et la ville. Resume récupère gratuitement les offres de la fonction publique (Choisir le Service Public), et celles de Jooble si vous avez une clé, puis vous donne des liens de recherche vers France Travail, LinkedIn, Hellowork, Indeed et APEC.</p>
           <button className="btn primary" onClick={() => setSettings(true)}>
             <BellRing size={16} /> Créer une alerte
           </button>
@@ -222,13 +227,6 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
                 </a>
               ))}
           </div>
-          {feed?.items.some((i) => i.source === 'Adzuna') && (
-            <p className="adzuna-credit">
-              <a href="https://www.adzuna.fr" target="_blank" rel="noreferrer">
-                Jobs by Adzuna
-              </a>
-            </p>
-          )}
           {!feed ? (
             <div className="empty-state">
               <p>Les annonces apparaîtront ici une fois la veille automatique activée.</p>

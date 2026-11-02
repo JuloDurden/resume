@@ -128,34 +128,22 @@ function Setup() {
       </div>
     )
 
-  const ok = feed?.status === 'ok'
-  return (
+    return (
     <div className="form-stack">
-      <Step n={1} title="Créez une clé Adzuna (gratuite)" done={ok}>
+      <div className="notice">
+        <strong>Sources gratuites, sans inscription</strong>
+        <ul className="small steps-list">
+          <li>
+            <strong>Choisir le Service Public</strong> : toutes les offres de la fonction publique (État, collectivités, hôpitaux), publiées chaque semaine en données ouvertes sur data.gouv.fr. Les offres arrivent avec 2 à 3 semaines de décalage, mais restent ouvertes en général un mois : la date limite est affichée.
+          </li>
+          <li>
+            <strong>Liens de recherche</strong> vers France Travail, LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle, triés par date, pour le secteur privé.
+          </li>
+        </ul>
+      </div>
+      <Step n={1} title="Installez la tâche programmée" done={!!installed}>
         <span className="muted small">
-          Adzuna regroupe les annonces de nombreux sites d'emploi français. Inscrivez-vous sur le portail développeur, puis notez l'<strong>Application ID</strong> et l'<strong>Application Key</strong> affichés dans votre tableau de bord.
-        </span>
-        <a className="btn sm self-start" href="https://developer.adzuna.com/signup" target="_blank" rel="noreferrer">
-          <ExternalLink size={14} /> Créer un compte Adzuna
-        </a>
-        <details className="small">
-          <summary>Et France Travail ?</summary>
-          <p className="muted">
-            Depuis octobre 2026, France Travail a retiré son API « Offres d'emploi » du catalogue francetravail.io : elle n'est plus accessible que sur demande motivée (formulaire de contact du site). Si votre demande est acceptée, ajoutez aussi les secrets <code>FT_CLIENT_ID</code> et <code>FT_CLIENT_SECRET</code> : la veille interrogera alors les deux sources, sans doublon.
-          </p>
-        </details>
-      </Step>
-      <Step n={2} title="Enregistrez la clé comme secrets du dépôt privé" done={ok}>
-        <span className="muted small">
-          Deux secrets dans <strong>{cfg.repo}</strong> : <code>ADZUNA_APP_ID</code> et <code>ADZUNA_APP_KEY</code>. Ils restent chiffrés chez GitHub : ni Resume ni le navigateur n'y ont accès.
-        </span>
-        <a className="btn sm self-start" href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
-          <KeyRound size={14} /> Ajouter un secret
-        </a>
-      </Step>
-      <Step n={3} title="Installez la tâche programmée" done={!!installed}>
-        <span className="muted small">
-          Resume ajoute à {cfg.repo} un petit script et une tâche GitHub Actions qui récupère les nouvelles annonces <strong>toutes les 3 heures</strong> (de 5 h à 20 h). Le token doit avoir la permission <strong>Workflows : Read and write</strong> en plus de Contents.
+          Resume ajoute à {cfg.repo} un petit script et une tâche GitHub Actions qui récupère les nouvelles annonces <strong>toutes les 3 heures</strong> (de 5 h à 20 h). Aucune clé n'est nécessaire. Le token doit avoir la permission <strong>Workflows : Read and write</strong> en plus de Contents.
         </span>
         <div className="row-gap">
           <button
@@ -202,11 +190,31 @@ function Setup() {
           )}
         </div>
       </Step>
+      <Step n={2} title="Facultatif : ajoutez le secteur privé avec Jooble" done={!!feed?.items.some((i) => i.source.includes('Jooble'))}>
+        <span className="muted small">
+          Jooble regroupe les annonces de nombreux sites d'emploi (dont des offres du privé). Sa clé est <strong>gratuite</strong>, mais attribuée sur demande : remplissez le formulaire de Jooble (nom du projet : « Resume, usage personnel »), la clé arrive par email. Enregistrez-la ensuite comme secret <code>JOOBLE_KEY</code> du dépôt <strong>{cfg.repo}</strong>. Elle reste chiffrée chez GitHub : ni Resume ni le navigateur n'y ont accès.
+        </span>
+        <div className="row-gap">
+          <a className="btn sm" href="https://jooble.org/api/about" target="_blank" rel="noreferrer">
+            <ExternalLink size={14} /> Demander une clé Jooble
+          </a>
+          <a className="btn sm" href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
+            <KeyRound size={14} /> Ajouter le secret
+          </a>
+        </div>
+        <details className="small">
+          <summary>Et France Travail ?</summary>
+          <p className="muted">
+            Depuis octobre 2026, l'API « Offres d'emploi » de France Travail n'est plus dans le catalogue francetravail.io : elle n'est accessible que sur demande motivée. Si votre demande est acceptée, ajoutez les secrets <code>FT_CLIENT_ID</code> et <code>FT_CLIENT_SECRET</code> : la veille interrogera aussi cette source, sans doublon.
+          </p>
+        </details>
+      </Step>
       <div className={`watch-status ${feed?.status ?? 'none'}`}>
         {feed ? (
           feed.status === 'ok' ? (
             <>
               <CheckCircle2 size={16} /> Dernière veille le {new Date(feed.updatedAt).toLocaleString('fr-FR')} : {feed.items.length} annonce(s).
+              {feed.errors?.length ? <span className="small"> Avertissement : {feed.errors.join(' ')}</span> : null}
             </>
           ) : (
             <>
@@ -238,7 +246,7 @@ export function AlertsModal({ open, onClose }: { open: boolean; onClose: () => v
           <button className="btn sm self-start" onClick={() => setAlerts([...alerts, { id: uid(), keywords: '', distance: 30, active: true, commune: alerts[0]?.commune, communeCode: alerts[0]?.communeCode }])}>
             <Plus size={14} /> Ajouter une alerte
           </button>
-          <p className="muted small">LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle n'offrent pas d'accès automatisé : les liens ouvrent votre recherche sur chaque site, triée par date. Une annonce intéressante s'ajoute ensuite avec « Offre depuis un lien ». Adzuna regroupe aussi des annonces de nombreux sites.</p>
+          <p className="muted small">LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle n'offrent pas d'accès automatisé : les liens ouvrent votre recherche sur chaque site, triée par date. Une annonce intéressante s'ajoute ensuite avec « Offre depuis un lien ».</p>
         </section>
         <section className="form-stack">
           <h3 className="modal-h3">Veille automatique</h3>

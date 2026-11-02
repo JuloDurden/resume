@@ -1,5 +1,6 @@
 # Veille d'annonces de Resume : récupère les nouvelles offres toutes les 3 heures.
-# Installée par l'application Resume. Secrets : ADZUNA_APP_ID et ADZUNA_APP_KEY, et/ou FT_CLIENT_ID et FT_CLIENT_SECRET.
+# Installée par l'application Resume. Source sans clé : Choisir le Service Public (data.gouv.fr).
+# Secrets facultatifs : JOOBLE_KEY (clé gratuite sur demande), FT_CLIENT_ID et FT_CLIENT_SECRET (accès sur demande).
 name: Veille annonces
 
 on:
@@ -17,7 +18,7 @@ concurrency:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,8 +27,7 @@ jobs:
       - name: Récupérer les annonces
         run: node veille/fetch.mjs
         env:
-          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          JOOBLE_KEY: ${{ secrets.JOOBLE_KEY }}
           FT_CLIENT_ID: ${{ secrets.FT_CLIENT_ID }}
           FT_CLIENT_SECRET: ${{ secrets.FT_CLIENT_SECRET }}
       - name: Enregistrer

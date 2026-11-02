@@ -291,6 +291,8 @@ export interface FeedItem {
   date?: string
   updated?: string
   firstSeen?: string
+  /** date limite de candidature (aaaa-mm-jj) */
+  until?: string
   url: string
   source: string
   contact?: { name?: string; email?: string }
@@ -301,6 +303,7 @@ export interface Feed {
   updatedAt: string
   status: 'ok' | 'error'
   errors?: string[]
+  notes?: string[]
   alerts?: number
   items: FeedItem[]
 }

@@ -4,6 +4,7 @@ import { del, get, set } from 'idb-keyval'
 import type { AnyDoc, Offer } from '../types'
 import { uid } from '../lib/ids'
 import { migrate } from '../lib/migrate'
+import { differs, mergeData, type DataSet } from '../lib/merge'
 export { migrate }
 
 const idbStorage: StateStorage = {
@@ -40,8 +41,8 @@ export interface DocsState {
   markBackup: () => void
   saveOffer: (o: Offer) => void
   removeOffer: (id: string) => void
-  /** Remplace les données par celles venues de la synchronisation (sans toucher à l'historique d'annulation) */
-  applyRemote: (docs: AnyDoc[], offers: Offer[], deleted: Record<string, number>) => void
+  /** Fusionne des données venues d'ailleurs (GitHub, autre onglet) sans jamais écraser une modification plus récente. Renvoie true si l'état local a changé. */
+  mergeIn: (data: DataSet) => boolean
 }
 
 const MAX_HISTORY = 80
@@ -147,12 +148,14 @@ export const useDocs = create<DocsState>()(
           )
           return { offers, docs, deleted: { ...s.deleted, [id]: Date.now() } }
         }),
-      applyRemote: (docs, offers, deleted) =>
-        setState((s) => ({
-          docs: Object.fromEntries(docs.map((d) => [d.id, d])),
-          offers: Object.fromEntries(offers.map((o) => [o.id, o])),
-          deleted: { ...s.deleted, ...deleted },
-        })),
+      mergeIn: (data) => {
+        const s = getState()
+        const cur: DataSet = { docs: s.docs, offers: s.offers, deleted: s.deleted }
+        const m = mergeData(cur, data)
+        if (!differs(cur, m)) return false
+        setState(m)
+        return true
+      },
     }),
     {
       name: 'resume-app-docs',

@@ -137,6 +137,24 @@
   color: var(--c-muted);
   font-size: calc(var(--fs) * 0.95);
 }
+.cv-contacts.multi {
+  flex-direction: column;
+  gap: 0.3em;
+}
+.cv-crow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em 1.1em;
+}
+.layout-center .cv-crow {
+  justify-content: center;
+}
+.layout-split .cv-contacts.multi {
+  align-items: flex-end;
+}
+.layout-split .cv-crow {
+  justify-content: flex-end;
+}
 .cv-contacts.stacked {
   flex-direction: column;
   gap: 0.3em;

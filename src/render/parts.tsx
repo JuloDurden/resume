@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { ContactLink, Header, Section, SectionItem, StyleSettings } from '../types'
 import { Icon } from '../lib/icons'
+import { toRows } from '../lib/contactRows'
 import { renderInline } from '../lib/inline'
 import { formatRange } from '../lib/dates'
 import { SECTION_DEFS } from '../data/sectionDefs'
@@ -36,27 +37,39 @@ export function contactHref(c: ContactLink): string | undefined {
 export function Contacts({ header, style, stacked }: { header: Header; style: StyleSettings; stacked?: boolean }) {
   const items = header.contacts.filter((c) => c.value.trim())
   if (!items.length) return null
+  const rows = toRows(items)
+  const one = (c: ContactLink) => {
+    const href = contactHref(c)
+    const label = c.label || c.value
+    const inner = (
+      <>
+        {style.contactIcons && <Icon name={CONTACT_ICON[c.kind]} size={11} className="cv-cicon" />}
+        <span>{label}</span>
+      </>
+    )
+    return href ? (
+      <a key={c.id} className="cv-contact" href={href} target="_blank" rel="noreferrer">
+        {inner}
+      </a>
+    ) : (
+      <span key={c.id} className="cv-contact">
+        {inner}
+      </span>
+    )
+  }
+  if (rows.length > 1 && !stacked)
+    return (
+      <div className="cv-contacts multi">
+        {rows.map((r, i) => (
+          <div className="cv-crow" key={i}>
+            {r.map(one)}
+          </div>
+        ))}
+      </div>
+    )
   return (
     <div className={`cv-contacts${stacked ? ' stacked' : ''}`}>
-      {items.map((c) => {
-        const href = contactHref(c)
-        const label = c.label || c.value
-        const inner = (
-          <>
-            {style.contactIcons && <Icon name={CONTACT_ICON[c.kind]} size={11} className="cv-cicon" />}
-            <span>{label}</span>
-          </>
-        )
-        return href ? (
-          <a key={c.id} className="cv-contact" href={href} target="_blank" rel="noreferrer">
-            {inner}
-          </a>
-        ) : (
-          <span key={c.id} className="cv-contact">
-            {inner}
-          </span>
-        )
-      })}
+      {rows.flat().map(one)}
     </div>
   )
 }

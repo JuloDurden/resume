@@ -6,6 +6,7 @@ import ResumeEditor from './pages/ResumeEditor'
 import LetterEditor from './pages/LetterEditor'
 import { ShowcaseDoc, ShowcasePage } from './pages/Showcase'
 import { Toasts } from './components/ui'
+import { UpdateBanner } from './components/UpdateBanner'
 import './styles/app.css'
 import { startAutoSync } from './store/sync'
 
@@ -24,5 +25,6 @@ createRoot(document.getElementById('root')!).render(
       </Routes>
     </HashRouter>
     <Toasts />
+    <UpdateBanner />
   </StrictMode>,
 )

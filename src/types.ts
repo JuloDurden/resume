@@ -67,6 +67,8 @@ export interface ContactLink {
   kind: 'email' | 'phone' | 'location' | 'linkedin' | 'website' | 'github' | 'other' | 'info'
   value: string
   label?: string
+  /** ligne d'affichage dans l'en-tête (0 = première) */
+  row?: number
 }
 
 export interface Header {

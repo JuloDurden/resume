@@ -119,3 +119,39 @@ describe('synchronisation GitHub', () => {
     expect(rA.data.docs[0].name).toBe('Version B')
   })
 })
+
+import { mergeData, toSet } from '../lib/merge'
+
+describe('fusion sans perte', () => {
+  beforeEach(reset)
+
+  it('conserve un CV créé et une suppression faite PENDANT une synchronisation', async () => {
+    const a = newResume('epure', true, 'A')
+    const b = newResume('epure', true, 'B')
+    device('A')
+    const before = toSet([a, b], [], {})
+    const res = await sync(cfg, { docs: [a, b], offers: [], deleted: {} }) // synchro lancée
+    // pendant la synchro : création d'un CV, suppression de B, modification de A
+    const c = newResume('epure', true, 'Nouveau CV importé')
+    const a2 = { ...a, name: 'A modifié', updatedAt: Date.now() + 5 }
+    const now = toSet([a2, c], [], { [b.id]: Date.now() + 5 })
+    void before
+    const merged = mergeData(now, toSet(res.data.docs, res.data.offers, res.data.deleted))
+    expect(Object.keys(merged.docs).sort()).toEqual([a.id, c.id].sort())
+    expect(merged.docs[a.id].name).toBe('A modifié')
+  })
+
+  it("un onglet resté ouvert avec d'anciennes données n'écrase pas les versions récentes", async () => {
+    const d = newResume('epure', true, 'Original')
+    device('A')
+    await sync(cfg, { docs: [d], offers: [], deleted: {} })
+    // un autre onglet du même navigateur (même localStorage) modifie et envoie
+    const recent = { ...d, name: 'Version récente', updatedAt: d.updatedAt + 1000 }
+    await sync(cfg, { docs: [recent], offers: [], deleted: {} })
+    // l'onglet resté ouvert synchronise avec son ancienne version
+    const r = await sync(cfg, { docs: [d], offers: [], deleted: {} })
+    expect(r.data.docs[0].name).toBe('Version récente')
+    const again = await sync(cfg, { docs: r.data.docs, offers: [], deleted: r.data.deleted })
+    expect(again.pushed).toBe(0)
+  })
+})

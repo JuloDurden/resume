@@ -1,4 +1,5 @@
 import type { AnyDoc, Offer } from '../types'
+import { mergeData, toSet } from './merge'
 
 /* ---------- Configuration (propre à chaque navigateur) ---------- */
 
@@ -161,7 +162,6 @@ interface TreeEntry {
  */
 export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promise<SyncResult> {
   const base = `/repos/${c.owner}/${c.repo}`
-  const state = loadState()
 
   // 1. état distant
   const ref = await gh<{ object: { sha: string } }>(c.token, `${base}/git/ref/heads/${c.branch}`)
@@ -179,11 +179,13 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
   await Promise.all(
     [...remoteFiles].map(async ([path, sha]) => {
       const id = path.replace(/^.*\//, '').replace(/\.json$/, '')
-      const known = state.shas[path] === sha
       const isDoc = path.startsWith(DOC_DIR)
       const isOffer = path.startsWith(OFFER_DIR)
-      // fichier inchangé depuis la dernière fois et présent localement : inutile de le télécharger
-      if (known && ((isDoc && localDocs.has(id)) || (isOffer && localOffers.has(id)))) return
+      if (!isDoc && !isOffer && path !== DELETED) return
+      // inutile de télécharger un fichier identique à la version locale (comparaison par contenu,
+      // fiable même si plusieurs onglets ou appareils synchronisent)
+      const mine = isDoc ? localDocs.get(id) : isOffer ? localOffers.get(id) : undefined
+      if (mine && (await gitSha(serialize(mine))) === sha) return
       const blob = await gh<{ content: string }>(c.token, `${base}/git/blobs/${sha}`)
       const value = JSON.parse(b64ToUtf8(blob.content))
       pulled++
@@ -193,33 +195,16 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
     }),
   )
 
-  // 3. fusion
-  const deleted = { ...remoteDeleted, ...local.deleted }
-  for (const [k, v] of Object.entries(remoteDeleted)) deleted[k] = Math.max(v, local.deleted[k] ?? 0)
-  const merge = <T extends { id: string; updatedAt: number }>(loc: Map<string, T>, rem: Map<string, T>, dir: string) => {
-    const out = new Map<string, T>()
-    const ids = new Set([...loc.keys(), ...rem.keys()])
-    // éléments présents à distance, inchangés, et non téléchargés : on garde la version locale
-    for (const id of ids) {
-      const a = loc.get(id)
-      const b = rem.get(id)
-      let pick = a && b ? ((b.updatedAt ?? 0) > (a.updatedAt ?? 0) ? b : a) : (a ?? b)
-      if (pick && deleted[id] && deleted[id] >= (pick.updatedAt ?? 0)) pick = undefined
-      // supprimé à distance depuis la dernière synchronisation (fichier connu mais disparu)
-      if (pick && a && !b && state.shas[dir + id + '.json'] && !remoteFiles.has(dir + id + '.json') && (state.lastSync ?? 0) >= (a.updatedAt ?? 0)) pick = undefined
-      if (pick) out.set(id, pick)
-    }
-    return out
-  }
-  const docs = merge(localDocs as Map<string, AnyDoc>, remoteDocs, DOC_DIR)
-  const offers = merge(localOffers, remoteOffers, OFFER_DIR)
+  // 3. fusion (les fichiers distants non téléchargés sont identiques aux versions locales)
+  const merged = mergeData(toSet(local.docs, local.offers, local.deleted), toSet([...remoteDocs.values()], [...remoteOffers.values()], remoteDeleted))
+  const docs = new Map(Object.entries(merged.docs))
+  const offers = new Map(Object.entries(merged.offers))
 
   // 4. fichiers à écrire ou supprimer
   const wanted = new Map<string, string>()
   for (const d of docs.values()) wanted.set(DOC_DIR + d.id + '.json', serialize(d))
   for (const o of offers.values()) wanted.set(OFFER_DIR + o.id + '.json', serialize(o))
-  // on ne garde que les suppressions des 90 derniers jours
-  const recentDeleted = Object.fromEntries(Object.entries(deleted).filter(([, t]) => Date.now() - t < 90 * 86400000))
+  const recentDeleted = merged.deleted
   wanted.set(DELETED, serialize(recentDeleted))
 
   const changes: { path: string; content?: string }[] = []
@@ -256,6 +241,7 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
   }
 
   saveState({ shas: newShas, lastSync: Date.now() })
+  void remoteFiles
   const data: LocalData = { docs: [...docs.values()], offers: [...offers.values()], deleted: recentDeleted }
   const changedLocal =
     data.docs.length !== local.docs.length ||

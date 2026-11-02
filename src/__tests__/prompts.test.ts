@@ -89,3 +89,24 @@ describe('offres', () => {
     expect(docTitle(newResume('epure', true, 'Mon CV')).company).toBeUndefined()
   })
 })
+
+import { moveContact, moveRow, toRows } from '../lib/contactRows'
+import type { ContactLink } from '../types'
+
+describe('lignes de coordonnées', () => {
+  const c = (id: string, row?: number): ContactLink => ({ id, kind: 'info', value: id, row })
+  const ids = (cs: ContactLink[]) => toRows(cs).map((r) => r.map((x) => x.id).join(','))
+  it('passe une coordonnée à la ligne suivante puis précédente', () => {
+    let cs = [c('a'), c('b'), c('c')]
+    cs = moveContact(cs, 'c', 1) // dernière de la dernière ligne : nouvelle ligne
+    expect(ids(cs)).toEqual(['a,b', 'c'])
+    cs = moveContact(cs, 'b', 1)
+    expect(ids(cs)).toEqual(['a', 'b,c'])
+    cs = moveContact(cs, 'b', -1)
+    expect(ids(cs)).toEqual(['a,b', 'c'])
+  })
+  it('réordonne les lignes', () => {
+    const cs = moveRow([c('a', 0), c('b', 1), c('l', 2)], 2, -1)
+    expect(ids(cs)).toEqual(['a', 'l', 'b'])
+  })
+})

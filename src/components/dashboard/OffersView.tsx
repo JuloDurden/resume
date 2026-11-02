@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, ExternalLink, FilePlus2, FileSignature, Link2, MapPin, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BookOpen, Briefcase, ExternalLink, FilePlus2, FileSignature, Link2, MapPin, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
 import { JOB_STATUS, newOffer } from '../../lib/offers'
@@ -10,6 +10,7 @@ import { DocThumb } from '../DocThumb'
 import { OfferFields } from '../OfferFields'
 import { OfferImportModal } from '../OfferImportModal'
 import { OfferLogo } from '../editor/AtsPanel'
+import { useRomeDrawer } from '../RomeDrawer'
 import { Menu, MenuItem, Modal, Segmented, Select, confirmAction, toast } from '../ui'
 import { openPath } from './DocCard'
 
@@ -63,6 +64,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
   const removeOffer = useDocs((s) => s.removeOffer)
   const add = useDocs((s) => s.add)
   const [cvModal, setCvModal] = useState(false)
+  const openRome = useRomeDrawer((s) => s.open)
   const linkedCv = docs.find((d): d is ResumeDoc => d.kind === 'resume')
   const scores = Object.entries(offer.scores ?? {}).filter(([id]) => docs.some((d) => d.id === id))
   const best = scores.length ? Math.max(...scores.map(([, v]) => v)) : undefined
@@ -110,6 +112,15 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
                 }}
               >
                 Modifier l'offre
+              </MenuItem>
+              <MenuItem
+                icon={<BookOpen size={14} />}
+                onClick={() => {
+                  close()
+                  openRome({ query: offer.title, code: offer.romeCode, context: offer.description, label: 'Fiche métier du poste visé' })
+                }}
+              >
+                Fiche métier
               </MenuItem>
               <MenuItem
                 danger

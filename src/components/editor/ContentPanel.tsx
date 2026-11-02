@@ -181,7 +181,7 @@ export function ContentPanel({ doc, update, active, setActive, onAskClaude }: Pr
         </div>
         {isOpen && (
           <div className="sec-body">
-            <SectionEditor section={s} onChange={setSection} onAskClaude={onAskClaude} />
+            <SectionEditor section={s} onChange={setSection} onAskClaude={onAskClaude} offerId={doc.offerId} />
           </div>
         )}
       </div>

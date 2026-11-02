@@ -180,6 +180,7 @@ export function cleanItem(raw: Partial<SectionItem> | undefined): SectionItem {
     level: Number.isFinite(level) ? Math.max(0, Math.min(5, Math.round(level))) : undefined,
     tags: strList(it.tags),
     icon: typeof it.icon === 'string' && it.icon in ICONS ? it.icon : undefined,
+    titleVariants: strList(it.titleVariants),
   }
 }
 

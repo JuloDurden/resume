@@ -1,4 +1,5 @@
-import { ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
+import { BookOpen, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
+import { useRomeDrawer } from './RomeDrawer'
 import type { JobStatus, Offer, OfferContact } from '../types'
 import { JOB_STATUS, linkedinSearch } from '../lib/offers'
 import { Field, Select, TextArea, TextInput } from './ui'
@@ -21,6 +22,7 @@ function LinkInput({ value, onChange, placeholder }: { value?: string; onChange:
 /** Formulaire complet d'une offre d'emploi. */
 export function OfferFields({ offer, onChange, compact }: { offer: Offer; onChange: (o: Offer) => void; compact?: boolean }) {
   const set = (p: Partial<Offer>) => onChange({ ...offer, ...p })
+  const openRome = useRomeDrawer((s) => s.open)
   const contacts = offer.contacts ?? []
   const setContact = (i: number, p: Partial<OfferContact>) => set({ contacts: contacts.map((c, j) => (j === i ? { ...c, ...p } : c)) })
   return (
@@ -29,7 +31,16 @@ export function OfferFields({ offer, onChange, compact }: { offer: Offer; onChan
       <div className="form-stack">
         <div className="grid-2">
           <Field label="Intitulé du poste">
-            <TextInput value={offer.title} onChange={(v) => set({ title: v })} />
+            <div className="row-gap">
+              <TextInput value={offer.title} onChange={(v) => set({ title: v })} />
+              <button
+                className="icon-btn bordered"
+                title="Fiche métier (ROME)"
+                onClick={() => openRome({ query: offer.title, code: offer.romeCode, context: offer.description, label: 'Fiche métier du poste visé' })}
+              >
+                <BookOpen size={15} />
+              </button>
+            </div>
           </Field>
           <Field label="Entreprise">
             <TextInput value={offer.company} onChange={(v) => set({ company: v })} />

@@ -22,6 +22,15 @@ Projet conçu par Julien Clavel avec Claude comme assistant de rédaction.
 - Chaque offre regroupe son CV et sa lettre, avec statut de suivi, notes, contacts et logo de l'entreprise.
 - Ajout d'une offre depuis son lien : Claude lit l'annonce et en extrait le poste, l'employeur et le texte complet.
 
+**Veille d'annonces**
+- Alertes par métier, lieu, rayon et type de contrat.
+- Nouvelles offres France Travail (et de ses sites partenaires) récupérées toutes les 3 heures par une tâche GitHub Actions dans le dépôt privé de sauvegarde (API « Offres d'emploi v2 », clés stockées en secrets GitHub).
+- Tri des annonces : favoris, masquées, création de la candidature en un clic.
+- Liens de recherche enregistrés vers LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle.
+
+**Fiches métiers**
+- Référentiel officiel ROME 4.0 intégré : intitulés équivalents d'un poste (variantes à choisir selon l'offre), définition, compétences, contextes de travail, métiers proches, lien vers MétierScope.
+
 **Analyse ATS**
 - Mots-clés de l'offre présents, proches ou absents (racinisation du français), contrôles de lisibilité par les logiciels de recrutement, conseils de rédaction séparés du score.
 
@@ -48,5 +57,7 @@ npm run build
 ```
 
 Chaque push sur `main` est testé, construit puis déployé par GitHub Actions.
+
+Données métiers : France Travail, Répertoire Opérationnel des Métiers et des Emplois (ROME 4.0), Licence Ouverte Etalab. Régénération : `python3 scripts/build_rome.py <dossier RefRomeJson> public/rome`.
 
 Pile : React 19, TypeScript, Vite, Zustand, idb-keyval, dnd-kit, lucide, Vitest.

@@ -155,3 +155,35 @@ describe('fusion sans perte', () => {
     expect(again.pushed).toBe(0)
   })
 })
+
+import { mergeWatch } from '../lib/merge'
+import type { WatchState } from '../types'
+
+describe('veille', () => {
+  beforeEach(reset)
+  it('fusionne alertes et favoris entre appareils sans écraser le flux', async () => {
+    const wA: WatchState = { alerts: [{ id: 'x', keywords: 'product owner' }], alertsAt: 10, marks: { j1: { s: 'fav', at: 5 } } }
+    device('A')
+    await sync(cfg, { docs: [], offers: [], deleted: {}, watch: wA })
+    expect(remotePaths()).toContain('data/watch.json')
+    // la tâche GitHub écrit le flux
+    const feedJson = JSON.stringify({ updatedAt: '2026-11-02T10:00:00Z', status: 'ok', items: [{ id: 'j1', title: 'PO', alerts: ['x'], url: 'u', source: 'France Travail' }] })
+    const sha = gitSha(feedJson); blobs.set(sha, feedJson)
+    const t = { ...trees.get(commits.get(head)!.tree)!, 'data/feed.json': sha }
+    const tid = id(); trees.set(tid, t); const c = id(); commits.set(c, { tree: tid }); head = c
+    // l'appareil B masque une autre annonce et reçoit le flux
+    device('B')
+    const wB: WatchState = { alerts: [], alertsAt: 0, marks: { j2: { s: 'hidden', at: 7 } } }
+    const r = await sync(cfg, { docs: [], offers: [], deleted: {}, watch: wB })
+    expect(r.feed?.feed.items[0].id).toBe('j1')
+    expect(r.data.watch?.alerts[0].keywords).toBe('product owner')
+    expect(Object.keys(r.data.watch!.marks).sort()).toEqual(['j1', 'j2'])
+    expect(remotePaths()).toContain('data/feed.json') // jamais supprimé par l'application
+  })
+  it('garde la marque la plus récente', () => {
+    const a: WatchState = { alerts: [], alertsAt: 1, marks: { j: { s: 'fav', at: 5 } } }
+    const b: WatchState = { alerts: [], alertsAt: 1, marks: { j: { s: 'hidden', at: 9 } } }
+    expect(mergeWatch(a, b)!.marks.j.s).toBe('hidden')
+    expect(mergeWatch(b, a)!.marks.j.s).toBe('hidden')
+  })
+})

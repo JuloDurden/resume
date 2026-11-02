@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
+import { BellRing, Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
 import type { ResumeDoc } from '../types'
 import { useDocs } from '../store/documents'
 import { TEMPLATES } from '../data/templates'
@@ -9,6 +9,8 @@ import { download, parseBackup, toJson } from '../lib/export'
 import { DocThumb } from '../components/DocThumb'
 import { DocCard } from '../components/dashboard/DocCard'
 import { OffersView } from '../components/dashboard/OffersView'
+import { JobsView } from '../components/dashboard/JobsView'
+import { useFeed } from '../store/feed'
 import { PdfImportModal } from '../components/PdfImportModal'
 import { SyncButton, SyncModal } from '../components/SyncModal'
 import { ShowcaseGrid, ShowcaseIntro, useShowcase } from './Showcase'
@@ -134,7 +136,11 @@ export default function Dashboard() {
   const lastBackup = useDocs((s) => s.lastBackup)
   const { importDocs, markBackup } = useDocs.getState()
   const [filter, setFilter] = useState<'all' | 'resume' | 'letter'>('all')
-  const [view, setView] = useState<'docs' | 'offers'>(() => (localStorage.getItem('resume-dash-view') === 'offers' ? 'offers' : 'docs'))
+  const [view, setView] = useState<'docs' | 'offers' | 'jobs'>(() => {
+    const v = localStorage.getItem('resume-dash-view')
+    return v === 'offers' || v === 'jobs' ? v : 'docs'
+  })
+  const newJobs = useFeed((s) => (s.feed?.items ?? []).filter((i) => i.firstSeen && new Date(i.firstSeen).getTime() > s.seenAt).length)
   const offersCount = useDocs((s) => Object.keys(s.offers).length)
   useEffect(() => localStorage.setItem('resume-dash-view', view), [view])
   const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | 'sync' | null>(null)
@@ -236,9 +242,14 @@ export default function Dashboard() {
         <button className={view === 'offers' ? 'on' : ''} onClick={() => setView('offers')}>
           <Briefcase size={16} /> Offres <em>{offersCount}</em>
         </button>
+        <button className={view === 'jobs' ? 'on' : ''} onClick={() => setView('jobs')}>
+          <BellRing size={16} /> Annonces {newJobs > 0 && view !== 'jobs' && <em className="badge-new">{newJobs}</em>}
+        </button>
       </div>
 
-      {view === 'offers' ? (
+      {view === 'jobs' ? (
+        <JobsView onShowOffers={() => setView('offers')} />
+      ) : view === 'offers' ? (
         <OffersView />
       ) : (
         <>

@@ -82,7 +82,8 @@ function Setup({ onDone }: { onDone: () => void }) {
           <ul className="small muted steps-list">
             <li>Expiration : 1 an (vous pourrez le renouveler).</li>
             <li>Repository access : « Only select repositories » et choisissez <strong>{repo}</strong> (ajoutez aussi <strong>resume</strong> pour publier la vitrine).</li>
-            <li>Permissions : <strong>Contents : Read and write</strong>. Rien d'autre.</li>
+            <li>Permissions : <strong>Contents : Read and write</strong>.</li>
+            <li>Pour la veille d'annonces (facultatif) : <strong>Workflows : Read and write</strong> et <strong>Actions : Read and write</strong>.</li>
           </ul>
         </div>
       </div>

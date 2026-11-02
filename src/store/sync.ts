@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { get as idbGet } from 'idb-keyval'
-import type { AnyDoc, Offer } from '../types'
+import type { AnyDoc, Offer, WatchState } from '../types'
+import { useFeed } from './feed'
 import { useDocs } from './documents'
-import { GitHubError, lastSyncTime, loadConfig, sync } from '../lib/github'
+import { GitHubError, lastSyncTime, loadConfig, markFeedRead, sync } from '../lib/github'
 import { differs, toSet, type DataSet } from '../lib/merge'
 
 type Status = 'off' | 'idle' | 'syncing' | 'error'
@@ -21,7 +22,7 @@ let merging = false
 
 const snapshot = (): DataSet => {
   const s = useDocs.getState()
-  return { docs: s.docs, offers: s.offers, deleted: s.deleted }
+  return { docs: s.docs, offers: s.offers, deleted: s.deleted, watch: s.watch }
 }
 
 function mergeIn(data: DataSet): boolean {
@@ -54,9 +55,13 @@ export const useSync = create<SyncStore>((set, get) => ({
     running = withLock(async () => {
       try {
         const before = snapshot()
-        const res = await sync(cfg, { docs: Object.values(before.docs), offers: Object.values(before.offers), deleted: before.deleted })
+        const res = await sync(cfg, { docs: Object.values(before.docs), offers: Object.values(before.offers), deleted: before.deleted, watch: before.watch })
+        if (res.feed) {
+          useFeed.getState().setFeed(res.feed.feed)
+          markFeedRead(res.feed.sha)
+        }
         // fusion avec l'état ACTUEL : ce qui a été créé, modifié ou supprimé pendant la synchronisation est conservé
-        const remote = toSet(res.data.docs, res.data.offers, res.data.deleted)
+        const remote = toSet(res.data.docs, res.data.offers, res.data.deleted, res.data.watch)
         mergeIn(remote)
         // des modifications locales sont arrivées pendant l'envoi : on les enverra au passage suivant
         if (differs(remote, snapshot())) again = true
@@ -91,6 +96,7 @@ interface TabMessage {
   docs: AnyDoc[]
   offers: Offer[]
   deleted: Record<string, number>
+  watch?: WatchState
 }
 
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('resume-docs') : null
@@ -101,7 +107,7 @@ async function mergeFromDisk() {
     const raw = await idbGet<string>('resume-app-docs')
     if (!raw) return
     const st = JSON.parse(raw).state as Partial<DataSet>
-    mergeIn({ docs: st.docs ?? {}, offers: st.offers ?? {}, deleted: st.deleted ?? {} })
+    mergeIn({ docs: st.docs ?? {}, offers: st.offers ?? {}, deleted: st.deleted ?? {}, watch: st.watch })
   } catch {
     /* données illisibles : on ignore */
   }
@@ -125,7 +131,7 @@ export function startAutoSync() {
 
   channel?.addEventListener('message', (e: MessageEvent<TabMessage>) => {
     const m = e.data
-    mergeIn(toSet(m.docs ?? [], m.offers ?? [], m.deleted ?? {}))
+    mergeIn(toSet(m.docs ?? [], m.offers ?? [], m.deleted ?? {}, m.watch))
   })
 
   useDocs.subscribe((s, prev) => {
@@ -133,13 +139,13 @@ export function startAutoSync() {
       schedule(300)
       return
     }
-    if (s.docs === prev.docs && s.offers === prev.offers && s.deleted === prev.deleted) return
+    if (s.docs === prev.docs && s.offers === prev.offers && s.deleted === prev.deleted && s.watch === prev.watch) return
     if (merging) return
     // modification faite dans cet onglet : on la diffuse aux autres onglets, puis on programme l'envoi
     const docs = Object.values(s.docs).filter((d) => prev.docs[d.id] !== d)
     const offers = Object.values(s.offers).filter((o) => prev.offers[o.id] !== o)
     try {
-      channel?.postMessage({ docs, offers, deleted: s.deleted } satisfies TabMessage)
+      channel?.postMessage({ docs, offers, deleted: s.deleted, watch: s.watch } satisfies TabMessage)
     } catch {
       /* message trop volumineux : les autres onglets se rattraperont au retour */
     }

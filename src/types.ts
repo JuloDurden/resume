@@ -35,6 +35,8 @@ export interface SectionItem {
   tags?: string[]
   icon?: string
   hidden?: boolean
+  /** variantes d'intitulé pour ce poste (selon l'offre visée) */
+  titleVariants?: string[]
 }
 
 export type SkillDisplay = 'tags' | 'flow' | 'list' | 'lines' | 'inline' | 'bars' | 'dots'
@@ -175,6 +177,11 @@ export interface Offer extends JobTarget {
   snapshotAt?: number
   /** Dernier score ATS par CV analysé */
   scores?: Record<string, number>
+  /** Code métier ROME (fourni par France Travail) */
+  romeCode?: string
+  /** Identifiant de l'annonce dans la veille */
+  sourceId?: string
+  salary?: string
 }
 
 export interface ResumeDoc {
@@ -243,3 +250,57 @@ export interface LetterDoc {
 }
 
 export type AnyDoc = ResumeDoc | LetterDoc
+
+/* ---------- Veille d'annonces ---------- */
+
+export interface Alert {
+  id: string
+  keywords: string
+  commune?: string
+  communeCode?: string
+  distance?: number
+  departement?: string
+  contracts?: string[]
+  active?: boolean
+}
+
+export type MarkState = 'fav' | 'hidden' | 'applied' | 'none'
+
+export interface WatchState {
+  alerts: Alert[]
+  alertsAt: number
+  /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
+  marks: Record<string, { s: MarkState; at: number }>
+}
+
+export interface FeedItem {
+  id: string
+  alerts: string[]
+  title: string
+  company?: string
+  companyUrl?: string
+  logo?: string
+  location?: string
+  contract?: string
+  contractCode?: string
+  worktime?: string
+  salary?: string
+  experience?: string
+  rome?: string
+  romeLabel?: string
+  date?: string
+  updated?: string
+  firstSeen?: string
+  url: string
+  source: string
+  contact?: { name?: string; email?: string }
+  description?: string
+}
+
+export interface Feed {
+  updatedAt: string
+  status: 'ok' | 'error'
+  errors?: string[]
+  alerts?: number
+  items: FeedItem[]
+}

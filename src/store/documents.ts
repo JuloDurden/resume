@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { del, get, set } from 'idb-keyval'
-import type { AnyDoc, Offer } from '../types'
+import type { Alert, AnyDoc, MarkState, Offer, WatchState } from '../types'
 import { uid } from '../lib/ids'
 import { migrate } from '../lib/migrate'
-import { differs, mergeData, type DataSet } from '../lib/merge'
+import { EMPTY_WATCH, differs, mergeData, type DataSet } from '../lib/merge'
 export { migrate }
 
 const idbStorage: StateStorage = {
@@ -26,6 +26,7 @@ interface History {
 export interface DocsState {
   docs: Record<string, AnyDoc>
   offers: Record<string, Offer>
+  watch: WatchState
   /** Suppressions récentes (id -> date), utiles à la synchronisation */
   deleted: Record<string, number>
   hydrated: boolean
@@ -40,6 +41,8 @@ export interface DocsState {
   redo: (id: string) => void
   markBackup: () => void
   saveOffer: (o: Offer) => void
+  setAlerts: (alerts: Alert[]) => void
+  mark: (id: string, s: MarkState) => void
   removeOffer: (id: string) => void
   /** Fusionne des données venues d'ailleurs (GitHub, autre onglet) sans jamais écraser une modification plus récente. Renvoie true si l'état local a changé. */
   mergeIn: (data: DataSet) => boolean
@@ -52,6 +55,7 @@ export const useDocs = create<DocsState>()(
     (setState, getState) => ({
       docs: {},
       offers: {},
+      watch: EMPTY_WATCH,
       deleted: {},
       hydrated: false,
       history: {},
@@ -138,6 +142,8 @@ export const useDocs = create<DocsState>()(
           }
         }),
       markBackup: () => setState({ lastBackup: Date.now() }),
+      setAlerts: (alerts) => setState((s) => ({ watch: { ...s.watch, alerts, alertsAt: Date.now() } })),
+      mark: (id, st) => setState((s) => ({ watch: { ...s.watch, marks: { ...s.watch.marks, [id]: { s: st, at: Date.now() } } } })),
       saveOffer: (o) => setState((s) => ({ offers: { ...s.offers, [o.id]: { ...o, updatedAt: Date.now() } } })),
       removeOffer: (id) =>
         setState((s) => {
@@ -150,10 +156,10 @@ export const useDocs = create<DocsState>()(
         }),
       mergeIn: (data) => {
         const s = getState()
-        const cur: DataSet = { docs: s.docs, offers: s.offers, deleted: s.deleted }
+        const cur: DataSet = { docs: s.docs, offers: s.offers, deleted: s.deleted, watch: s.watch }
         const m = mergeData(cur, data)
         if (!differs(cur, m)) return false
-        setState(m)
+        setState({ docs: m.docs, offers: m.offers, deleted: m.deleted, watch: m.watch ?? s.watch })
         return true
       },
     }),
@@ -161,11 +167,11 @@ export const useDocs = create<DocsState>()(
       name: 'resume-app-docs',
       version: 2,
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ docs: s.docs, offers: s.offers, deleted: s.deleted, lastBackup: s.lastBackup }) as unknown as DocsState,
+      partialize: (s) => ({ docs: s.docs, offers: s.offers, deleted: s.deleted, watch: s.watch, lastBackup: s.lastBackup }) as unknown as DocsState,
       migrate: (persisted) => persisted as DocsState,
       onRehydrateStorage: () => () => {
         const s = useDocs.getState()
-        useDocs.setState({ ...migrate({ docs: s.docs, offers: s.offers ?? {} }), deleted: s.deleted ?? {}, hydrated: true })
+        useDocs.setState({ ...migrate({ docs: s.docs, offers: s.offers ?? {} }), deleted: s.deleted ?? {}, watch: s.watch ?? EMPTY_WATCH, hydrated: true })
       },
     },
   ),

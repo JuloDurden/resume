@@ -1,4 +1,4 @@
-import type { AnyDoc, Offer } from '../types'
+import type { AnyDoc, Feed, Offer, WatchState } from '../types'
 import { mergeData, toSet } from './merge'
 
 /* ---------- Configuration (propre à chaque navigateur) ---------- */
@@ -45,6 +45,7 @@ const loadState = (): SyncState => {
 }
 const saveState = (s: SyncState) => localStorage.setItem(STATE_KEY, JSON.stringify(s))
 export const lastSyncTime = () => loadState().lastSync
+export const markFeedRead = (sha: string) => localStorage.setItem(FEED_SHA_KEY, sha)
 
 /* ---------- API GitHub ---------- */
 
@@ -134,16 +135,22 @@ async function gitSha(content: string): Promise<string> {
 const DOC_DIR = 'data/documents/'
 const OFFER_DIR = 'data/offers/'
 const DELETED = 'data/deleted.json'
+const WATCH = 'data/watch.json'
+const FEED = 'data/feed.json'
+const FEED_SHA_KEY = 'resume-feed-sha'
 const serialize = (x: unknown) => JSON.stringify(x, null, 1) + '\n'
 
 export interface LocalData {
   docs: AnyDoc[]
   offers: Offer[]
   deleted: Record<string, number>
+  watch?: WatchState
 }
 
 export interface SyncResult {
   data: LocalData
+  /** flux d'annonces, s'il a changé depuis la dernière lecture */
+  feed?: { sha: string; feed: Feed }
   /** les données locales ont changé (à appliquer dans le store) */
   changedLocal: boolean
   pushed: number
@@ -173,6 +180,8 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
   const remoteDocs = new Map<string, AnyDoc>()
   const remoteOffers = new Map<string, Offer>()
   let remoteDeleted: Record<string, number> = {}
+  let remoteWatch: WatchState | undefined
+  let remoteFeed: { sha: string; feed: Feed } | undefined
   let pulled = 0
   const localDocs = new Map(local.docs.map((d) => [d.id, d]))
   const localOffers = new Map(local.offers.map((o) => [o.id, o]))
@@ -181,6 +190,22 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
       const id = path.replace(/^.*\//, '').replace(/\.json$/, '')
       const isDoc = path.startsWith(DOC_DIR)
       const isOffer = path.startsWith(OFFER_DIR)
+      if (path === FEED) {
+        if (localStorage.getItem(FEED_SHA_KEY) === sha) return
+        const blob = await gh<{ content: string }>(c.token, `${base}/git/blobs/${sha}`)
+        try {
+          remoteFeed = { sha, feed: JSON.parse(b64ToUtf8(blob.content)) }
+        } catch {
+          /* flux illisible : ignoré */
+        }
+        return
+      }
+      if (path === WATCH) {
+        if (local.watch && (await gitSha(serialize(local.watch))) === sha) return
+        const blob = await gh<{ content: string }>(c.token, `${base}/git/blobs/${sha}`)
+        remoteWatch = JSON.parse(b64ToUtf8(blob.content))
+        return
+      }
       if (!isDoc && !isOffer && path !== DELETED) return
       // inutile de télécharger un fichier identique à la version locale (comparaison par contenu,
       // fiable même si plusieurs onglets ou appareils synchronisent)
@@ -196,7 +221,7 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
   )
 
   // 3. fusion (les fichiers distants non téléchargés sont identiques aux versions locales)
-  const merged = mergeData(toSet(local.docs, local.offers, local.deleted), toSet([...remoteDocs.values()], [...remoteOffers.values()], remoteDeleted))
+  const merged = mergeData(toSet(local.docs, local.offers, local.deleted, local.watch), toSet([...remoteDocs.values()], [...remoteOffers.values()], remoteDeleted, remoteWatch))
   const docs = new Map(Object.entries(merged.docs))
   const offers = new Map(Object.entries(merged.offers))
 
@@ -206,6 +231,8 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
   for (const o of offers.values()) wanted.set(OFFER_DIR + o.id + '.json', serialize(o))
   const recentDeleted = merged.deleted
   wanted.set(DELETED, serialize(recentDeleted))
+  // l'état de la veille (alertes, favoris) n'est écrit que s'il existe : data/feed.json reste réservé à la tâche GitHub
+  if (merged.watch && (merged.watch.alerts.length || Object.keys(merged.watch.marks).length)) wanted.set(WATCH, serialize(merged.watch))
 
   const changes: { path: string; content?: string }[] = []
   const newShas: Record<string, string> = {}
@@ -242,13 +269,13 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
 
   saveState({ shas: newShas, lastSync: Date.now() })
   void remoteFiles
-  const data: LocalData = { docs: [...docs.values()], offers: [...offers.values()], deleted: recentDeleted }
+  const data: LocalData = { docs: [...docs.values()], offers: [...offers.values()], deleted: recentDeleted, watch: merged.watch }
   const changedLocal =
     data.docs.length !== local.docs.length ||
     data.offers.length !== local.offers.length ||
     data.docs.some((d) => localDocs.get(d.id) !== d) ||
     data.offers.some((o) => localOffers.get(o.id) !== o)
-  return { data, changedLocal, pushed: changes.length, pulled }
+  return { data, changedLocal, pushed: changes.length, pulled, feed: remoteFeed }
 }
 
 /* ---------- Vitrine publique ---------- */

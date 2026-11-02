@@ -7,6 +7,7 @@ import LetterEditor from './pages/LetterEditor'
 import { ShowcaseDoc, ShowcasePage } from './pages/Showcase'
 import { Toasts } from './components/ui'
 import { UpdateBanner } from './components/UpdateBanner'
+import { RomeDrawer } from './components/RomeDrawer'
 import './styles/app.css'
 import { startAutoSync } from './store/sync'
 
@@ -26,5 +27,6 @@ createRoot(document.getElementById('root')!).render(
     </HashRouter>
     <Toasts />
     <UpdateBanner />
+    <RomeDrawer />
   </StrictMode>,
 )

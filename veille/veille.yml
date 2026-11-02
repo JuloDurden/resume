@@ -1,0 +1,39 @@
+# Veille d'annonces de Resume : récupère les nouvelles offres France Travail toutes les 3 heures.
+# Installée par l'application Resume. Secrets requis : FT_CLIENT_ID et FT_CLIENT_SECRET.
+name: Veille annonces
+
+on:
+  schedule:
+    - cron: '23 4-19/3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: veille
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Récupérer les annonces
+        run: node veille/fetch.mjs
+        env:
+          FT_CLIENT_ID: ${{ secrets.FT_CLIENT_ID }}
+          FT_CLIENT_SECRET: ${{ secrets.FT_CLIENT_SECRET }}
+      - name: Enregistrer
+        run: |
+          git config user.name "Resume (veille)"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/feed.json
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Veille : annonces mises à jour"
+          for i in 1 2 3; do git pull --rebase -q && git push -q && exit 0; sleep 5; done
+          exit 1

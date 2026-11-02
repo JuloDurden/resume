@@ -1,6 +1,9 @@
-import { useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Plus, Sparkles, Trash2 } from 'lucide-react'
-import type { Section, SectionItem, SectionOptions } from '../../types'
+import { useRef, useState } from 'react'
+import { BookOpen, X, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Plus, Sparkles, Trash2 } from 'lucide-react'
+import type { Offer, Section, SectionItem, SectionOptions } from '../../types'
+import { useRomeDrawer } from '../RomeDrawer'
+import { useOffer } from '../../store/documents'
+import type { RomeFiche } from '../../lib/rome'
 import { SECTION_DEFS, emptyItem } from '../../data/sectionDefs'
 import { uid } from '../../lib/ids'
 import { stripInline } from '../../lib/inline'
@@ -19,7 +22,7 @@ const OPTION_LABELS: Partial<Record<keyof SectionOptions, string>> = {
 
 const FORMAT_HINT = 'Mise en forme : **gras**, *italique*, [texte](lien)'
 
-export function SectionEditor({ section, onChange, onAskClaude }: { section: Section; onChange: (s: Section) => void; onAskClaude?: (action: 'summary' | 'bullets', itemId?: string) => void }) {
+export function SectionEditor({ section, onChange, onAskClaude, offerId }: { section: Section; onChange: (s: Section) => void; onAskClaude?: (action: 'summary' | 'bullets', itemId?: string) => void; offerId?: string }) {
   const def = SECTION_DEFS[section.type]
   const [open, setOpen] = useState<string | null>(section.items.length === 1 ? section.items[0].id : null)
   const setItem = (id: string, patch: Partial<SectionItem>) => onChange({ ...section, items: section.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) })
@@ -145,7 +148,7 @@ export function SectionEditor({ section, onChange, onAskClaude }: { section: Sec
               </div>
               {isOpen && (
                 <div className="item-body">
-                  <ItemFields section={section} item={it} onChange={(p) => setItem(it.id, p)} onAskClaude={onAskClaude} />
+                  <ItemFields section={section} item={it} onChange={(p) => setItem(it.id, p)} onAskClaude={onAskClaude} offerId={offerId} />
                 </div>
               )}
             </div>
@@ -166,7 +169,7 @@ export function SectionEditor({ section, onChange, onAskClaude }: { section: Sec
   )
 }
 
-function ItemFields({ section, item, onChange, onAskClaude }: { section: Section; item: SectionItem; onChange: (p: Partial<SectionItem>) => void; onAskClaude?: (a: 'summary' | 'bullets', id?: string) => void }) {
+function ItemFields({ section, item, onChange, onAskClaude, offerId }: { section: Section; item: SectionItem; onChange: (p: Partial<SectionItem>) => void; onAskClaude?: (a: 'summary' | 'bullets', id?: string) => void; offerId?: string }) {
   const def = SECTION_DEFS[section.type]
   const f = def.fields
   const L = def.labels
@@ -178,6 +181,7 @@ function ItemFields({ section, item, onChange, onAskClaude }: { section: Section
           {f.includes('title') && (
             <Field label={L.title}>
               <TextInput value={item.title} onChange={(v) => onChange({ title: v })} />
+              {['experience', 'volunteering'].includes(section.type) && <TitleVariants item={item} onChange={onChange} offerId={offerId} />}
             </Field>
           )}
         </div>
@@ -236,4 +240,73 @@ function ItemFields({ section, item, onChange, onAskClaude }: { section: Section
       )}
     </div>
   )
+}
+
+/** Variantes d'intitulé d'un poste (ex. Responsable de secteur, Chef de secteur, Manager commercial) et accès à la fiche métier. */
+function TitleVariants({ item, onChange, offerId }: { item: SectionItem; onChange: (p: Partial<SectionItem>) => void; offerId?: string }) {
+  const open = useRomeDrawer((s) => s.open)
+  const offer = useOffer(offerId)
+  const variants = item.titleVariants ?? []
+  const all = [...new Set([...(item.title ? [item.title] : []), ...variants])]
+  const pickRef = useRef(item)
+  pickRef.current = item
+  const add = (t: string) => {
+    const cur = pickRef.current
+    const list = [...new Set([...(cur.titleVariants ?? []), ...(cur.title ? [cur.title] : []), t])]
+    onChange({ titleVariants: list })
+  }
+  const context = [item.subtitle, item.description, ...(item.bullets ?? [])].filter(Boolean).join(' ')
+  return (
+    <div className="title-variants">
+      {all.length > 1 &&
+        all.map((t) => (
+          <span key={t} className={`title-variant${t === item.title ? ' on' : ''}`} onClick={() => onChange({ title: t, titleVariants: [...new Set([...variants, ...(item.title ? [item.title] : [])])] })} title="Utiliser cet intitulé">
+            {t}
+            {t !== item.title && (
+              <button
+                className="x"
+                title="Retirer cette variante"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onChange({ titleVariants: variants.filter((v) => v !== t) })
+                }}
+              >
+                <X size={11} />
+              </button>
+            )}
+          </span>
+        ))}
+      <button
+        className="btn ghost sm"
+        onClick={() =>
+          open({
+            query: item.title,
+            context,
+            label: 'Intitulés équivalents et fiche métier',
+            picked: all,
+            onPick: add,
+            claudePrompt: offer?.description ? (fiche) => titlePrompt(item, fiche, offer) : undefined,
+          })
+        }
+      >
+        <BookOpen size={14} /> Intitulés équivalents et fiche métier
+      </button>
+    </div>
+  )
+}
+
+function titlePrompt(item: SectionItem, fiche: RomeFiche, offer: Offer): string {
+  return `Je candidate à l'offre ci-dessous. Pour mon expérience « ${item.title} »${item.subtitle ? ` chez ${item.subtitle}` : ''}, propose les 3 intitulés de poste les plus adaptés à cette offre, choisis parmi les intitulés officiels du métier ROME ${fiche.code} (${fiche.intitule}) ou très proches, sans exagérer mon niveau de responsabilité.
+
+Mes missions :
+${[item.description, ...(item.bullets ?? [])].filter(Boolean).map((b) => `- ${b}`).join('\n')}
+
+Intitulés officiels possibles : ${fiche.appellations.slice(0, 60).join(' ; ')}
+
+<offre>
+${offer.title ?? ''}${offer.company ? ` - ${offer.company}` : ''}
+${offer.description ?? ''}
+</offre>
+
+Réponds uniquement par 3 lignes commençant par "- ", chacune au format : intitulé : raison en une phrase. Sans tiret cadratin.`
 }

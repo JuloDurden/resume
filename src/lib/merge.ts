@@ -1,9 +1,23 @@
-import type { AnyDoc, Offer } from '../types'
+import type { AnyDoc, Offer, WatchState } from '../types'
 
 export interface DataSet {
   docs: Record<string, AnyDoc>
   offers: Record<string, Offer>
   deleted: Record<string, number>
+  watch?: WatchState
+}
+
+export const EMPTY_WATCH: WatchState = { alerts: [], alertsAt: 0, marks: {} }
+
+/** Alertes : la liste la plus récente gagne. Marques (favori, masquée) : fusion annonce par annonce. */
+export function mergeWatch(a?: WatchState, b?: WatchState): WatchState | undefined {
+  if (!a) return b
+  if (!b) return a
+  const marks = { ...a.marks }
+  for (const [id, m] of Object.entries(b.marks)) if (!marks[id] || m.at > marks[id].at) marks[id] = m
+  const newer = b.alertsAt > a.alertsAt ? b : a
+  const same = newer === a && Object.keys(marks).length === Object.keys(a.marks).length && Object.entries(b.marks).every(([id, m]) => a.marks[id] && a.marks[id].at >= m.at)
+  return same ? a : { alerts: newer.alerts, alertsAt: newer.alertsAt, marks }
 }
 
 /** Durée de conservation des suppressions (pour qu'un appareil resté hors ligne ne fasse pas revenir un document supprimé). */
@@ -38,7 +52,7 @@ export function mergeDeleted(a: Record<string, number>, b: Record<string, number
  */
 export function mergeData(a: DataSet, b: DataSet): DataSet {
   const deleted = mergeDeleted(a.deleted, b.deleted)
-  return { docs: mergeMap(a.docs, b.docs, deleted), offers: mergeMap(a.offers, b.offers, deleted), deleted }
+  return { docs: mergeMap(a.docs, b.docs, deleted), offers: mergeMap(a.offers, b.offers, deleted), deleted, watch: mergeWatch(a.watch, b.watch) }
 }
 
 /** Indique si la fusion a modifié `a` (par référence d'objet). */
@@ -50,12 +64,14 @@ export function differs(a: DataSet, m: DataSet): boolean {
     ko.length !== Object.keys(m.offers).length ||
     ka.some((id) => a.docs[id] !== m.docs[id]) ||
     ko.some((id) => a.offers[id] !== m.offers[id]) ||
-    Object.keys(m.deleted).length !== Object.keys(a.deleted).length
+    Object.keys(m.deleted).length !== Object.keys(a.deleted).length ||
+    a.watch !== m.watch
   )
 }
 
-export const toSet = (docs: AnyDoc[], offers: Offer[], deleted: Record<string, number>): DataSet => ({
+export const toSet = (docs: AnyDoc[], offers: Offer[], deleted: Record<string, number>, watch?: WatchState): DataSet => ({
   docs: Object.fromEntries(docs.map((d) => [d.id, d])),
   offers: Object.fromEntries(offers.map((o) => [o.id, o])),
   deleted,
+  watch,
 })

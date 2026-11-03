@@ -132,7 +132,7 @@ export function offerFromItem(i: FeedItem): Offer {
     url: i.url,
     website: i.companyUrl,
     logo: i.logo,
-    description: i.description,
+    description: i.fullText ?? i.description,
     romeCode: i.rome,
     sourceId: i.id,
     snapshotAt: Date.now(),

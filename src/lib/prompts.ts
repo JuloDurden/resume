@@ -357,3 +357,28 @@ ${list}`
 export interface ClaudeReviews {
   reviews?: { id?: string; score?: number; verdict?: string; pros?: string[]; cons?: string[]; tip?: string }[]
 }
+
+/* ---------- Préparation d'entretien ---------- */
+
+export function interviewPrepPrompt(cvText: string, offer: { title?: string; company?: string; location?: string; description?: string; url?: string }): string {
+  return `Tu es un coach en recrutement. Prépare-moi à l'entretien pour le poste ci-dessous, à partir de mon CV. Sois concret et honnête, n'invente rien sur mon parcours.
+
+Réponds uniquement avec un bloc \`\`\`json de la forme :
+{
+  "company": "ce qu'il faut savoir sur l'employeur avant l'entretien (activité, taille, actualité, valeurs), en 4 à 6 phrases ; si tu ne le connais pas avec certitude, dis-le et indique quoi vérifier",
+  "pitch": "ma présentation en 1 minute, à la première personne, adaptée à ce poste",
+  "questions": [{"q": "question probable", "why": "ce que le recruteur cherche à vérifier", "answer": "ma réponse, au format STAR quand c'est pertinent, en m'appuyant sur une expérience réelle de mon CV"}],
+  "weaknesses": [{"point": "point faible de mon profil pour ce poste", "how": "comment l'aborder positivement"}],
+  "ask": ["question pertinente à poser au recruteur"],
+  "checklist": ["chose à préparer ou vérifier avant l'entretien"]
+}
+
+Règles : 8 à 10 questions (motivation, métier, comportement, mises en situation), 3 points faibles, 5 questions à poser, 5 éléments de checklist ; phrases courtes ; n'écris jamais de tiret cadratin ni de tiret demi-cadratin.
+
+## Mon CV
+${cvText}
+
+## Le poste
+${[offer.title, offer.company, offer.location].filter(Boolean).join(', ')}${offer.url ? `\nLien : ${offer.url}` : ''}
+${offer.description?.trim() || '(texte de l\'annonce non disponible : appuie-toi sur l\'intitulé et sur ce que tu sais de l\'employeur)'}`
+}

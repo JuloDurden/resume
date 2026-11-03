@@ -143,6 +143,8 @@ export interface MatchResult {
   level: { v: number; label: string; kind: 'junior' | 'neutral' | 'mid' | 'senior' }
   place: { v: number; label: string }
   degree?: { required: number; strict: boolean; factor: number }
+  /** ajustement selon vos choix passés */
+  learned?: number
 }
 
 const JUNIOR = /\bjunior\b|d[ée]butant|premi[eè]re exp[ée]rience|premier emploi|jeune(s)? dipl[oô]m|\bstages?\b|stagiaire|alternan|apprenti|sans exp[ée]rience|\b[01] [àa] [23] ans\b|reconversion/i
@@ -243,4 +245,42 @@ export function resolveProfile(saved: MatchProfile | undefined, docs: ResumeDoc[
     degree: saved?.degree ?? 2,
     home,
   }
+}
+
+/* ---------- apprentissage à partir de vos choix ---------- */
+
+export type Learned = Map<string, { pos: number; neg: number }>
+
+/** Mots des intitulés mis en favori ou en candidature (positifs), masqués ou supprimés (négatifs). */
+export function learnFromMarks(marks: Record<string, { s: string; t?: string }>): Learned {
+  const m: Learned = new Map()
+  for (const { s, t } of Object.values(marks)) {
+    if (!t || s === 'none') continue
+    const good = s === 'fav' || s === 'applied'
+    for (const w of canonSet(t)) {
+      const e = m.get(w) ?? { pos: 0, neg: 0 }
+      if (good) e.pos++
+      else e.neg++
+      m.set(w, e)
+    }
+  }
+  return m
+}
+
+/** Ajuste l'indice (au plus 12 points) selon les mots de l'intitulé que vous avez déjà retenus ou écartés. */
+export function applyLearning(r: MatchResult, i: FeedItem, learned: Learned): MatchResult & { learned?: number } {
+  if (!learned.size) return r
+  let sum = 0
+  let n = 0
+  for (const w of canonSet(i.title)) {
+    const e = learned.get(w)
+    if (!e || e.pos + e.neg < 2) continue
+    // un favori pèse plus qu'une annonce masquée (on masque beaucoup, on retient peu)
+    sum += (e.pos * 3 - e.neg) / (e.pos * 3 + e.neg + 2)
+    n++
+  }
+  if (!n) return r
+  const adj = Math.round(12 * (sum / n))
+  if (!adj) return r
+  return { ...r, score: Math.max(0, Math.min(100, r.score + adj)), learned: adj }
 }

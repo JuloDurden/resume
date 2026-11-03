@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Briefcase, ExternalLink, FilePlus2, FileSignature, Link2, MapPin, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BarChart3, BellRing, BookOpen, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, LayoutGrid, Link2, MapPin, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FollowUpModal, InterviewModal, followUpLabel } from './OfferTools'
+import { isDue } from '../../lib/followup'
+import { OfferStats } from './OfferStats'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
 import { JOB_STATUS, newOffer } from '../../lib/offers'
@@ -14,7 +17,8 @@ import { useRomeDrawer } from '../RomeDrawer'
 import { Menu, MenuItem, Modal, Segmented, Select, confirmAction, toast } from '../ui'
 import { openPath } from './DocCard'
 
-type Filter = 'all' | 'active' | 'interview' | 'closed'
+type Filter = 'all' | 'active' | 'followup' | 'interview' | 'closed'
+type View = 'cards' | 'columns' | 'stats'
 
 const docName = (o: Offer) => [o.title || 'Poste', o.company].filter(Boolean).join(' - ')
 
@@ -64,6 +68,9 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
   const removeOffer = useDocs((s) => s.removeOffer)
   const add = useDocs((s) => s.add)
   const [cvModal, setCvModal] = useState(false)
+  const [followUp, setFollowUp] = useState(false)
+  const [prep, setPrep] = useState(false)
+  const fu = followUpLabel(offer)
   const openRome = useRomeDrawer((s) => s.open)
   const linkedCv = docs.find((d): d is ResumeDoc => d.kind === 'resume')
   const scores = Object.entries(offer.scores ?? {}).filter(([id]) => docs.some((d) => d.id === id))
@@ -114,6 +121,26 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
                 Modifier l'offre
               </MenuItem>
               <MenuItem
+                icon={<MessagesSquare size={14} />}
+                onClick={() => {
+                  close()
+                  setPrep(true)
+                }}
+              >
+                {offer.interview ? "Préparation d'entretien" : "Préparer l'entretien"}
+              </MenuItem>
+              {offer.status === 'applied' && (
+                <MenuItem
+                  icon={<BellRing size={14} />}
+                  onClick={() => {
+                    close()
+                    setFollowUp(true)
+                  }}
+                >
+                  Relancer maintenant
+                </MenuItem>
+              )}
+              <MenuItem
                 icon={<BookOpen size={14} />}
                 onClick={() => {
                   close()
@@ -145,6 +172,21 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
           ))}
         </select>
         {best !== undefined && <span className={`offer-score ${best >= 75 ? 'good' : best >= 55 ? 'mid' : 'low'}`} title="Meilleur score ATS des CV rattachés">ATS {best}</span>}
+        {fu &&
+          (fu.due ? (
+            <button className="followup-badge due" onClick={() => setFollowUp(true)} title="Préparer l'email de relance">
+              <BellRing size={12} /> {fu.label}
+            </button>
+          ) : (
+            <span className="followup-badge" title="Relance proposée automatiquement 7 jours après l'envoi">
+              {fu.label}
+            </span>
+          ))}
+        {(offer.status === 'interview' || offer.interview) && (
+          <button className={`followup-badge prep${offer.interview ? ' ready' : ''}`} onClick={() => setPrep(true)}>
+            <MessagesSquare size={12} /> {offer.interview ? 'Préparation prête' : "Préparer l'entretien"}
+          </button>
+        )}
         <span className="muted small">Ajoutée le {new Date(offer.createdAt).toLocaleDateString('fr-FR')}</span>
         {offer.url && (
           <a className="btn ghost sm" href={/^https?:/i.test(offer.url) ? offer.url : `https://${offer.url}`} target="_blank" rel="noreferrer">
@@ -169,6 +211,8 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
         </div>
       </div>
       {cvModal && <NewCvForOffer offer={offer} resumes={resumes} onClose={() => setCvModal(false)} />}
+      {followUp && <FollowUpModal offer={offer} onClose={() => setFollowUp(false)} />}
+      {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
     </div>
   )
 }
@@ -178,6 +222,13 @@ export function OffersView() {
   const docsMap = useDocs((s) => s.docs)
   const saveOffer = useDocs((s) => s.saveOffer)
   const [filter, setFilter] = useState<Filter>('all')
+  const [view, setView] = useState<View>(() => {
+    try {
+      return (localStorage.getItem('resume-offers-view') as View) || 'cards'
+    } catch {
+      return 'cards'
+    }
+  })
   const [editing, setEditing] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const offers = useMemo(() => Object.values(offersMap).sort((a, b) => b.createdAt - a.createdAt), [offersMap])
@@ -186,6 +237,7 @@ export function OffersView() {
   const match = (o: Offer) => {
     const s = o.status ?? 'todo'
     if (filter === 'active') return s === 'todo' || s === 'applied'
+    if (filter === 'followup') return isDue(o)
     if (filter === 'interview') return s === 'interview' || s === 'offer'
     if (filter === 'closed') return s === 'rejected'
     return true
@@ -202,11 +254,28 @@ export function OffersView() {
           options={[
             { value: 'all', label: `Toutes (${offers.length})` },
             { value: 'active', label: 'En cours' },
+            { value: 'followup', label: `À relancer (${offers.filter((o) => isDue(o)).length})` },
             { value: 'interview', label: 'Entretiens' },
             { value: 'closed', label: 'Refusées' },
           ]}
         />
         <div className="row-gap">
+          <Segmented
+            value={view}
+            onChange={(v) => {
+              setView(v)
+              try {
+                localStorage.setItem('resume-offers-view', v)
+              } catch {
+                /* ignore */
+              }
+            }}
+            options={[
+              { value: 'cards', label: <LayoutGrid size={15} />, title: 'Cartes' },
+              { value: 'columns', label: <Columns3 size={15} />, title: 'Colonnes par statut' },
+              { value: 'stats', label: <BarChart3 size={15} />, title: 'Statistiques de recherche' },
+            ]}
+          />
           <button className="btn" onClick={() => setImporting(true)}>
             <Link2 size={16} /> Offre depuis un lien
           </button>
@@ -230,6 +299,24 @@ export function OffersView() {
           <button className="btn primary" onClick={() => setImporting(true)}>
             <Link2 size={16} /> Ajouter une offre
           </button>
+        </div>
+      ) : view === 'stats' ? (
+        <OfferStats offers={offers} />
+      ) : view === 'columns' ? (
+        <div className="offer-columns">
+          {(Object.keys(JOB_STATUS) as JobStatus[]).map((st) => {
+            const col = shown.filter((o) => (o.status ?? 'todo') === st)
+            return (
+              <div key={st} className={`offer-col st-${st}`}>
+                <h3>
+                  {JOB_STATUS[st]} <span>{col.length}</span>
+                </h3>
+                {col.map((o) => (
+                  <OfferCard key={o.id} offer={o} docs={docs.filter((d) => d.offerId === o.id)} resumes={resumes} onEdit={() => setEditing(o.id)} />
+                ))}
+              </div>
+            )
+          })}
         </div>
       ) : (
         <div className="offer-grid">

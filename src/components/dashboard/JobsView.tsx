@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import { Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, JobReview, MarkState, ResumeDoc } from '../../types'
-import { geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
+import { useNavigate } from 'react-router-dom'
+import { uid } from '../../lib/ids'
+import { groupJobs } from '../../lib/dedupe'
+import { applyLearning, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
 import { ClaudeRankModal, MatchProfileModal } from './MatchTools'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -90,6 +93,12 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
         <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'}>
           <MapPin size={12} /> {m.place.label}
         </span>
+        {!!m.learned && (
+          <span className={m.learned > 0 ? 'ok' : 'no'} title="Selon les annonces que vous avez mises en favori, en candidature ou masquées">
+            {m.learned > 0 ? '+' : ''}
+            {m.learned} selon vos choix
+          </span>
+        )}
         {m.degree && (
           <span className="no">
             <AlertTriangle size={12} /> Bac+{m.degree.required} {m.degree.strict ? 'exigé' : 'demandé'}
@@ -126,8 +135,7 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
   )
 }
 
-function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect, match, review }: { item: FeedItem; mark: MarkState; alertNames: string[]; onApply: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
-  const setMark = useDocs((s) => s.mark)
+function JobCard({ item, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
   return (
@@ -153,7 +161,7 @@ function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect, m
             {match.score}
           </button>
         )}
-        <button className={`icon-btn${mark === 'fav' ? ' fav' : ''}`} title={mark === 'fav' ? 'Retirer des favoris' : 'Mettre en favori'} onClick={() => setMark(item.id, mark === 'fav' ? 'none' : 'fav')}>
+        <button className={`icon-btn${mark === 'fav' ? ' fav' : ''}`} title={mark === 'fav' ? 'Retirer des favoris' : 'Mettre en favori'} onClick={() => onMark(mark === 'fav' ? 'none' : 'fav')}>
           <Star size={17} fill={mark === 'fav' ? 'currentColor' : 'none'} />
         </button>
       </div>
@@ -184,8 +192,13 @@ function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect, m
         )}
       </div>
       <div className="jc-tags">
-        <span className="jc-source">{item.source}</span>
-        {alertNames.map((n) => (
+        <span className="jc-source">{item.source.replace(' (alerte email)', '')}</span>
+        {others.map((o) => (
+          <a key={o.id} className="jc-source also" href={o.url} target="_blank" rel="noreferrer" title="Même offre publiée sur un autre site">
+            + {o.source.replace(' (alerte email)', '')}
+          </a>
+        ))}
+        {alertNames.filter((n) => n !== 'Alerte email').map((n) => (
           <span key={n} className="jc-alert">
             {n}
           </span>
@@ -213,6 +226,9 @@ function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect, m
             Créer la candidature
           </button>
         )}
+        <button className="btn sm claude" onClick={onTailor} title="Crée la candidature et une copie de votre CV de référence, puis ouvre l'adaptation avec Claude">
+          <Wand2 size={13} /> CV adapté
+        </button>
         <a className="btn sm" href={item.url} target="_blank" rel="noreferrer">
           <ExternalLink size={13} /> Annonce
         </a>
@@ -229,16 +245,16 @@ function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect, m
         <span className="spacer" />
         {mark === 'hidden' ? (
           <>
-            <button className="btn sm ghost" onClick={() => setMark(item.id, 'none')}>
+            <button className="btn sm ghost" onClick={() => onMark('none')}>
               <Eye size={13} /> Restaurer
             </button>
-            <button className="btn sm ghost danger" onClick={() => setMark(item.id, 'deleted')} title="Supprimer définitivement cette annonce">
+            <button className="btn sm ghost danger" onClick={() => onMark('deleted')} title="Supprimer définitivement cette annonce">
               <Trash2 size={13} /> Supprimer
             </button>
           </>
         ) : (
           mark !== 'applied' && (
-            <button className="btn sm ghost" onClick={() => setMark(item.id, 'hidden')} title="Ne plus afficher cette annonce">
+            <button className="btn sm ghost" onClick={() => onMark('hidden')} title="Ne plus afficher cette annonce">
               <EyeOff size={13} /> Masquer
             </button>
           )
@@ -254,7 +270,8 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const markSeen = useFeed((s) => s.markSeen)
   const watch = useDocs((s) => s.watch)
   const saveOffer = useDocs((s) => s.saveOffer)
-  const setMark = useDocs((s) => s.mark)
+  const addDoc = useDocs((s) => s.add)
+  const navigate = useNavigate()
   const markMany = useDocs((s) => s.markMany)
   const setExcludes = useDocs((s) => s.setExcludes)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -291,29 +308,45 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   void seenAt
 
   const terms = useMemo(() => watch.excludes ?? [], [watch.excludes])
-  const markOf = (id: string): MarkState => watch.marks[id]?.s ?? 'none'
   const all = useMemo(() => (feed?.items ?? []).filter((i) => watch.marks[i.id]?.s !== 'deleted'), [feed, watch.marks])
   // les termes exclus ne cachent pas les favoris ni les candidatures
   const items = useMemo(() => all.filter((i) => ['fav', 'applied'].includes(watch.marks[i.id]?.s ?? '') || !excluded(i, terms)), [all, terms, watch.marks])
   const excludedCount = all.length - items.length
+  // une même offre reçue par plusieurs sites : une seule carte
+  const groups = useMemo(() => groupJobs(items), [items])
+  const groupOf = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups])
+  const RANK: MarkState[] = ['applied', 'fav', 'none', 'hidden']
+  const groupMark = (id: string): MarkState => {
+    const ms = (groupOf.get(id)?.members ?? [{ id }]).map((m) => watch.marks[m.id]?.s ?? 'none')
+    return RANK.find((r) => ms.includes(r)) ?? 'none'
+  }
+  const expand = (ids: string[]) => ids.flatMap((id) => groupOf.get(id)?.members.map((m) => m.id) ?? [id])
+  const titlesOf = (ids: string[]) => Object.fromEntries(expand(ids).map((id) => [id, items.find((i) => i.id === id)?.title ?? '']))
+  const markGroup = (ids: string[], st: MarkState) => markMany(expand(ids), st, titlesOf(ids))
+  const gitems = useMemo(() => groups.map((g) => g.item), [groups])
   const names = useMemo<Record<string, string>>(() => ({ email: 'Alerte email', ...Object.fromEntries(watch.alerts.map((a) => [a.id, a.keywords])) }), [watch.alerts])
+  const markOf = groupMark
   const counts = useMemo(() => {
     const c = { new: 0, fav: 0, applied: 0, hidden: 0 }
-    for (const i of items) {
+    for (const i of gitems) {
       const m = markOf(i.id)
       if (m === 'none') c.new++
       else if (m !== 'deleted') c[m]++
     }
     return c
-  }, [items, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gitems, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
   const nq = q.trim().toLowerCase()
   const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume'), [docsMap])
   const profile = useMemo(() => resolveProfile(watch.profile, cvs, watch.alerts), [watch.profile, cvs, watch.alerts, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => geocode([...items.map((i) => i.location), watch.alerts[0]?.commune], () => setGeoTick((t) => t + 1)), [items, watch.alerts])
-  const matches = useMemo(() => Object.fromEntries(items.map((i) => [i.id, matchItem(i, profile)])), [items, profile, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  const learned = useMemo(() => {
+    const titles = new Map((feed?.items ?? []).map((i) => [i.id, i.title]))
+    return learnFromMarks(Object.fromEntries(Object.entries(watch.marks).map(([id, m]) => [id, m.t ? m : { ...m, t: titles.get(id) }])))
+  }, [watch.marks, feed])
+  const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchItem(i, profile), i, learned)])), [gitems, profile, geoTick, learned]) // eslint-disable-line react-hooks/exhaustive-deps
   const reviews = watch.reviews ?? {}
   const rank = (i: FeedItem) => reviews[i.id]?.score ?? matches[i.id]?.score ?? 0
-  const filtered = items.filter((i) => {
+  const filtered = gitems.filter((i) => {
     const m = markOf(i.id)
     if (filter === 'new' ? m !== 'none' : m !== filter) return false
     if (alert !== 'all' && !i.alerts.includes(alert)) return false
@@ -334,29 +367,49 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
       return n
     })
   const bulk = (st: MarkState, msg: string) => {
-    markMany(sel, st)
+    markGroup(sel, st)
     toast.ok(`${sel.length} annonce${sel.length > 1 ? 's' : ''} ${msg}`)
     setSelected(new Set())
   }
   const removeAll = (ids: string[]) => {
     if (!ids.length || !window.confirm(`Supprimer définitivement ${ids.length} annonce${ids.length > 1 ? 's' : ''} ? Elles ne reviendront pas, même si une alerte les renvoie.`)) return
-    markMany(ids, 'deleted')
+    markGroup(ids, 'deleted')
     toast.ok(`${ids.length} annonce${ids.length > 1 ? 's' : ''} supprimée${ids.length > 1 ? 's' : ''}`)
     setSelected(new Set())
   }
 
-  const apply = (i: FeedItem) => {
+  /** Candidature de l'annonce (créée une seule fois, même si l'annonce existe sur plusieurs sites). */
+  const offerFor = (i: FeedItem) => {
+    const ids = expand([i.id])
+    const existing = Object.values(useDocs.getState().offers).find((o) => o.sourceId && ids.includes(o.sourceId))
+    if (existing) return existing
     const o = offerFromItem(i)
     saveOffer(o)
-    setMark(i.id, 'applied')
+    markGroup([i.id], 'applied')
+    return o
+  }
+  const apply = (i: FeedItem) => {
+    offerFor(i)
     toast.ok('Candidature créée : rattachez-y un CV et une lettre depuis l\'onglet Offres')
     onShowOffers()
   }
+  const tailor = (i: FeedItem) => {
+    const cv = profile.cv
+    if (!cv) return toast.error('Aucun CV : créez-en un ou choisissez un CV de référence dans « Profil »')
+    const o = offerFor(i)
+    const now = Date.now()
+    const title = i.title.replace(/\s*[(-]?\s*\b[hfHF]\s*\/\s*[hfHF](\s*\/\s*\w+)?\s*\)?/g, '').replace(/\s*\((cdi|cdd)\)\s*$/i, '').trim()
+    const copy: ResumeDoc = { ...structuredClone(cv), id: uid(), name: [title, o.company].filter(Boolean).join(' - '), offerId: o.id, createdAt: now, updatedAt: now, header: { ...cv.header, title } }
+    addDoc(copy)
+    navigate(`/cv/${copy.id}?claude=tailor`)
+    toast.ok('CV créé pour cette offre : copiez le prompt d\'adaptation pour Claude')
+  }
 
   const noAlerts = !watch.alerts.length
+  const linksAlert = watch.alerts.find((a) => a.id === alert) ?? watch.alerts[0]
   return (
     <>
-      <div className="dash-filter">
+      <div className="jobs-head">
         <Segmented
           value={filter}
           onChange={setFilter}
@@ -368,11 +421,14 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ]}
         />
         <div className="row-gap">
-          <button className="btn" onClick={() => runSync()} disabled={syncStatus === 'syncing' || syncStatus === 'off'} title="Récupérer la dernière veille">
-            <RefreshCw size={16} className={syncStatus === 'syncing' ? 'spin' : ''} />
+          <button className="btn" onClick={() => setProfileOpen(true)} title="CV de référence, métiers visés, diplôme, domicile">
+            <Target size={16} /> Mon profil
           </button>
           <button className="btn" onClick={() => setSettings(true)}>
             <Settings2 size={16} /> Alertes et veille
+          </button>
+          <button className="btn icon-only" onClick={() => runSync()} disabled={syncStatus === 'syncing' || syncStatus === 'off'} title="Récupérer la dernière veille">
+            <RefreshCw size={16} className={syncStatus === 'syncing' ? 'spin' : ''} />
           </button>
         </div>
       </div>
@@ -381,58 +437,71 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
         <div className="empty-state">
           <BellRing size={28} className="muted" />
           <h2>Créez votre première alerte</h2>
-          <p>Indiquez le métier recherché et la ville. Resume récupère gratuitement les offres de la fonction publique (Choisir le Service Public), et celles de Jooble si vous avez une clé, puis vous donne des liens de recherche vers France Travail, LinkedIn, Hellowork, Indeed et APEC.</p>
+          <p>Indiquez le métier recherché et la ville. Resume lit vos alertes email (LinkedIn, France Travail, Glassdoor, Jobijoba...) et les offres de la fonction publique, puis vous donne des liens de recherche vers les autres sites.</p>
           <button className="btn primary" onClick={() => setSettings(true)}>
             <BellRing size={16} /> Créer une alerte
           </button>
         </div>
       ) : (
         <>
-          <div className="jobs-toolbar">
-            <div className="rome-search small">
-              <Search size={15} />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer (poste, entreprise, ville)" />
+          <div className="jobs-filters">
+            <div className="jf-row">
+              <div className="rome-search small">
+                <Search size={15} />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (poste, entreprise, ville)" />
+                {q && (
+                  <button className="icon-btn xs" onClick={() => setQ('')} title="Effacer">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              <select className="input select alert-select" value={alert} onChange={(e) => setAlert(e.target.value)} title="Filtrer par alerte">
+                <option value="all">Toutes les alertes</option>
+                {gitems.some((i) => i.alerts.includes('email')) && <option value="email">Alertes email</option>}
+                {watch.alerts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.keywords || 'Sans titre'}
+                  </option>
+                ))}
+              </select>
+              <div className="jf-sort">
+                <span className="muted small">Trier :</span>
+                <Segmented
+                  value={sort}
+                  onChange={(v) => {
+                    setSort(v)
+                    try {
+                      localStorage.setItem('resume-jobs-sort', v)
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                  options={[
+                    { value: 'date', label: 'Récentes' },
+                    { value: 'score', label: <><ArrowDownWideNarrow size={13} /> Correspondance</>, title: 'Trier par indice de correspondance (avis de Claude en priorité)' },
+                  ]}
+                />
+              </div>
             </div>
-            <select className="input select alert-select" value={alert} onChange={(e) => setAlert(e.target.value)}>
-              <option value="all">Toutes les alertes</option>
-              {items.some((i) => i.alerts.includes('email')) && <option value="email">Alertes email</option>}
-              {watch.alerts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.keywords || 'Sans titre'}
-                </option>
-              ))}
-            </select>
-            <Segmented
-              value={sort}
-              onChange={(v) => {
-                setSort(v)
-                try {
-                  localStorage.setItem('resume-jobs-sort', v)
-                } catch {
-                  /* ignore */
-                }
-              }}
-              options={[
-                { value: 'date', label: 'Plus récentes' },
-                { value: 'score', label: <><ArrowDownWideNarrow size={13} /> Correspondance</>, title: 'Trier par indice de correspondance (avis de Claude en priorité)' },
-              ]}
-            />
-            <button className="btn sm" onClick={() => setProfileOpen(true)} title="CV de référence, métiers visés, diplôme, domicile">
-              <Target size={14} /> Profil
-            </button>
-            <button className="btn sm claude" onClick={() => setClaudeOpen(true)} title="Faire évaluer les meilleures annonces par Claude">
-              <Sparkles size={14} /> Affiner avec Claude
-            </button>
-            <span className="muted small">{feed ? `Veille du ${new Date(feed.updatedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Veille automatique non configurée'}</span>
+            <ExcludeBar terms={terms} onChange={setExcludes} count={excludedCount} />
           </div>
-          <ExcludeBar terms={terms} onChange={setExcludes} count={excludedCount} />
-          {shown.length > 0 && (
+
+          {feed?.status === 'error' && (
+            <div className="notice warn">
+              La dernière veille a échoué : {feed.errors?.join(' ')}{' '}
+              <button className="link" onClick={() => setSettings(true)}>
+                Vérifier la configuration
+              </button>
+            </div>
+          )}
+
+          {feed && shown.length > 0 && (
             <div className={`bulk-bar${sel.length ? ' active' : ''}`}>
               <label className="bulk-all">
                 <input type="checkbox" checked={allSel} ref={(el) => { if (el) el.indeterminate = sel.length > 0 && !allSel }} onChange={(e) => setSelected(e.target.checked ? new Set(shownIds) : new Set())} />
-                {sel.length ? `${sel.length} sélectionnée${sel.length > 1 ? 's' : ''}` : `Tout sélectionner (${shownIds.length})`}
+                {sel.length ? `${sel.length} sélectionnée${sel.length > 1 ? 's' : ''}` : `${shownIds.length} annonce${shownIds.length > 1 ? 's' : ''}`}
               </label>
-              {sel.length > 0 && (
+              {sel.length > 0 ? (
                 <>
                   {filter !== 'fav' && (
                     <button className="btn sm" onClick={() => bulk('fav', 'en favori')}>
@@ -455,31 +524,22 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
                     Annuler
                   </button>
                 </>
-              )}
-              {!sel.length && filter === 'hidden' && (
-                <button className="btn sm ghost danger" onClick={() => removeAll(shownIds)}>
-                  <Trash2 size={13} /> Supprimer toutes les annonces masquées
-                </button>
+              ) : (
+                <>
+                  <span className="muted small">Veille du {new Date(feed.updatedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                  {filter === 'hidden' && (
+                    <button className="btn sm ghost danger" onClick={() => removeAll(shownIds)}>
+                      <Trash2 size={13} /> Tout supprimer
+                    </button>
+                  )}
+                  <button className="btn sm claude" onClick={() => setClaudeOpen(true)} title="Faire évaluer les meilleures annonces par Claude">
+                    <Sparkles size={14} /> Affiner avec Claude
+                  </button>
+                </>
               )}
             </div>
           )}
-          {feed?.status === 'error' && (
-            <div className="notice warn">
-              La dernière veille a échoué : {feed.errors?.join(' ')}{' '}
-              <button className="link" onClick={() => setSettings(true)}>
-                Vérifier la configuration
-              </button>
-            </div>
-          )}
-          <div className="quick-links">
-            <span className="muted small">Chercher aussi sur :</span>
-            {(watch.alerts.find((a) => a.id === alert) ?? watch.alerts[0]) &&
-              searchLinks(watch.alerts.find((a) => a.id === alert) ?? watch.alerts[0]).map((l) => (
-                <a key={l.site} href={l.url} target="_blank" rel="noreferrer">
-                  {l.site} <ExternalLink size={11} />
-                </a>
-              ))}
-          </div>
+
           {!feed ? (
             <div className="empty-state">
               <p>Les annonces apparaîtront ici une fois la veille automatique activée.</p>
@@ -490,12 +550,23 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ) : shown.length ? (
             <div className="job-list">
               {shown.map((i) => (
-                <JobCard key={i.id} item={i} mark={markOf(i.id)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                <JobCard key={i.id} item={i} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
               ))}
             </div>
           ) : (
             <div className="empty-state">
               <p>{filter === 'new' ? 'Toutes les annonces ont été triées.' : 'Rien ici pour le moment.'}</p>
+            </div>
+          )}
+
+          {linksAlert && (
+            <div className="quick-links">
+              <span className="muted small">Chercher aussi « {linksAlert.keywords.split(',')[0]} » sur :</span>
+              {searchLinks(linksAlert).map((l) => (
+                <a key={l.site} href={l.url} target="_blank" rel="noreferrer">
+                  {l.site} <ExternalLink size={11} />
+                </a>
+              ))}
             </div>
           )}
         </>

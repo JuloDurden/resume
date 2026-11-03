@@ -182,6 +182,24 @@ export interface Offer extends JobTarget {
   /** Identifiant de l'annonce dans la veille */
   sourceId?: string
   salary?: string
+  /** date de chaque changement de statut (statistiques) */
+  statusAt?: Partial<Record<JobStatus, number>>
+  /** dates des relances envoyées */
+  followUps?: number[]
+  /** relances désactivées pour cette offre */
+  noFollowUp?: boolean
+  /** préparation d'entretien rédigée par Claude */
+  interview?: InterviewPrep
+}
+
+export interface InterviewPrep {
+  at: number
+  company?: string
+  pitch?: string
+  questions?: { q: string; why?: string; answer?: string }[]
+  weaknesses?: { point: string; how?: string }[]
+  ask?: string[]
+  checklist?: string[]
 }
 
 export interface ResumeDoc {
@@ -277,7 +295,7 @@ export interface WatchState {
   /** avis de Claude sur certaines annonces */
   reviews?: Record<string, JobReview>
   /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
-  marks: Record<string, { s: MarkState; at: number }>
+  marks: Record<string, { s: MarkState; at: number; t?: string }>
 }
 
 export interface MatchProfile {

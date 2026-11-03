@@ -42,8 +42,8 @@ export interface DocsState {
   markBackup: () => void
   saveOffer: (o: Offer) => void
   setAlerts: (alerts: Alert[]) => void
-  mark: (id: string, s: MarkState) => void
-  markMany: (ids: string[], s: MarkState) => void
+  mark: (id: string, s: MarkState, title?: string) => void
+  markMany: (ids: string[], s: MarkState, titles?: Record<string, string>) => void
   setExcludes: (terms: string[]) => void
   setProfile: (p: MatchProfile) => void
   addReviews: (r: Record<string, JobReview>) => void
@@ -147,18 +147,25 @@ export const useDocs = create<DocsState>()(
         }),
       markBackup: () => setState({ lastBackup: Date.now() }),
       setAlerts: (alerts) => setState((s) => ({ watch: { ...s.watch, alerts, alertsAt: Date.now() } })),
-      mark: (id, st) => setState((s) => ({ watch: { ...s.watch, marks: { ...s.watch.marks, [id]: { s: st, at: Date.now() } } } })),
-      markMany: (ids, st) =>
+      mark: (id, st, t) => setState((s) => ({ watch: { ...s.watch, marks: { ...s.watch.marks, [id]: { s: st, at: Date.now(), ...(t ? { t } : {}) } } } })),
+      markMany: (ids, st, titles) =>
         setState((s) => {
           const at = Date.now()
           const marks = { ...s.watch.marks }
-          for (const id of ids) marks[id] = { s: st, at }
+          for (const id of ids) marks[id] = { s: st, at, ...(titles?.[id] ? { t: titles[id] } : {}) }
           return { watch: { ...s.watch, marks } }
         }),
       setProfile: (profile) => setState((s) => ({ watch: { ...s.watch, profile, profileAt: Date.now() } })),
       addReviews: (r) => setState((s) => ({ watch: { ...s.watch, reviews: { ...(s.watch.reviews ?? {}), ...r } } })),
       setExcludes: (terms) => setState((s) => ({ watch: { ...s.watch, excludes: terms, alertsAt: Date.now() } })),
-      saveOffer: (o) => setState((s) => ({ offers: { ...s.offers, [o.id]: { ...o, updatedAt: Date.now() } } })),
+      saveOffer: (o) =>
+        setState((s) => {
+          const prev = s.offers[o.id]
+          const st = o.status ?? 'todo'
+          // date de passage à chaque statut, pour les statistiques et les relances
+          const statusAt = (!prev || prev.status !== o.status) && !o.statusAt?.[st] ? { ...o.statusAt, [st]: Date.now() } : o.statusAt
+          return { offers: { ...s.offers, [o.id]: { ...o, statusAt, updatedAt: Date.now() } } }
+        }),
       removeOffer: (id) =>
         setState((s) => {
           const offers = { ...s.offers }

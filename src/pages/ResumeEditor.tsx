@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Columns2, FileSignature, LayoutTemplate, ListChecks, Palette, PenLine, Sparkles } from 'lucide-react'
 import type { ResumeDoc } from '../types'
 import { useDoc, useDocs, useOffer } from '../store/documents'
@@ -51,6 +51,14 @@ function ResumeEditor({ id }: { id: string | undefined }) {
     setRequest({ action, itemId, keywords, nonce: Date.now() })
     setTab('claude')
   }, [])
+
+  // ouverture depuis une annonce : prompt d'adaptation à l'offre prêt dans l'onglet Claude
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    if (!hydrated || !doc || params.get('claude') !== 'tailor') return
+    askClaude('tailor')
+    setParams({}, { replace: true })
+  }, [hydrated, doc?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!hydrated) return <div className="loading">Chargement...</div>
   if (!doc || !view || doc.kind !== 'resume') return <Navigate to="/" replace />

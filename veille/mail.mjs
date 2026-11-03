@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { parse } from 'node-html-parser'
 
 /** Change à chaque évolution de la lecture : les annonces des emails sont alors relues. */
-export const PARSER_VERSION = 2
+export const PARSER_VERSION = 3
 
 /** Expéditeurs d'alertes emploi. */
 export const SENDERS = [
@@ -195,7 +195,7 @@ function readCard(site, L, mailDate) {
     r.company = rest[0]?.replace(/\s+\d[.,]\d\s*★$/, '')
     r.title = rest[1]
     r.location = rest[2] && !/€|^\d+\s*[jh]$/i.test(rest[2]) ? rest[2] : undefined
-    r.salary = rest.find((l) => /€/.test(l))?.replace(/\s*\(Estimation de l'employeur\)/i, ' (estimation)')
+    r.salary = rest.find((l) => /€/.test(l))?.replace(/\s*\(Estimation de (l'employeur|Glassdoor)\)/i, ' (estimation)')
     const age = rest.map((l) => AGE.exec(l)).find(Boolean)
     const t = new Date(mailDate).getTime()
     if (age && !Number.isNaN(t)) r.date = new Date(t - Number(age[1]) * (age[2].startsWith('h') ? 3600000 : 86400000)).toISOString()

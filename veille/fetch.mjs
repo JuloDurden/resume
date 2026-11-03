@@ -412,7 +412,10 @@ async function stillOnline(i) {
     if (/choisirleservicepublic/.test(i.url) && !/offre-emploi/.test(final)) return false
     if (/hellowork/.test(i.url) && !/emplois\/\d+/.test(final)) return false
     if (/francetravail/.test(i.url) && !/detail/.test(final)) return false
-    const html = (await r.text()).slice(0, 400000)
+    // on ignore les formulaires (ex. « signaler une offre : l'offre n'existe plus »), scripts et styles
+    const html = (await r.text())
+      .slice(0, 600000)
+      .replace(/<(form|script|style|select|label|template|noscript)\b[\s\S]*?<\/\1>/gi, ' ')
     return !GONE.test(html)
   } catch {
     return undefined

@@ -25,7 +25,7 @@ Projet conçu par Julien Clavel avec Claude comme assistant de rédaction.
 **Veille d'annonces**
 - Alertes par métier, lieu, rayon et type de contrat.
 - Nouvelles offres récupérées par une tâche GitHub Actions dans le dépôt privé de sauvegarde, sans clé ni abonnement : offres de la fonction publique publiées chaque semaine par Choisir le Service Public en données ouvertes (data.gouv.fr, Licence Ouverte).
-- Alertes email : lecture seule des alertes reçues dans Gmail (LinkedIn, Hellowork, Indeed, APEC, France Travail, Welcome to the Jungle...), avec un mot de passe d'application (secrets `GMAIL_USER` et `GMAIL_APP_PASSWORD`).
+- Alertes email : lecture seule des alertes reçues dans Gmail (LinkedIn, France Travail, Glassdoor, Jobijoba, Hellowork, Indeed, APEC...), avec un mot de passe d'application (secrets `GMAIL_USER` et `GMAIL_APP_PASSWORD`).
 - Vérification quotidienne des liens : les annonces retirées par les sites disparaissent de la liste.
 - Sources facultatives : Jooble (clé gratuite sur demande, secret `JOOBLE_KEY`) et API France Travail « Offres d'emploi v2 » (accès sur demande, secrets `FT_CLIENT_ID` et `FT_CLIENT_SECRET`).
 - Tri des annonces : favoris, masquées, création de la candidature en un clic.

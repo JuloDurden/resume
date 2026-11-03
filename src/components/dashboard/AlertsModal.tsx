@@ -190,12 +190,12 @@ function Setup() {
           )}
         </div>
       </Step>
-      <Step n={2} title="Recommandé : vos alertes email (LinkedIn, Hellowork, Indeed, APEC...)" done={!!feed?.items.some((i) => i.alerts.includes('email'))}>
+      <Step n={2} title="Recommandé : vos alertes email (LinkedIn, France Travail, Glassdoor, Jobijoba...)" done={!!feed?.items.some((i) => i.alerts.includes('email'))}>
         <span className="muted small">
           La veille lit, <strong>en lecture seule</strong>, les alertes emploi reçues dans Gmail et en extrait chaque annonce. Aucun email n'est modifié, seuls ceux des sites d'emploi sont ouverts.
         </span>
         <ol className="small muted steps-list">
-          <li>Créez vos alertes sur les sites (LinkedIn, Hellowork, Indeed, APEC, France Travail, Welcome to the Jungle...) avec votre adresse Gmail, en envoi quotidien.</li>
+          <li>Créez vos alertes sur les sites (LinkedIn, France Travail, Glassdoor, Jobijoba, Hellowork, Indeed, APEC...) avec votre adresse Gmail, en envoi quotidien.</li>
           <li>
             Activez la validation en deux étapes de votre compte Google si ce n'est pas fait, puis créez un <strong>mot de passe d'application</strong> nommé « Resume veille » : Google affiche 16 lettres.
           </li>

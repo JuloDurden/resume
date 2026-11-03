@@ -335,9 +335,12 @@ const add = (item, alertId) => {
 const hasMail = !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
 if (hasMail) {
   try {
-    const { readMailAlerts } = await import('./mail.mjs')
-    await readMailAlerts({ user: process.env.GMAIL_USER.trim(), password: process.env.GMAIL_APP_PASSWORD.replace(/\s+/g, ''), days: firstRun || !sources.mail ? 14 : 3, add: (i) => add(i, MAIL_ALERT), notes })
-    sources.mail = { at: new Date().toISOString() }
+    const { readMailAlerts, PARSER_VERSION } = await import('./mail.mjs')
+    // nouvelle version de la lecture des emails : on relit 14 jours et on remplace les annonces mal lues
+    const reparse = sources.mail?.v !== PARSER_VERSION
+    if (reparse) for (const [id, i] of known) if (i.alerts?.includes(MAIL_ALERT) && !['fav', 'applied'].includes(watch.marks?.[id]?.s)) known.delete(id)
+    await readMailAlerts({ user: process.env.GMAIL_USER.trim(), password: process.env.GMAIL_APP_PASSWORD.replace(/\s+/g, ''), days: firstRun || reparse ? 14 : 3, add: (i) => add(i, MAIL_ALERT), notes })
+    sources.mail = { at: new Date().toISOString(), v: PARSER_VERSION }
   } catch (e) {
     errors.push(/auth|credentials|invalid/i.test(`${e.message} ${e.responseText ?? ''}`) ? 'Gmail : connexion refusée. Vérifiez GMAIL_USER (adresse complète) et le mot de passe d\'application (16 lettres).' : `Gmail : ${e.message}`)
   }

@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 22
       - name: Modules de lecture des emails
-        run: npm install --no-save --no-package-lock --no-audit --no-fund imapflow@1 mailparser@3
+        run: npm install --no-save --no-package-lock --no-audit --no-fund imapflow@1 mailparser@3 node-html-parser@7
       - name: Récupérer les annonces
         run: node veille/fetch.mjs
         env:

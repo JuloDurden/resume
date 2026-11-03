@@ -3,7 +3,8 @@ import { get as idbGet } from 'idb-keyval'
 import type { AnyDoc, Offer, WatchState } from '../types'
 import { useFeed } from './feed'
 import { useDocs } from './documents'
-import { GitHubError, lastSyncTime, loadConfig, markFeedRead, sync } from '../lib/github'
+import { GitHubError, lastSyncTime, loadConfig, markFeedRead, sync, type SyncConfig } from '../lib/github'
+import { runWatchNow } from '../lib/watch'
 import { differs, toSet, type DataSet } from '../lib/merge'
 
 type Status = 'off' | 'idle' | 'syncing' | 'error'
@@ -40,6 +41,28 @@ function withLock(fn: () => Promise<void>): Promise<void> {
   return locks ? locks.request('resume-github-sync', fn) : fn()
 }
 
+/**
+ * GitHub retarde ou saute souvent les tâches programmées : quand la veille date de plus d'une heure,
+ * l'application la relance elle-même (au plus une fois par demi-heure), puis récupère le résultat.
+ */
+const KICK_KEY = 'resume-watch-kick'
+function kickWatch(cfg: SyncConfig, run: () => void) {
+  const feed = useFeed.getState().feed
+  if (!feed || !useDocs.getState().watch.alerts.length) return
+  if (Date.now() - new Date(feed.updatedAt).getTime() < 65 * 60000) return
+  try {
+    if (Date.now() - Number(localStorage.getItem(KICK_KEY) ?? 0) < 30 * 60000) return
+    localStorage.setItem(KICK_KEY, String(Date.now()))
+  } catch {
+    return
+  }
+  runWatchNow(cfg)
+    .then(() => setTimeout(run, 110000))
+    .catch(() => {
+      /* permission « Actions » absente : la tâche programmée prendra le relais */
+    })
+}
+
 export const useSync = create<SyncStore>((set, get) => ({
   status: loadConfig() ? 'idle' : 'off',
   lastSync: lastSyncTime(),
@@ -66,6 +89,7 @@ export const useSync = create<SyncStore>((set, get) => ({
         // des modifications locales sont arrivées pendant l'envoi : on les enverra au passage suivant
         if (differs(remote, snapshot())) again = true
         set({ status: 'idle', message: undefined, lastSync: Date.now() })
+        kickWatch(cfg, () => get().run())
       } catch (e) {
         const msg =
           e instanceof GitHubError

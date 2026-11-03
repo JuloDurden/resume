@@ -143,7 +143,7 @@ function Setup() {
       </div>
       <Step n={1} title="Installez la tâche programmée" done={!!installed}>
         <span className="muted small">
-          Resume ajoute à {cfg.repo} un petit script et une tâche GitHub Actions qui récupère les nouvelles annonces <strong>toutes les 3 heures</strong> (de 5 h à 20 h). Aucune clé n'est nécessaire. Le token doit avoir la permission <strong>Workflows : Read and write</strong> en plus de Contents.
+          Resume ajoute à {cfg.repo} un petit script et une tâche GitHub Actions qui récupère les nouvelles annonces <strong>toutes les heures</strong> (de 5 h à 21 h). GitHub retarde parfois ces passages : Resume relance alors la veille lui-même à son ouverture (permission <strong>Actions : Read and write</strong>). Aucune clé n'est nécessaire. Le token doit avoir la permission <strong>Workflows : Read and write</strong> en plus de Contents.
         </span>
         <div className="row-gap">
           <button

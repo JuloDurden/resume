@@ -403,25 +403,100 @@ const items = [...known.values()]
 const GONE = /n['’]est plus (disponible|en ligne|active|accessible)|n['’]existe plus|a été (pourvue|supprimée|retirée|clôturée)|offre (expirée|clôturée|pourvue|dépubliée)|plus d['’]acceptation de candidatures|n['’]accepte plus de candidatures|no longer accepting applications|this job is no longer available|page (introuvable|non trouvée)/i
 const CHECKABLE = /choisirleservicepublic|francetravail|hellowork|linkedin|welcometothejungle|cadremploi/
 
-async function stillOnline(i) {
+/* ---------- texte complet des annonces ---------- */
+
+const decodeHtml = (s) =>
+  (s ?? '')
+    .replace(/<br\s*\/?>|<\/(p|li|div|h\d|tr)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;|&rsquo;/g, '’')
+    .replace(/&euro;/g, '€')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/[ \t ]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+const MAX_TEXT = 7000
+
+/** Texte de l'annonce : données structurées JobPosting, sinon zone de description propre au site. */
+async function extractText(url, html) {
+  const out = []
+  const facts = {}
+  for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let data
+    try {
+      data = JSON.parse(m[1])
+    } catch {
+      continue
+    }
+    const list = [data, ...(Array.isArray(data) ? data : []), ...(data?.['@graph'] ?? [])].flat()
+    const jp = list.find((x) => x && x['@type'] === 'JobPosting')
+    if (!jp) continue
+    const desc = jp.description ?? jp.Description
+    if (desc) out.push(decodeHtml(desc))
+    const val = (v) => (typeof v === 'string' ? decodeHtml(v) : v?.credentialCategory ?? v?.name ?? (v?.monthsOfExperience ? `${Math.round(v.monthsOfExperience / 12)} an(s)` : ''))
+    if (jp.educationRequirements) facts.education = val(jp.educationRequirements)
+    if (jp.experienceRequirements) facts.experience = val(jp.experienceRequirements)
+    if (jp.skills) facts.skills = decodeHtml(Array.isArray(jp.skills) ? jp.skills.join(', ') : String(jp.skills))
+    break
+  }
+  if (!out.length) {
+    try {
+      const { parse } = await import('node-html-parser')
+      const root = parse(html)
+      if (/linkedin/.test(url)) {
+        const d = root.querySelector('.show-more-less-html__markup')
+        if (d) out.push(decodeHtml(d.innerHTML))
+        for (const li of root.querySelectorAll('.description__job-criteria-item')) {
+          const k = li.querySelector('h3')?.text.trim()
+          const v = li.querySelector('span')?.text.trim()
+          if (k && v) out.push(`${k} : ${v}`)
+          if (k && v && /niveau hi[ée]rarchique|seniority/i.test(k)) facts.level = v
+        }
+      } else {
+        const d = root.querySelectorAll('[itemprop=description], .job-description, .description').find((e) => !e.closest('li') && !e.closest('.media-body') && e.text.trim().length > 200)
+        if (d) out.push(decodeHtml(d.innerHTML))
+      }
+      // France Travail : le détail est chargé par script, seule la description courte (meta) est servie
+      if (!out.length && /francetravail/.test(url)) {
+        const meta = root.querySelector('meta[name=description]')?.getAttribute('content')
+        if (meta) out.push(decodeHtml(meta))
+      }
+    } catch {
+      /* module absent : pas d'extraction */
+    }
+  }
+  const text = out.filter(Boolean).join('\n\n').slice(0, MAX_TEXT)
+  return { text: text.length > 60 ? text : undefined, facts }
+}
+
+/** Vérifie que l'annonce est en ligne et récupère son texte. online : true, false ou undefined (inconnu). */
+async function inspect(i) {
   const ctl = new AbortController()
   const t = setTimeout(() => ctl.abort(), 12000)
   try {
     const r = await fetch(i.url, { redirect: 'follow', signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (veille Resume)', 'Accept-Language': 'fr-FR,fr' } })
-    if (r.status === 404 || r.status === 410) return false
-    if (!r.ok) return undefined // bloqué ou indisponible : on ne conclut pas
+    if (r.status === 404 || r.status === 410) return { online: false }
+    if (!r.ok) return { online: undefined } // bloqué ou indisponible : on ne conclut pas
     const final = r.url
     // redirigé vers une page de recherche : l'annonce a disparu
-    if (/choisirleservicepublic/.test(i.url) && !/offre-emploi/.test(final)) return false
-    if (/hellowork/.test(i.url) && !/emplois\/\d+/.test(final)) return false
-    if (/francetravail/.test(i.url) && !/detail/.test(final)) return false
+    if (/choisirleservicepublic/.test(i.url) && !/offre-emploi/.test(final)) return { online: false }
+    if (/hellowork/.test(i.url) && !/emplois\/\d+/.test(final)) return { online: false }
+    if (/francetravail/.test(i.url) && !/detail/.test(final)) return { online: false }
+    const raw = (await r.text()).slice(0, 1500000)
     // on ignore les formulaires (ex. « signaler une offre : l'offre n'existe plus »), scripts et styles
-    const html = (await r.text())
-      .slice(0, 600000)
-      .replace(/<(form|script|style|select|label|template|noscript)\b[\s\S]*?<\/\1>/gi, ' ')
-    return !GONE.test(html)
+    const visible = raw.slice(0, 600000).replace(/<(form|script|style|select|label|template|noscript)\b[\s\S]*?<\/\1>/gi, ' ')
+    const online = !GONE.test(visible)
+    return { online, ...(online && !i.fullText ? await extractText(i.url, raw) : {}) }
   } catch {
-    return undefined
+    return { online: undefined }
   } finally {
     clearTimeout(t)
   }
@@ -429,22 +504,36 @@ async function stillOnline(i) {
 
 {
   const day = Date.now() - 20 * 3600000
-  const todo = items.filter((i) => CHECKABLE.test(i.url ?? '') && !i.closed && new Date(i.checkedAt ?? 0).getTime() < day).slice(0, 120)
+  // contrôle quotidien, et tout de suite pour les annonces dont on n'a pas encore le texte
+  const todo = items
+    .filter((i) => CHECKABLE.test(i.url ?? '') && !i.closed && (new Date(i.checkedAt ?? 0).getTime() < day || (!i.fullText && !i.textTried)))
+    .slice(0, 150)
   let gone = 0
+  let texts = 0
   for (let k = 0; k < todo.length; k += 4) {
     await Promise.all(
       todo.slice(k, k + 4).map(async (i) => {
-        const ok = await stillOnline(i)
-        if (ok === undefined) return
+        const r = await inspect(i)
+        if (r.online === undefined) return
         i.checkedAt = new Date().toISOString()
-        if (!ok) {
+        if (!r.online) {
           i.closed = true
           gone++
+          return
+        }
+        if (!i.fullText) {
+          i.textTried = true
+          if (r.text) {
+            i.fullText = r.text
+            texts++
+          }
+          if (r.facts && Object.values(r.facts).some(Boolean)) i.facts = r.facts
         }
       }),
     )
+    if (/linkedin/.test(todo[k]?.url ?? '')) await sleep(300)
   }
-  if (todo.length) notes.push(`Vérification : ${todo.length} lien(s) contrôlé(s), ${gone} annonce(s) retirée(s).`)
+  if (todo.length) notes.push(`Vérification : ${todo.length} lien(s) contrôlé(s), ${gone} annonce(s) retirée(s), ${texts} texte(s) complet(s) récupéré(s).`)
 }
 // les annonces retirées ne restent que si elles sont en favori ou en candidature (signalées « expirée »)
 for (let k = items.length - 1; k >= 0; k--) if (items[k].closed && !marked(items[k].id)) items.splice(k, 1)

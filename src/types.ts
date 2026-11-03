@@ -271,8 +271,32 @@ export interface WatchState {
   alertsAt: number
   /** termes à exclure de la liste des annonces (ex. « alternance », « B2B ») */
   excludes?: string[]
+  /** profil utilisé pour l'indice de correspondance */
+  profile?: MatchProfile
+  profileAt?: number
+  /** avis de Claude sur certaines annonces */
+  reviews?: Record<string, JobReview>
   /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
   marks: Record<string, { s: MarkState; at: number }>
+}
+
+export interface MatchProfile {
+  /** CV de référence (compétences) */
+  cvId?: string
+  /** métiers visés */
+  targets: string[]
+  /** niveau de diplôme : 0 (aucun), 2 (bac+2), 3, 5... */
+  degree: number
+  home?: { nom: string; lat: number; lon: number }
+}
+
+export interface JobReview {
+  score: number
+  verdict?: string
+  pros?: string[]
+  cons?: string[]
+  tip?: string
+  at: number
 }
 
 export interface FeedItem {
@@ -298,6 +322,10 @@ export interface FeedItem {
   /** l'annonce n'est plus en ligne */
   closed?: boolean
   checkedAt?: string
+  /** texte complet de l'annonce, récupéré par la veille */
+  fullText?: string
+  textTried?: boolean
+  facts?: { education?: string; experience?: string; skills?: string; level?: string }
   url: string
   source: string
   contact?: { name?: string; email?: string }

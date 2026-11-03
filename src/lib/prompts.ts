@@ -312,3 +312,48 @@ export interface ClaudeOffer {
   description?: string
   contacts?: { name?: string; role?: string; email?: string; phone?: string }[]
 }
+
+/* ---------- Classement d'annonces par Claude ---------- */
+
+export interface RankItem {
+  id: string
+  title: string
+  company?: string
+  location?: string
+  contract?: string
+  text?: string
+  score?: number
+}
+
+export function jobRankPrompt(cvText: string, items: RankItem[], opts: { degree: number; targets: string[] }): string {
+  const list = items
+    .map(
+      (i, n) =>
+        `### Annonce ${n + 1} (id: ${i.id})
+${i.title}${i.company ? `, ${i.company}` : ''}${i.location ? `, ${i.location}` : ''}${i.contract ? `, ${i.contract}` : ''}
+${(i.text ?? '').replace(/\s+/g, ' ').slice(0, 1400) || '(texte de l\'annonce non disponible : juge sur l\'intitulé)'}`,
+    )
+    .join('\n\n')
+  return `Tu es un conseiller en recrutement. Voici mon CV puis ${items.length} annonces. Évalue honnêtement, pour chacune, si je dois postuler.
+
+Contexte :
+- Métiers visés : ${opts.targets.join(', ') || 'voir le CV'}.
+- Mon niveau de diplôme : ${opts.degree ? `bac+${opts.degree}` : 'sans diplôme du supérieur'} (plus mes certifications du CV).
+- Je me repositionne : les postes junior ou débutant me conviennent très bien, ne les pénalise pas.
+- Signale clairement une exigence bloquante (diplôme imposé, années d'expérience, langue, permis...).
+
+Réponds uniquement avec un bloc \`\`\`json de la forme :
+{"reviews": [{"id": "id exact de l'annonce", "score": 0 à 100, "verdict": "une phrase : postuler ou non, et pourquoi", "pros": ["points forts de mon profil pour ce poste"], "cons": ["manques ou risques"], "tip": "conseil concret pour la candidature (ce qu'il faut mettre en avant)"}]}
+
+Règles : une entrée par annonce, avec l'id recopié à l'identique ; 2 à 4 éléments dans pros et cons ; phrases courtes ; n'écris jamais de tiret cadratin ni de tiret demi-cadratin.
+
+## Mon CV
+${cvText}
+
+## Annonces
+${list}`
+}
+
+export interface ClaudeReviews {
+  reviews?: { id?: string; score?: number; verdict?: string; pros?: string[]; cons?: string[]; tip?: string }[]
+}

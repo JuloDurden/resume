@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
-import type { FeedItem, MarkState } from '../../types'
+import { BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import type { FeedItem, JobReview, MarkState, ResumeDoc } from '../../types'
+import { geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
+import { ClaudeRankModal, MatchProfileModal } from './MatchTools'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { useSync } from '../../store/sync'
@@ -68,7 +70,63 @@ function ExcludeBar({ terms, onChange, count }: { terms: string[]; onChange: (t:
   )
 }
 
-function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect }: { item: FeedItem; mark: MarkState; alertNames: string[]; onApply: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void }) {
+function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
+  const pct = (v: number) => `${Math.round(v * 100)} %`
+  return (
+    <div className="match-details">
+      <div className="match-chips">
+        <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
+          <Target size={12} /> Intitulé {pct(m.title.v)}
+          {m.title.target && m.title.v > 0 ? ` (${m.title.target})` : ''}
+        </span>
+        {m.skills ? (
+          <span className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}>
+            <Check size={12} /> Compétences {m.skills.matched.length}/{m.skills.total}
+          </span>
+        ) : (
+          <span className="na" title="Le texte complet de l'annonce n'est pas disponible">Compétences : texte indisponible</span>
+        )}
+        <span className={m.level.kind === 'junior' ? 'ok' : m.level.kind === 'senior' ? 'no' : 'mid'}>{m.level.label}</span>
+        <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'}>
+          <MapPin size={12} /> {m.place.label}
+        </span>
+        {m.degree && (
+          <span className="no">
+            <AlertTriangle size={12} /> Bac+{m.degree.required} {m.degree.strict ? 'exigé' : 'demandé'}
+          </span>
+        )}
+      </div>
+      {m.skills && m.skills.matched.length > 0 && <p className="small muted">Compétences retrouvées : {m.skills.matched.join(', ')}</p>}
+      {review && (
+        <div className="review-box">
+          <strong>
+            <Sparkles size={13} /> Avis de Claude : {review.score}/100
+          </strong>
+          {review.verdict && <p>{review.verdict}</p>}
+          <div className="review-cols">
+            {!!review.pros?.length && (
+              <ul className="pros">
+                {review.pros.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            )}
+            {!!review.cons?.length && (
+              <ul className="cons">
+                {review.cons.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {review.tip && <p className="small"><strong>Conseil :</strong> {review.tip}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect, match, review }: { item: FeedItem; mark: MarkState; alertNames: string[]; onApply: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const setMark = useDocs((s) => s.mark)
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
@@ -85,6 +143,16 @@ function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect }:
           </strong>
           <span>{item.company ?? 'Entreprise non communiquée'}</span>
         </div>
+        {review && (
+          <span className={`match-badge claude ${scoreClass(review.score)}`} title={`Avis de Claude : ${review.verdict ?? ''}`}>
+            <Sparkles size={11} /> {review.score}
+          </span>
+        )}
+        {match && (
+          <button className={`match-badge ${scoreClass(match.score)}`} title="Indice de correspondance avec votre profil (détails)" onClick={() => setOpen((o) => !o)}>
+            {match.score}
+          </button>
+        )}
         <button className={`icon-btn${mark === 'fav' ? ' fav' : ''}`} title={mark === 'fav' ? 'Retirer des favoris' : 'Mettre en favori'} onClick={() => setMark(item.id, mark === 'fav' ? 'none' : 'fav')}>
           <Star size={17} fill={mark === 'fav' ? 'currentColor' : 'none'} />
         </button>
@@ -123,7 +191,20 @@ function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect }:
           </span>
         ))}
       </div>
-      {open && item.description && <p className="jc-desc" style={{ whiteSpace: 'pre-line' }}>{item.description}</p>}
+      {open && (
+        <div className="jc-open">
+          {match && <MatchDetails m={match} review={review} />}
+          {item.fullText ? (
+            <details className="jc-full" open>
+              <summary>Texte complet de l'annonce</summary>
+              <div className="jc-desc">{item.fullText}</div>
+            </details>
+          ) : (
+            item.description && <p className="jc-desc">{item.description}</p>
+          )}
+          {!item.fullText && <p className="muted small">Texte complet non disponible pour ce site : ouvrez l'annonce pour la lire en entier.</p>}
+        </div>
+      )}
       <div className="jc-actions">
         {mark === 'applied' ? (
           <span className="applied-badge">Candidature créée</span>
@@ -135,7 +216,7 @@ function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect }:
         <a className="btn sm" href={item.url} target="_blank" rel="noreferrer">
           <ExternalLink size={13} /> Annonce
         </a>
-        {item.description && (
+        {(
           <button className="btn sm ghost" onClick={() => setOpen((o) => !o)}>
             {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {open ? 'Réduire' : 'Détails'}
           </button>
@@ -182,6 +263,17 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const [filter, setFilter] = useState<Filter>('new')
   const [alert, setAlert] = useState<string>('all')
   const [q, setQ] = useState('')
+  const [sort, setSort] = useState<'date' | 'score'>(() => {
+    try {
+      return localStorage.getItem('resume-jobs-sort') === 'score' ? 'score' : 'date'
+    } catch {
+      return 'date'
+    }
+  })
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [claudeOpen, setClaudeOpen] = useState(false)
+  const [geoTick, setGeoTick] = useState(0)
+  const docsMap = useDocs((s) => s.docs)
   const [settings, setSettings] = useState(false)
   // date de la visite précédente, lue une fois le stockage local chargé (pour signaler les nouveautés)
   const [lastSeen, setLastSeen] = useState(0)
@@ -215,13 +307,20 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     return c
   }, [items, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
   const nq = q.trim().toLowerCase()
-  const shown = items.filter((i) => {
+  const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume'), [docsMap])
+  const profile = useMemo(() => resolveProfile(watch.profile, cvs, watch.alerts), [watch.profile, cvs, watch.alerts, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => geocode([...items.map((i) => i.location), watch.alerts[0]?.commune], () => setGeoTick((t) => t + 1)), [items, watch.alerts])
+  const matches = useMemo(() => Object.fromEntries(items.map((i) => [i.id, matchItem(i, profile)])), [items, profile, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  const reviews = watch.reviews ?? {}
+  const rank = (i: FeedItem) => reviews[i.id]?.score ?? matches[i.id]?.score ?? 0
+  const filtered = items.filter((i) => {
     const m = markOf(i.id)
     if (filter === 'new' ? m !== 'none' : m !== filter) return false
     if (alert !== 'all' && !i.alerts.includes(alert)) return false
     if (nq && !`${i.title} ${i.company ?? ''} ${i.location ?? ''}`.toLowerCase().includes(nq)) return false
     return true
   })
+  const shown = sort === 'score' ? [...filtered].sort((a, b) => rank(b) - rank(a)) : filtered
 
   useEffect(() => setSelected(new Set()), [filter, alert, q, terms])
   const shownIds = shown.map((i) => i.id)
@@ -303,6 +402,27 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
                 </option>
               ))}
             </select>
+            <Segmented
+              value={sort}
+              onChange={(v) => {
+                setSort(v)
+                try {
+                  localStorage.setItem('resume-jobs-sort', v)
+                } catch {
+                  /* ignore */
+                }
+              }}
+              options={[
+                { value: 'date', label: 'Plus récentes' },
+                { value: 'score', label: <><ArrowDownWideNarrow size={13} /> Correspondance</>, title: 'Trier par indice de correspondance (avis de Claude en priorité)' },
+              ]}
+            />
+            <button className="btn sm" onClick={() => setProfileOpen(true)} title="CV de référence, métiers visés, diplôme, domicile">
+              <Target size={14} /> Profil
+            </button>
+            <button className="btn sm claude" onClick={() => setClaudeOpen(true)} title="Faire évaluer les meilleures annonces par Claude">
+              <Sparkles size={14} /> Affiner avec Claude
+            </button>
             <span className="muted small">{feed ? `Veille du ${new Date(feed.updatedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Veille automatique non configurée'}</span>
           </div>
           <ExcludeBar terms={terms} onChange={setExcludes} count={excludedCount} />
@@ -370,7 +490,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ) : shown.length ? (
             <div className="job-list">
               {shown.map((i) => (
-                <JobCard key={i.id} item={i} mark={markOf(i.id)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                <JobCard key={i.id} item={i} mark={markOf(i.id)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
               ))}
             </div>
           ) : (
@@ -381,6 +501,8 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
         </>
       )}
       <AlertsModal open={settings} onClose={() => setSettings(false)} />
+      <MatchProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <ClaudeRankModal open={claudeOpen} onClose={() => setClaudeOpen(false)} items={[...filtered].sort((a, b) => (matches[b.id]?.score ?? 0) - (matches[a.id]?.score ?? 0)).map((i) => ({ ...i, score: matches[i.id]?.score }))} />
     </>
   )
 }

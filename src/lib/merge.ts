@@ -16,8 +16,16 @@ export function mergeWatch(a?: WatchState, b?: WatchState): WatchState | undefin
   const marks = { ...a.marks }
   for (const [id, m] of Object.entries(b.marks)) if (!marks[id] || m.at > marks[id].at) marks[id] = m
   const newer = b.alertsAt > a.alertsAt ? b : a
-  const same = newer === a && Object.keys(marks).length === Object.keys(a.marks).length && Object.entries(b.marks).every(([id, m]) => a.marks[id] && a.marks[id].at >= m.at)
-  return same ? a : { alerts: newer.alerts, alertsAt: newer.alertsAt, excludes: newer.excludes, marks }
+  const prof = (b.profileAt ?? 0) > (a.profileAt ?? 0) ? b : a
+  const reviews = { ...(a.reviews ?? {}) }
+  let reviewsChanged = false
+  for (const [id, r] of Object.entries(b.reviews ?? {}))
+    if (!reviews[id] || r.at > reviews[id].at) {
+      reviews[id] = r
+      reviewsChanged = true
+    }
+  const same = newer === a && prof === a && !reviewsChanged && Object.keys(marks).length === Object.keys(a.marks).length && Object.entries(b.marks).every(([id, m]) => a.marks[id] && a.marks[id].at >= m.at)
+  return same ? a : { alerts: newer.alerts, alertsAt: newer.alertsAt, excludes: newer.excludes, profile: prof.profile, profileAt: prof.profileAt, reviews, marks }
 }
 
 /** Durée de conservation des suppressions (pour qu'un appareil resté hors ligne ne fasse pas revenir un document supprimé). */

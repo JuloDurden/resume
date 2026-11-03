@@ -388,7 +388,10 @@ const limit = Date.now() - KEEP_DAYS * 86400000
 const active = new Set([...alerts.map((a) => a.id), ...(hasMail ? [MAIL_ALERT] : [])])
 // les annonces en favori ou en candidature restent, même si leur alerte a été supprimée
 const marked = (id) => ['fav', 'applied'].includes(watch.marks?.[id]?.s)
+// annonces supprimées depuis l'application : retirées définitivement de la liste
+const removed = (id) => watch.marks?.[id]?.s === 'deleted'
 const items = [...known.values()]
+  .filter((i) => !removed(i.id))
   .map((i) => ({ ...i, alerts: (i.alerts ?? []).filter((x) => active.has(x)) }))
   .filter((i) => (i.alerts.length || marked(i.id)) && (i.until ? i.until >= now : new Date(i.date ?? i.firstSeen).getTime() >= limit))
   .sort((x, y) => (y.date ?? '').localeCompare(x.date ?? ''))

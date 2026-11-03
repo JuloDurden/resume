@@ -43,6 +43,8 @@ export interface DocsState {
   saveOffer: (o: Offer) => void
   setAlerts: (alerts: Alert[]) => void
   mark: (id: string, s: MarkState) => void
+  markMany: (ids: string[], s: MarkState) => void
+  setExcludes: (terms: string[]) => void
   removeOffer: (id: string) => void
   /** Fusionne des données venues d'ailleurs (GitHub, autre onglet) sans jamais écraser une modification plus récente. Renvoie true si l'état local a changé. */
   mergeIn: (data: DataSet) => boolean
@@ -144,6 +146,14 @@ export const useDocs = create<DocsState>()(
       markBackup: () => setState({ lastBackup: Date.now() }),
       setAlerts: (alerts) => setState((s) => ({ watch: { ...s.watch, alerts, alertsAt: Date.now() } })),
       mark: (id, st) => setState((s) => ({ watch: { ...s.watch, marks: { ...s.watch.marks, [id]: { s: st, at: Date.now() } } } })),
+      markMany: (ids, st) =>
+        setState((s) => {
+          const at = Date.now()
+          const marks = { ...s.watch.marks }
+          for (const id of ids) marks[id] = { s: st, at }
+          return { watch: { ...s.watch, marks } }
+        }),
+      setExcludes: (terms) => setState((s) => ({ watch: { ...s.watch, excludes: terms, alertsAt: Date.now() } })),
       saveOffer: (o) => setState((s) => ({ offers: { ...s.offers, [o.id]: { ...o, updatedAt: Date.now() } } })),
       removeOffer: (id) =>
         setState((s) => {

@@ -264,11 +264,13 @@ export interface Alert {
   active?: boolean
 }
 
-export type MarkState = 'fav' | 'hidden' | 'applied' | 'none'
+export type MarkState = 'fav' | 'hidden' | 'applied' | 'deleted' | 'none'
 
 export interface WatchState {
   alerts: Alert[]
   alertsAt: number
+  /** termes à exclure de la liste des annonces (ex. « alternance », « B2B ») */
+  excludes?: string[]
   /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
   marks: Record<string, { s: MarkState; at: number }>
 }

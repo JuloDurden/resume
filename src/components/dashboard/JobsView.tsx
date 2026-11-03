@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BellRing, BookOpen, CalendarClock, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import { BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, MarkState } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -11,13 +11,71 @@ import { Segmented, toast } from '../ui'
 
 type Filter = 'new' | 'fav' | 'applied' | 'hidden'
 
-function JobCard({ item, mark, alertNames, onApply, isNew }: { item: FeedItem; mark: MarkState; alertNames: string[]; onApply: () => void; isNew: boolean }) {
+const norm = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+/** Vrai si l'annonce contient un des termes exclus (au début d'un mot, sans tenir compte des accents). */
+export function excluded(item: FeedItem, terms: string[]): boolean {
+  if (!terms.length) return false
+  const hay = ` ${norm(`${item.title} ${item.company ?? ''} ${item.contract ?? ''}`).replace(/[^a-z0-9]+/g, ' ')} `
+  return terms.some((t) => {
+    const k = norm(t).replace(/[^a-z0-9]+/g, ' ').trim()
+    return k && hay.includes(` ${k}`)
+  })
+}
+
+function ExcludeBar({ terms, onChange, count }: { terms: string[]; onChange: (t: string[]) => void; count: number }) {
+  const [v, setV] = useState('')
+  const add = () => {
+    const parts = v
+      .split(',')
+      .map((x) => x.trim())
+      .filter((x) => x && !terms.some((t) => norm(t) === norm(x)))
+    if (parts.length) onChange([...terms, ...parts])
+    setV('')
+  }
+  return (
+    <div className="exclude-bar">
+      <span className="muted small">
+        <Ban size={13} /> Exclure :
+      </span>
+      {terms.map((t) => (
+        <span key={t} className="exclude-chip">
+          {t}
+          <button title={`Ne plus exclure « ${t} »`} onClick={() => onChange(terms.filter((x) => x !== t))}>
+            <X size={12} />
+          </button>
+        </span>
+      ))}
+      <input
+        className="exclude-input"
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault()
+            add()
+          }
+        }}
+        onBlur={add}
+        placeholder={terms.length ? 'Ajouter un terme' : 'ex. alternance, B2B, stage (Entrée pour valider)'}
+      />
+      {count > 0 && <span className="muted small">{count} annonce{count > 1 ? 's' : ''} exclue{count > 1 ? 's' : ''}</span>}
+    </div>
+  )
+}
+
+function JobCard({ item, mark, alertNames, onApply, isNew, selected, onSelect }: { item: FeedItem; mark: MarkState; alertNames: string[]; onApply: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void }) {
   const setMark = useDocs((s) => s.mark)
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
   return (
-    <article className={`job-card${mark === 'hidden' ? ' hidden' : ''}`}>
+    <article className={`job-card${mark === 'hidden' ? ' hidden' : ''}${selected ? ' selected' : ''}`}>
       <div className="jc-head">
+        <input type="checkbox" className="jc-check" checked={selected} onChange={(e) => onSelect(e.target.checked)} title="Sélectionner" />
         {item.logo ? <img className="offer-logo" src={item.logo} alt="" width={36} height={36} /> : <span className="offer-logo fallback" style={{ width: 36, height: 36, fontSize: 16 }}>{(item.company ?? item.title).charAt(0).toUpperCase()}</span>}
         <div className="jc-title">
           <strong>
@@ -89,9 +147,14 @@ function JobCard({ item, mark, alertNames, onApply, isNew }: { item: FeedItem; m
         )}
         <span className="spacer" />
         {mark === 'hidden' ? (
-          <button className="btn sm ghost" onClick={() => setMark(item.id, 'none')}>
-            <Eye size={13} /> Restaurer
-          </button>
+          <>
+            <button className="btn sm ghost" onClick={() => setMark(item.id, 'none')}>
+              <Eye size={13} /> Restaurer
+            </button>
+            <button className="btn sm ghost danger" onClick={() => setMark(item.id, 'deleted')} title="Supprimer définitivement cette annonce">
+              <Trash2 size={13} /> Supprimer
+            </button>
+          </>
         ) : (
           mark !== 'applied' && (
             <button className="btn sm ghost" onClick={() => setMark(item.id, 'hidden')} title="Ne plus afficher cette annonce">
@@ -111,6 +174,9 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const watch = useDocs((s) => s.watch)
   const saveOffer = useDocs((s) => s.saveOffer)
   const setMark = useDocs((s) => s.mark)
+  const markMany = useDocs((s) => s.markMany)
+  const setExcludes = useDocs((s) => s.setExcludes)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const syncStatus = useSync((s) => s.status)
   const runSync = useSync((s) => s.run)
   const [filter, setFilter] = useState<Filter>('new')
@@ -132,15 +198,19 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   }, [markSeen])
   void seenAt
 
-  const items = feed?.items ?? []
+  const terms = useMemo(() => watch.excludes ?? [], [watch.excludes])
   const markOf = (id: string): MarkState => watch.marks[id]?.s ?? 'none'
+  const all = useMemo(() => (feed?.items ?? []).filter((i) => watch.marks[i.id]?.s !== 'deleted'), [feed, watch.marks])
+  // les termes exclus ne cachent pas les favoris ni les candidatures
+  const items = useMemo(() => all.filter((i) => ['fav', 'applied'].includes(watch.marks[i.id]?.s ?? '') || !excluded(i, terms)), [all, terms, watch.marks])
+  const excludedCount = all.length - items.length
   const names = useMemo<Record<string, string>>(() => ({ email: 'Alerte email', ...Object.fromEntries(watch.alerts.map((a) => [a.id, a.keywords])) }), [watch.alerts])
   const counts = useMemo(() => {
     const c = { new: 0, fav: 0, applied: 0, hidden: 0 }
     for (const i of items) {
       const m = markOf(i.id)
       if (m === 'none') c.new++
-      else c[m]++
+      else if (m !== 'deleted') c[m]++
     }
     return c
   }, [items, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -152,6 +222,29 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     if (nq && !`${i.title} ${i.company ?? ''} ${i.location ?? ''}`.toLowerCase().includes(nq)) return false
     return true
   })
+
+  useEffect(() => setSelected(new Set()), [filter, alert, q, terms])
+  const shownIds = shown.map((i) => i.id)
+  const sel = shownIds.filter((id) => selected.has(id))
+  const allSel = shownIds.length > 0 && sel.length === shownIds.length
+  const toggle = (id: string, v: boolean) =>
+    setSelected((p) => {
+      const n = new Set(p)
+      if (v) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  const bulk = (st: MarkState, msg: string) => {
+    markMany(sel, st)
+    toast.ok(`${sel.length} annonce${sel.length > 1 ? 's' : ''} ${msg}`)
+    setSelected(new Set())
+  }
+  const removeAll = (ids: string[]) => {
+    if (!ids.length || !window.confirm(`Supprimer définitivement ${ids.length} annonce${ids.length > 1 ? 's' : ''} ? Elles ne reviendront pas, même si une alerte les renvoie.`)) return
+    markMany(ids, 'deleted')
+    toast.ok(`${ids.length} annonce${ids.length > 1 ? 's' : ''} supprimée${ids.length > 1 ? 's' : ''}`)
+    setSelected(new Set())
+  }
 
   const apply = (i: FeedItem) => {
     const o = offerFromItem(i)
@@ -212,6 +305,44 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
             </select>
             <span className="muted small">{feed ? `Veille du ${new Date(feed.updatedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Veille automatique non configurée'}</span>
           </div>
+          <ExcludeBar terms={terms} onChange={setExcludes} count={excludedCount} />
+          {shown.length > 0 && (
+            <div className={`bulk-bar${sel.length ? ' active' : ''}`}>
+              <label className="bulk-all">
+                <input type="checkbox" checked={allSel} ref={(el) => { if (el) el.indeterminate = sel.length > 0 && !allSel }} onChange={(e) => setSelected(e.target.checked ? new Set(shownIds) : new Set())} />
+                {sel.length ? `${sel.length} sélectionnée${sel.length > 1 ? 's' : ''}` : `Tout sélectionner (${shownIds.length})`}
+              </label>
+              {sel.length > 0 && (
+                <>
+                  {filter !== 'fav' && (
+                    <button className="btn sm" onClick={() => bulk('fav', 'en favori')}>
+                      <Star size={13} /> Favori
+                    </button>
+                  )}
+                  {filter === 'hidden' || filter === 'fav' ? (
+                    <button className="btn sm" onClick={() => bulk('none', 'remises à trier')}>
+                      <Eye size={13} /> Restaurer
+                    </button>
+                  ) : (
+                    <button className="btn sm" onClick={() => bulk('hidden', 'masquée(s)')}>
+                      <EyeOff size={13} /> Masquer
+                    </button>
+                  )}
+                  <button className="btn sm danger" onClick={() => removeAll(sel)}>
+                    <Trash2 size={13} /> Supprimer
+                  </button>
+                  <button className="btn sm ghost" onClick={() => setSelected(new Set())}>
+                    Annuler
+                  </button>
+                </>
+              )}
+              {!sel.length && filter === 'hidden' && (
+                <button className="btn sm ghost danger" onClick={() => removeAll(shownIds)}>
+                  <Trash2 size={13} /> Supprimer toutes les annonces masquées
+                </button>
+              )}
+            </div>
+          )}
           {feed?.status === 'error' && (
             <div className="notice warn">
               La dernière veille a échoué : {feed.errors?.join(' ')}{' '}
@@ -239,7 +370,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ) : shown.length ? (
             <div className="job-list">
               {shown.map((i) => (
-                <JobCard key={i.id} item={i} mark={markOf(i.id)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                <JobCard key={i.id} item={i} mark={markOf(i.id)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
               ))}
             </div>
           ) : (

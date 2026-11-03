@@ -5,8 +5,14 @@
 import { createHash } from 'node:crypto'
 import { parse } from 'node-html-parser'
 
+/** Expéditeurs qui envoient aussi des lettres d'information : sujet attendu pour une vraie alerte. */
+const NEWSLETTER = [
+  ['jobijoba.com', /propos|offres?|emplois?\s.*\sà\s/i],
+  ['glassdoor.com', /emplois?|postulez|candidat|recrute|chez\s/i],
+]
+
 /** Change à chaque évolution de la lecture : les annonces des emails sont alors relues. */
-export const PARSER_VERSION = 3
+export const PARSER_VERSION = 4
 
 /** Expéditeurs d'alertes emploi. */
 export const SENDERS = [
@@ -110,7 +116,8 @@ export function parseAlertText(text, date) {
   let pending = null // annonce dont l'intitulé est le texte du lien : l'entreprise et le lieu suivent
   for (const raw of lines) {
     const urls = raw.match(/https?:\/\/[^\s<>"'\])]+/g) ?? []
-    const job = urls.map(matchJob).find(Boolean)
+    // texte brut : seulement les liens d'annonce identifiables (pas les redirections génériques de Jobijoba)
+    const job = urls.map(matchJob).find((j) => j?.stable)
     const label = clean(raw.replace(/https?:\/\/\S+/g, '').replace(/[[\]<>]|\(\s*\)/g, ' ').replace(/:\s*$/, ''))
     if (job) {
       const prev = out.get(`${job.site}:${job.id}`)
@@ -296,6 +303,9 @@ export async function readMailAlerts({ user, password, days, add, notes }) {
       const uids = (await client.search({ gmraw: query }, { uid: true })) || []
       for await (const msg of client.fetch(uids.slice(-300), { source: true, envelope: true, internalDate: true }, { uid: true })) {
         const mail = await simpleParser(msg.source)
+        // lettres d'information sans annonce (ex. Jobijoba « Les secteurs dynamiques de l'emploi »)
+        const from = mail.from?.value?.[0]?.address ?? ''
+        if (NEWSLETTER.some(([dom, ok]) => from.endsWith(dom) && !ok.test(mail.subject ?? ''))) continue
         const date = (mail.date ?? msg.internalDate ?? new Date()).toISOString()
         const found = parseMail({ text: mail.text, html: typeof mail.html === 'string' ? mail.html : '' }, date)
         if (!found.length) continue

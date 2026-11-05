@@ -92,6 +92,8 @@ export const useDocs = create<DocsState>()(
         copy.id = uid()
         copy.name = `${cur.name} (copie)`
         copy.createdAt = copy.updatedAt = Date.now()
+        // la copie d'un CV de référence est un CV de candidature
+        if (copy.kind === 'resume') delete copy.reference
         getState().add(copy)
         return copy.id
       },

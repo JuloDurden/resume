@@ -32,3 +32,18 @@ describe('indice de correspondance', () => {
     expect(placeName('France (À distance)')).toBeUndefined()
   })
 })
+
+describe('périmètre de recherche', () => {
+  const home = { lat: 43.53, lon: 3.86, nom: 'Villeneuve-lès-Maguelone' }
+  it('met 0 à une offre en présentiel trop loin, pas à une offre en télétravail', async () => {
+    const { geocodeCacheForTests } = await import('../lib/match')
+    geocodeCacheForTests('Paris', { lat: 48.85, lon: 2.35 })
+    const pp = { ...p, home, maxKm: 50 }
+    const far = matchItem(item({ title: 'Product Owner', location: 'Paris' }), pp)
+    expect(far.score).toBe(0)
+    expect(far.out).toBeTruthy()
+    expect(matchItem(item({ title: 'Product Owner', location: 'Paris', fullText: 'Poste en hybride, 2 jours de télétravail par semaine. '.repeat(8) }), pp).score).toBeGreaterThan(0)
+    expect(matchItem(item({ title: 'Product Owner', location: 'Paris', worktime: 'À distance' }), pp).score).toBeGreaterThan(40)
+    expect(matchItem(item({ title: 'Product Owner', location: 'Paris', fullText: 'Télétravail : Non. '.repeat(20) }), pp).score).toBe(0)
+  })
+})

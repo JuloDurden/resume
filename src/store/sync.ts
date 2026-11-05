@@ -4,7 +4,9 @@ import type { AnyDoc, Offer, WatchState } from '../types'
 import { useFeed } from './feed'
 import { useDocs } from './documents'
 import { GitHubError, lastSyncTime, loadConfig, markFeedRead, sync, type SyncConfig } from '../lib/github'
-import { runWatchNow } from '../lib/watch'
+import { autoUpdateWatch, runWatchNow } from '../lib/watch'
+
+declare const __BUILD_ID__: string
 import { differs, toSet, type DataSet } from '../lib/merge'
 
 type Status = 'off' | 'idle' | 'syncing' | 'error'
@@ -90,6 +92,10 @@ export const useSync = create<SyncStore>((set, get) => ({
         if (differs(remote, snapshot())) again = true
         set({ status: 'idle', message: undefined, lastSync: Date.now() })
         kickWatch(cfg, () => get().run())
+        // nouvelle version de Resume : la tâche de veille du dépôt est mise à jour (permission Workflows requise)
+        autoUpdateWatch(cfg, __BUILD_ID__).catch(() => {
+          /* permission absente : bouton « Mettre à jour » dans Alertes et veille */
+        })
       } catch (e) {
         const msg =
           e instanceof GitHubError

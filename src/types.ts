@@ -206,6 +206,8 @@ export interface ResumeDoc {
   id: string
   kind: 'resume'
   name: string
+  /** CV de référence : modèle personnel d'un type de poste, à dupliquer pour chaque candidature */
+  reference?: boolean
   createdAt: number
   updatedAt: number
   templateId: string
@@ -306,6 +308,8 @@ export interface MatchProfile {
   /** niveau de diplôme : 0 (aucun), 2 (bac+2), 3, 5... */
   degree: number
   home?: { nom: string; lat: number; lon: number }
+  /** périmètre de recherche en km : au-delà, une offre sans télétravail a la note 0 */
+  maxKm?: number
 }
 
 export interface JobReview {

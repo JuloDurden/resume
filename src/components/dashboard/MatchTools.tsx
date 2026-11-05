@@ -102,11 +102,11 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
   const setProfile = useDocs((s) => s.setProfile)
   const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume').sort((a, b) => b.updatedAt - a.updatedAt), [docsMap])
   const resolved = resolveProfile(watch.profile, cvs, watch.alerts)
-  const [draft, setDraft] = useState<MatchProfile>({ cvId: resolved.cv?.id, targets: resolved.targets, degree: resolved.degree, home: resolved.home })
+  const [draft, setDraft] = useState<MatchProfile>({ cvId: resolved.cv?.id, targets: resolved.targets, degree: resolved.degree, home: resolved.home, maxKm: resolved.maxKm })
   useEffect(() => {
     if (open) {
       const r = resolveProfile(useDocs.getState().watch.profile, cvs, useDocs.getState().watch.alerts)
-      setDraft({ cvId: r.cv?.id, targets: r.targets, degree: r.degree, home: r.home })
+      setDraft({ cvId: r.cv?.id, targets: r.targets, degree: r.degree, home: r.home, maxKm: r.maxKm })
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const skills = cvSkills(cvs.find((d) => d.id === draft.cvId))
@@ -139,7 +139,7 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
           L'indice (0 à 100) compare chaque annonce à ce profil : intitulé proche d'un métier visé (35 %), compétences du CV retrouvées dans le texte (25 %), niveau du poste (20 % : un poste junior est un plus, un poste senior un frein), distance (20 %). Un diplôme exigé supérieur au vôtre fait baisser l'indice et s'affiche en alerte.
         </p>
         <Field label="CV de référence (compétences)">
-          <Select value={draft.cvId ?? ''} onChange={(v) => setDraft({ ...draft, cvId: v || undefined })} options={cvs.map((d) => ({ value: d.id, label: d.name }))} />
+          <Select value={draft.cvId ?? ''} onChange={(v) => setDraft({ ...draft, cvId: v || undefined })} options={[...cvs].sort((a, b) => Number(!!b.reference) - Number(!!a.reference)).map((d) => ({ value: d.id, label: d.reference ? `${d.name} (référence)` : d.name }))} />
         </Field>
         {skills.length > 0 && (
           <div className="skill-preview">
@@ -155,6 +155,9 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
           </Field>
           <Field label="Domicile (calcul des distances)">
             <HomeInput value={draft.home} onChange={(home) => setDraft({ ...draft, home })} />
+          </Field>
+          <Field label="Périmètre de recherche" hint="Au-delà, une offre sans télétravail mentionné reçoit la note 0 et passe dans « Hors critères ».">
+            <Select value={draft.maxKm ?? 50} onChange={(maxKm) => setDraft({ ...draft, maxKm })} options={[20, 30, 40, 50, 75, 100, 150].map((d) => ({ value: d, label: `${d} km autour du domicile` }))} />
           </Field>
         </div>
       </div>

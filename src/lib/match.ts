@@ -42,6 +42,7 @@ export interface ProfileData {
   skills: string[]
   degree: number
   home?: { lat: number; lon: number; nom: string }
+  maxKm?: number
 }
 
 /** Compétences du CV, découpées en éléments courts (« Microsoft 365 - SharePoint » donne deux compétences). */
@@ -143,6 +144,8 @@ export interface MatchResult {
   level: { v: number; label: string; kind: 'junior' | 'neutral' | 'mid' | 'senior' }
   place: { v: number; label: string }
   degree?: { required: number; strict: boolean; factor: number }
+  /** hors critères (note 0) : raison */
+  out?: string
   /** ajustement selon vos choix passés */
   learned?: number
 }
@@ -210,14 +213,18 @@ export function matchItem(i: FeedItem, p: ProfileData): MatchResult {
 
   const level = levelOf(i, text)
 
-  // distance au domicile
+  // distance au domicile ; au-delà du périmètre, une offre en présentiel est hors critères
   let place: MatchResult['place'] = { v: 0.6, label: i.location ?? 'Lieu non précisé' }
+  let out: string | undefined
+  const remote = remoteOf(i, text)
   if (/distance|t[ée]l[ée]travail|remote/i.test(`${i.location ?? ''} ${i.worktime ?? ''}`)) place = { v: 0.85, label: 'Télétravail' }
   else if (p.home) {
     const g = geoOf(i.location)
     if (g) {
       const d = Math.round(km(p.home, g))
-      place = { v: d <= 15 ? 1 : d <= 30 ? 0.85 : d <= 50 ? 0.6 : d <= 100 ? 0.3 : 0.1, label: `${d} km` }
+      const max = p.maxKm ?? 50
+      place = { v: d <= 15 ? 1 : d <= 30 ? 0.85 : d <= max ? 0.6 : remote === 'full' ? 0.75 : remote === 'partial' ? 0.3 : 0, label: `${d} km${d > max && remote ? remote === 'full' ? ', télétravail complet' : ', télétravail partiel' : ''}` }
+      if (d > max && !remote) out = `À ${d} km, au-delà de votre périmètre de ${max} km, sans télétravail mentionné`
     }
   }
 
@@ -225,8 +232,22 @@ export function matchItem(i: FeedItem, p: ProfileData): MatchResult {
 
   // sans texte complet, les compétences comptent pour une valeur moyenne : une annonce peu détaillée n'est pas avantagée
   const base = (title.v * 35 + (skills ? skills.v : 0.45) * 25 + level.v * 20 + place.v * 20) / 100
-  const score = Math.round(100 * base * (degree?.factor ?? 1) * (level.kind === 'senior' ? 0.85 : 1))
-  return { score, title, skills, level, place, degree }
+  const score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * (level.kind === 'senior' ? 0.85 : 1))
+  return { score, title, skills, level, place, degree, out }
+}
+
+const NO_REMOTE = /(pas de|sans|aucun)\s+t[ée]l[ée]travail|t[ée]l[ée]travail\s*:\s*(non|aucun|0|pas)|100\s*%\s*(sur site|pr[ée]sentiel)|full on.?site/i
+const FULL_REMOTE = /full.?remote|100\s*%\s*(t[ée]l[ée]travail|remote|[àa] distance)|t[ée]l[ée]travail (complet|total|int[ée]gral)/i
+const PART_REMOTE = /t[ée]l[ée]travail|remote|hybride|hybrid|[àa] distance|home.?office|jours? (de )?tt\b/i
+
+/** Télétravail possible : complet, partiel, ou non mentionné (undefined). */
+export function remoteOf(i: FeedItem, text: string): 'full' | 'partial' | undefined {
+  const t = `${i.location ?? ''} ${i.worktime ?? ''} ${i.title}\n${text}`
+  if (/^\s*(à distance|a distance|remote|télétravail)\s*$/i.test(i.worktime ?? '') || /\((à distance|remote)\)/i.test(i.location ?? '') || FULL_REMOTE.test(`${i.location ?? ''} ${i.title}`)) return 'full'
+  if (/hybride|hybrid/i.test(i.worktime ?? '')) return 'partial'
+  if (NO_REMOTE.test(t) && !/hybride|hybrid/i.test(t)) return undefined
+  if (FULL_REMOTE.test(t)) return 'full'
+  return PART_REMOTE.test(t) ? 'partial' : undefined
 }
 
 export const scoreClass = (s: number) => (s >= 70 ? 'high' : s >= 50 ? 'mid' : 'low')
@@ -244,6 +265,7 @@ export function resolveProfile(saved: MatchProfile | undefined, docs: ResumeDoc[
     skills: cvSkills(cv),
     degree: saved?.degree ?? 2,
     home,
+    maxKm: saved?.maxKm ?? 50,
   }
 }
 
@@ -269,7 +291,7 @@ export function learnFromMarks(marks: Record<string, { s: string; t?: string }>)
 
 /** Ajuste l'indice (au plus 12 points) selon les mots de l'intitulé que vous avez déjà retenus ou écartés. */
 export function applyLearning(r: MatchResult, i: FeedItem, learned: Learned): MatchResult & { learned?: number } {
-  if (!learned.size) return r
+  if (!learned.size || r.out) return r
   let sum = 0
   let n = 0
   for (const w of canonSet(i.title)) {
@@ -283,4 +305,26 @@ export function applyLearning(r: MatchResult, i: FeedItem, learned: Learned): Ma
   const adj = Math.round(12 * (sum / n))
   if (!adj) return r
   return { ...r, score: Math.max(0, Math.min(100, r.score + adj)), learned: adj }
+}
+
+/** Pour les tests : position connue d'une commune. */
+export const geocodeCacheForTests = (name: string, pos: { lat: number; lon: number }) => {
+  geoCache[strip(name)] = pos
+}
+
+/** Proximité de deux intitulés (0 à 1) : part des mots de b retrouvés dans a, synonymes compris. */
+export function titleSimilarity(a: string, b: string): number {
+  const A = canonSet(a)
+  const B = [...canonSet(b)]
+  return B.length ? B.filter((x) => A.has(x)).length / B.length : 0
+}
+
+/** CV de référence le plus proche d'un intitulé d'annonce. */
+export function bestReference(title: string, refs: ResumeDoc[]): ResumeDoc | undefined {
+  let best: { d: ResumeDoc; v: number } | undefined
+  for (const d of refs) {
+    const v = Math.max(titleSimilarity(title, d.header.title ?? ''), titleSimilarity(title, d.name))
+    if (!best || v > best.v) best = { d, v }
+  }
+  return best && best.v > 0 ? best.d : refs.length === 1 ? refs[0] : undefined
 }

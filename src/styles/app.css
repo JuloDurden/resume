@@ -505,6 +505,17 @@ h3 {
   flex-direction: column;
   transition: box-shadow 0.15s, transform 0.15s;
 }
+.doc-card,
+.offer-card,
+.job-card {
+  position: relative;
+}
+/* carte dont le menu est ouvert : passe au-dessus des cartes voisines */
+.doc-card:has(.menu),
+.offer-card:has(.menu),
+.job-card:has(.menu) {
+  z-index: 30;
+}
 .doc-card:hover {
   box-shadow: var(--shadow-lg);
   transform: translateY(-2px);
@@ -581,6 +592,13 @@ h3 {
 }
 .thumb-inner {
   width: max-content;
+  /* la miniature est dans un bouton : on annule les styles hérités du bouton (texte centré, police système) */
+  text-align: left;
+  font: initial;
+  line-height: normal;
+  letter-spacing: normal;
+  white-space: normal;
+  color: initial;
 }
 
 /* ---------- Éditeur ---------- */
@@ -2361,7 +2379,8 @@ a.brand {
   right: 0;
   bottom: 0;
   width: min(560px, 100vw);
-  z-index: 90;
+  /* au-dessus des modales (100) : la fiche métier s'ouvre aussi depuis « Modifier l'offre » */
+  z-index: 120;
   background: var(--panel);
   box-shadow: -12px 0 32px rgba(16, 24, 40, 0.18);
   display: flex;
@@ -3501,4 +3520,123 @@ button.followup-badge {
   .stats-grid {
     grid-template-columns: 1fr;
   }
+}
+.match-out {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #fdecec;
+  color: #9b1c1c;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.quick-links-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.quick-links-block .quick-links {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.quick-links .ql-name {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  min-width: 150px;
+}
+.explain {
+  background: var(--brand-soft);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.explain p {
+  margin: 0;
+}
+.explain p + p {
+  margin-top: 6px;
+}
+.watch-status .btn {
+  margin-left: auto;
+}
+.insights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.insight-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.insight-row svg {
+  flex: none;
+  position: relative;
+  top: 2px;
+}
+.sal-cmp.low {
+  color: #b45309;
+}
+.sal-cmp.high {
+  color: #15803d;
+}
+.sal-cmp.ok {
+  color: var(--ink-2);
+}
+.jc-flags {
+  color: #b45309;
+  font-weight: 600;
+}
+.jc-flags.lvl2 {
+  color: #b91c1c;
+}
+.flags {
+  border: 1px solid #f5d0a9;
+  background: #fff8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.flags strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #b45309;
+}
+.flags ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.flags li {
+  margin-bottom: 3px;
+}
+.flags li.lvl2 b {
+  color: #b91c1c;
+}
+.flags em {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.ref-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #fef3c7;
+  color: #92400e;
+}
+.doc-card.reference {
+  border-color: #f2d48a;
 }

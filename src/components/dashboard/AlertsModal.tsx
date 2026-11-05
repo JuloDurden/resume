@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, CircleDashed, ExternalLink, KeyRound, MapPin, Play, Plus, Trash2, Wrench } from 'lucide-react'
+import { CheckCircle2, CircleDashed, Clock, ExternalLink, KeyRound, Mail, MapPin, Play, Plus, Search, Trash2, Wrench } from 'lucide-react'
 import type { Alert } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { useSync } from '../../store/sync'
 import { uid } from '../../lib/ids'
 import { loadConfig, GitHubError } from '../../lib/github'
-import { CONTRACTS, actionsUrl, findCommunes, installWatch, runWatchNow, searchLinks, secretsUrl, watchInstalled, type Commune } from '../../lib/watch'
-import { Field, Modal, Select, TextInput, Toggle, toast } from '../ui'
+import { CONTRACTS, actionsUrl, findCommunes, installWatch, runWatchNow, searchLinks, secretsUrl, watchStatus, type Commune } from '../../lib/watch'
+import { Field, Modal, Segmented, Select, TextInput, Toggle, toast } from '../ui'
 
 function CommuneInput({ alert, onChange }: { alert: Alert; onChange: (p: Partial<Alert>) => void }) {
   const [q, setQ] = useState(alert.commune ?? '')
@@ -99,159 +99,170 @@ function AlertCard({ alert, onChange, onDelete }: { alert: Alert; onChange: (p: 
   )
 }
 
-function Step({ done, n, title, children }: { done?: boolean; n: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className={`step${done ? ' done' : ''}`}>
-      <span className="step-n">{done ? <CheckCircle2 size={14} /> : n}</span>
-      <div className="step-body">
-        <strong>{title}</strong>
-        {children}
-      </div>
-    </div>
-  )
-}
+type WatchState = 'missing' | 'outdated' | 'ok' | null
 
-function Setup() {
+/** Tâche automatique : installée une fois, mise à jour automatiquement ensuite. */
+function TaskTab() {
   const cfg = loadConfig()
   const feed = useFeed((s) => s.feed)
   const runSync = useSync((s) => s.run)
-  const [installed, setInstalled] = useState<boolean | null>(null)
+  const [state, setState] = useState<WatchState>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
-    if (cfg) watchInstalled(cfg).then(setInstalled)
+    if (cfg) watchStatus(cfg).then(setState).catch(() => setState(null))
   }, [cfg?.repo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!cfg)
     return (
       <div className="notice warn">
-        La veille automatique s'appuie sur la <strong>sauvegarde GitHub</strong> (accueil, bouton « Sauvegarde GitHub »). Activez-la d'abord. En attendant, vos alertes servent déjà de recherches enregistrées vers chaque site.
+        La tâche automatique s'appuie sur la <strong>sauvegarde GitHub</strong> (accueil, bouton « Sauvegarde GitHub »). Activez-la d'abord. En attendant, vos recherches servent déjà de liens enregistrés vers chaque site.
       </div>
     )
 
-    return (
+  const install = async () => {
+    setBusy(true)
+    try {
+      await runSync()
+      await installWatch(cfg)
+      setState('ok')
+      toast.ok('Tâche installée et à jour')
+    } catch (e) {
+      toast.error(e instanceof GitHubError && (e.status === 403 || e.status === 404) ? 'Permission refusée : ajoutez « Workflows : Read and write » au token (sur GitHub), puis réessayez.' : `Installation impossible : ${e instanceof Error ? e.message : ''}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
     <div className="form-stack">
-      <div className="notice">
-        <strong>Sources gratuites, sans inscription</strong>
-        <ul className="small steps-list">
-          <li>
-            <strong>Choisir le Service Public</strong> : toutes les offres de la fonction publique (État, collectivités, hôpitaux), publiées chaque semaine en données ouvertes sur data.gouv.fr. Les offres arrivent avec 2 à 3 semaines de décalage, mais restent ouvertes en général un mois : la date limite est affichée.
-          </li>
-          <li>
-            <strong>Liens de recherche</strong> vers France Travail, LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle, triés par date, pour le secteur privé.
-          </li>
-        </ul>
+      <div className="explain">
+        <p>
+          Une <strong>tâche GitHub Actions</strong>, installée une seule fois dans votre dépôt privé <strong>{cfg.repo}</strong>, passe <strong>toutes les heures de 5 h à 21 h</strong>. À chaque passage, elle relit vos recherches et vos emails d'alerte, récupère les nouvelles annonces et vérifie que les anciennes sont toujours en ligne.
+        </p>
+        <p>
+          Vous n'avez <strong>rien à relancer</strong> quand vous ajoutez ou modifiez une recherche : elle est prise en compte au passage suivant. Quand Resume évolue, la tâche est mise à jour automatiquement à l'ouverture de l'application.
+        </p>
       </div>
-      <Step n={1} title="Installez la tâche programmée" done={!!installed}>
-        <span className="muted small">
-          Resume ajoute à {cfg.repo} un petit script et une tâche GitHub Actions qui récupère les nouvelles annonces <strong>toutes les heures</strong> (de 5 h à 21 h). GitHub retarde parfois ces passages : Resume relance alors la veille lui-même à son ouverture (permission <strong>Actions : Read and write</strong>). Aucune clé n'est nécessaire. Le token doit avoir la permission <strong>Workflows : Read and write</strong> en plus de Contents.
-        </span>
-        <div className="row-gap">
-          <button
-            className="btn sm primary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true)
-              try {
-                await runSync()
-                const changed = await installWatch(cfg)
-                setInstalled(true)
-                toast.ok(changed ? 'Veille installée' : 'Veille déjà à jour')
-              } catch (e) {
-                toast.error(e instanceof GitHubError && (e.status === 403 || e.status === 404) ? 'Permission refusée : ajoutez « Workflows : Read and write » au token (sur GitHub), puis réessayez.' : `Installation impossible : ${e instanceof Error ? e.message : ''}`)
-              } finally {
-                setBusy(false)
-              }
-            }}
-          >
-            <Wrench size={14} /> {installed ? 'Mettre à jour la tâche' : 'Installer la veille'}
+
+      <div className={`watch-status ${state === 'ok' ? 'ok' : 'none'}`}>
+        {state === 'ok' ? <CheckCircle2 size={16} /> : <CircleDashed size={16} />}
+        <span>{state === null ? 'Vérification...' : state === 'ok' ? 'Tâche installée et à jour.' : state === 'outdated' ? 'Une nouvelle version de la tâche est disponible.' : "La tâche n'est pas encore installée."}</span>
+        {state !== 'ok' && state !== null && (
+          <button className="btn sm primary" disabled={busy} onClick={install}>
+            <Wrench size={14} /> {state === 'missing' ? 'Installer' : 'Mettre à jour'}
           </button>
-          {installed && (
-            <button
-              className="btn sm"
-              onClick={async () => {
-                try {
-                  await runSync()
-                  await runWatchNow(cfg)
-                  toast.ok('Veille lancée : les annonces arrivent dans 1 à 2 minutes')
-                  setTimeout(() => runSync(), 90000)
-                } catch {
-                  toast.info('Lancement manuel refusé (permission « Actions : Read and write » absente). Lancez-la depuis GitHub, ou attendez le prochain passage.')
-                  window.open(actionsUrl(cfg), '_blank', 'noopener')
-                }
-              }}
-            >
-              <Play size={14} /> Lancer maintenant
-            </button>
-          )}
-          {installed && (
-            <a className="btn sm ghost" href={actionsUrl(cfg)} target="_blank" rel="noreferrer">
-              <ExternalLink size={14} /> Historique
-            </a>
-          )}
-        </div>
-      </Step>
-      <Step n={2} title="Recommandé : vos alertes email (LinkedIn, France Travail, Glassdoor, Jobijoba...)" done={!!feed?.items.some((i) => i.alerts.includes('email'))}>
-        <span className="muted small">
-          La veille lit, <strong>en lecture seule</strong>, les alertes emploi reçues dans Gmail et en extrait chaque annonce. Aucun email n'est modifié, seuls ceux des sites d'emploi sont ouverts.
-        </span>
-        <ol className="small muted steps-list">
-          <li>Créez vos alertes sur les sites (LinkedIn, France Travail, Glassdoor, Jobijoba, Hellowork, Indeed, APEC...) avec votre adresse Gmail, en envoi quotidien.</li>
-          <li>
-            Activez la validation en deux étapes de votre compte Google si ce n'est pas fait, puis créez un <strong>mot de passe d'application</strong> nommé « Resume veille » : Google affiche 16 lettres.
-          </li>
-          <li>
-            Ajoutez deux secrets au dépôt <strong>{cfg.repo}</strong> : <code>GMAIL_USER</code> (votre adresse Gmail) et <code>GMAIL_APP_PASSWORD</code> (les 16 lettres). Ils restent chiffrés chez GitHub.
-          </li>
-          <li>Cliquez sur « Mettre à jour la tâche », puis « Lancer maintenant ».</li>
-        </ol>
-        <div className="row-gap">
-          <a className="btn sm" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
-            <ExternalLink size={14} /> Mot de passe d'application
-          </a>
-          <a className="btn sm" href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
-            <KeyRound size={14} /> Ajouter un secret
-          </a>
-        </div>
-        <span className="muted small">Vous pouvez révoquer ce mot de passe à tout moment depuis votre compte Google : la veille s'arrête alors simplement de lire les emails.</span>
-      </Step>
-      <Step n={3} title="Facultatif : ajoutez le secteur privé avec Jooble" done={!!feed?.items.some((i) => i.source.includes('Jooble'))}>
-        <span className="muted small">
-          Jooble regroupe les annonces de nombreux sites d'emploi (dont des offres du privé). Sa clé est <strong>gratuite</strong>, mais attribuée sur demande : remplissez le formulaire de Jooble (nom du projet : « Resume, usage personnel »), la clé arrive par email. Enregistrez-la ensuite comme secret <code>JOOBLE_KEY</code> du dépôt <strong>{cfg.repo}</strong>. Elle reste chiffrée chez GitHub : ni Resume ni le navigateur n'y ont accès.
-        </span>
-        <div className="row-gap">
-          <a className="btn sm" href="https://jooble.org/api/about" target="_blank" rel="noreferrer">
-            <ExternalLink size={14} /> Demander une clé Jooble
-          </a>
-          <a className="btn sm" href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
-            <KeyRound size={14} /> Ajouter le secret
-          </a>
-        </div>
-        <details className="small">
-          <summary>Et France Travail ?</summary>
-          <p className="muted">
-            Depuis octobre 2026, l'API « Offres d'emploi » de France Travail n'est plus dans le catalogue francetravail.io : elle n'est accessible que sur demande motivée. Si votre demande est acceptée, ajoutez les secrets <code>FT_CLIENT_ID</code> et <code>FT_CLIENT_SECRET</code> : la veille interrogera aussi cette source, sans doublon.
-          </p>
-        </details>
-      </Step>
-      <div className={`watch-status ${feed?.status ?? 'none'}`}>
-        {feed ? (
-          feed.status === 'ok' ? (
+        )}
+      </div>
+
+      <div className="watch-status none">
+        <Clock size={16} />
+        <span>
+          {feed ? (
             <>
-              <CheckCircle2 size={16} /> Dernière veille le {new Date(feed.updatedAt).toLocaleString('fr-FR')} : {feed.items.length} annonce(s).
-              {feed.notes?.length ? <span className="small"> {feed.notes.join(' ')}</span> : null}
+              Dernier passage le {new Date(feed.updatedAt).toLocaleString('fr-FR')} : {feed.items.length} annonce(s) en cours.
+              {feed.notes?.length ? <span className="small muted"> {feed.notes.join(' ')}</span> : null}
               {feed.errors?.length ? <span className="small"> Avertissement : {feed.errors.join(' ')}</span> : null}
             </>
           ) : (
-            <>
-              <CircleDashed size={16} /> Dernière veille en erreur : {feed.errors?.join(' ') || 'erreur inconnue'}
-            </>
-          )
-        ) : (
-          <>
-            <CircleDashed size={16} /> Aucune veille reçue pour l'instant.
-          </>
+            'Aucun passage pour le moment.'
+          )}
+        </span>
+        {state === 'ok' && (
+          <button
+            className="btn sm"
+            onClick={async () => {
+              try {
+                await runSync()
+                await runWatchNow(cfg)
+                toast.ok('Passage lancé : les annonces arrivent dans 1 à 2 minutes')
+                setTimeout(() => runSync(), 100000)
+              } catch {
+                toast.info('Lancement refusé (permission « Actions : Read and write » absente du token). Le prochain passage automatique prendra le relais.')
+                window.open(actionsUrl(cfg), '_blank', 'noopener')
+              }
+            }}
+          >
+            <Play size={14} /> Lancer maintenant
+          </button>
         )}
       </div>
+
+      <details className="small">
+        <summary>Permissions du token et historique</summary>
+        <p className="muted">
+          Le token GitHub doit avoir, sur le dépôt {cfg.repo} : <strong>Contents</strong> (sauvegarde), <strong>Workflows</strong> (installer et mettre à jour la tâche) et <strong>Actions</strong> (« Lancer maintenant » et relance automatique quand GitHub prend du retard), en « Read and write ».
+        </p>
+        <a className="btn sm" href={actionsUrl(cfg)} target="_blank" rel="noreferrer">
+          <ExternalLink size={14} /> Historique des passages sur GitHub
+        </a>
+      </details>
+
+      <details className="small">
+        <summary>Sources facultatives : Jooble et France Travail</summary>
+        <p className="muted">
+          <strong>Jooble</strong> (agrégateur, clé gratuite sur demande) : ajoutez le secret <code>JOOBLE_KEY</code> au dépôt ; il est interrogé une fois par jour pour ménager le quota.{' '}
+          <a href="https://jooble.org/api/about" target="_blank" rel="noreferrer">
+            Demander une clé
+          </a>
+          . <strong>France Travail</strong> : l'API « Offres d'emploi » n'est accessible que sur demande ; si elle vous est accordée, ajoutez <code>FT_CLIENT_ID</code> et <code>FT_CLIENT_SECRET</code>.{' '}
+          <a href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
+            Ajouter un secret
+          </a>
+        </p>
+      </details>
+    </div>
+  )
+}
+
+/** Alertes email créées sur les sites d'emploi, lues par la tâche dans Gmail. */
+function MailTab() {
+  const cfg = loadConfig()
+  const feed = useFeed((s) => s.feed)
+  const alerts = useDocs((s) => s.watch.alerts)
+  const connected = !!feed?.notes?.some((n) => n.startsWith('Gmail'))
+  const failing = feed?.errors?.find((e) => e.startsWith('Gmail'))
+  const first = alerts.find((a) => a.keywords.trim())
+  return (
+    <div className="form-stack">
+      <div className="explain">
+        <p>
+          C'est la source principale d'annonces. Les alertes se créent <strong>directement sur chaque site</strong> (LinkedIn, France Travail, Glassdoor, Jobijoba, Hellowork, Indeed, APEC...), avec votre adresse Gmail. La tâche automatique lit ensuite ces emails, <strong>en lecture seule</strong>, et en extrait chaque annonce.
+        </p>
+        <p className="muted small">Ces alertes vivent sur les sites, pas dans Resume : pour en changer les critères, modifiez-les sur le site concerné. Vous pouvez supprimer les emails une fois leurs annonces apparues dans Resume.</p>
+      </div>
+      <div className={`watch-status ${connected && !failing ? 'ok' : 'none'}`}>
+        {connected && !failing ? <CheckCircle2 size={16} /> : <CircleDashed size={16} />}
+        <span>{failing ?? (connected ? feed?.notes?.find((n) => n.startsWith('Gmail')) : 'Lecture de Gmail non configurée.')}</span>
+      </div>
+      {first && (
+        <div className="quick-links">
+          <span className="muted small">Créer une alerte « {first.keywords.split(',')[0].trim()} » sur :</span>
+          {searchLinks({ ...first, keywords: first.keywords.split(',')[0].trim() }).map((l) => (
+            <a key={l.site} href={l.url} target="_blank" rel="noreferrer">
+              {l.site} <ExternalLink size={11} />
+            </a>
+          ))}
+        </div>
+      )}
+      {!connected && cfg && (
+        <ol className="small muted steps-list">
+          <li>Activez la validation en deux étapes de votre compte Google, puis créez un mot de passe d'application nommé « Resume veille » (16 lettres).</li>
+          <li>
+            Ajoutez deux secrets au dépôt <strong>{cfg.repo}</strong> : <code>GMAIL_USER</code> (votre adresse Gmail) et <code>GMAIL_APP_PASSWORD</code> (les 16 lettres).
+          </li>
+          <li>Les emails d'alerte seront lus au prochain passage de la tâche.</li>
+        </ol>
+      )}
+      {cfg && (
+        <div className="row-gap">
+          <a className="btn sm" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
+            <ExternalLink size={14} /> Mot de passe d'application Google
+          </a>
+          <a className="btn sm" href={secretsUrl(cfg)} target="_blank" rel="noreferrer">
+            <KeyRound size={14} /> Secrets du dépôt
+          </a>
+        </div>
+      )}
     </div>
   )
 }
@@ -259,24 +270,38 @@ function Setup() {
 export function AlertsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const alerts = useDocs((s) => s.watch.alerts)
   const setAlerts = useDocs((s) => s.setAlerts)
+  const [tab, setTab] = useState<'search' | 'mail' | 'task'>('search')
   const set = (id: string, p: Partial<Alert>) => setAlerts(alerts.map((a) => (a.id === id ? { ...a, ...p } : a)))
   return (
     <Modal open={open} onClose={onClose} wide title="Alertes et veille d'annonces">
       <div className="form-stack">
-        <section className="form-stack">
-          <h3 className="modal-h3">Mes alertes</h3>
-          {alerts.map((a) => (
-            <AlertCard key={a.id} alert={a} onChange={(p) => set(a.id, p)} onDelete={() => setAlerts(alerts.filter((x) => x.id !== a.id))} />
-          ))}
-          <button className="btn sm self-start" onClick={() => setAlerts([...alerts, { id: uid(), keywords: '', distance: 30, active: true, commune: alerts[0]?.commune, communeCode: alerts[0]?.communeCode }])}>
-            <Plus size={14} /> Ajouter une alerte
-          </button>
-          <p className="muted small">LinkedIn, Hellowork, Indeed, APEC et Welcome to the Jungle n'offrent pas d'accès automatisé : les liens ouvrent votre recherche sur chaque site, triée par date. Une annonce intéressante s'ajoute ensuite avec « Offre depuis un lien ».</p>
-        </section>
-        <section className="form-stack">
-          <h3 className="modal-h3">Veille automatique</h3>
-          <Setup />
-        </section>
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'search', label: <><Search size={14} /> Mes recherches ({alerts.length})</> },
+            { value: 'mail', label: <><Mail size={14} /> Alertes email des sites</> },
+            { value: 'task', label: <><Clock size={14} /> Tâche automatique</> },
+          ]}
+        />
+        {tab === 'search' && (
+          <section className="form-stack">
+            <div className="explain">
+              <p>
+                Une recherche = un métier (ou plusieurs intitulés séparés par des virgules) et un lieu. Elle sert à <strong>trouver les offres de la fonction publique</strong> (Choisir le Service Public), à <strong>créer les liens de recherche</strong> vers les autres sites en bas de la liste, et à <strong>étiqueter les annonces</strong>.
+              </p>
+              <p className="muted small">Enregistrée automatiquement et prise en compte au prochain passage de la tâche (toutes les heures) : rien à installer ni à relancer.</p>
+            </div>
+            {alerts.map((a) => (
+              <AlertCard key={a.id} alert={a} onChange={(p) => set(a.id, p)} onDelete={() => setAlerts(alerts.filter((x) => x.id !== a.id))} />
+            ))}
+            <button className="btn sm self-start" onClick={() => setAlerts([...alerts, { id: uid(), keywords: '', distance: 30, active: true, commune: alerts[0]?.commune, communeCode: alerts[0]?.communeCode, departement: alerts[0]?.departement }])}>
+              <Plus size={14} /> Ajouter une recherche
+            </button>
+          </section>
+        )}
+        {tab === 'mail' && <MailTab />}
+        {tab === 'task' && <TaskTab />}
       </div>
     </Modal>
   )

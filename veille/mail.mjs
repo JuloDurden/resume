@@ -12,7 +12,7 @@ const NEWSLETTER = [
 ]
 
 /** Change à chaque évolution de la lecture : les annonces des emails sont alors relues. */
-export const PARSER_VERSION = 4
+export const PARSER_VERSION = 5
 
 /** Expéditeurs d'alertes emploi. */
 export const SENDERS = [
@@ -175,6 +175,8 @@ const lineList = (el) =>
 function readCard(site, L, mailDate) {
   const r = {}
   if (site === 'LinkedIn') {
+    // aperçu de l'email (« Salaire entre... ») et en-tête d'alerte écartés
+    L = L.filter((l) => !/^(salaire entre|votre alerte|cette entreprise recrute|voir l.offre)/i.test(l))
     if (/similaires|recommand|vous pourriez|consultée/i.test(L[0] ?? '')) return null
     r.title = L[0]
     const [company, loc] = (L[1] ?? '').split(/\s+·\s+/)
@@ -244,7 +246,15 @@ export function parseAlertHtml(html, date) {
     if (done.has(k)) continue
     done.add(k)
     let card = a
-    while (card.parentNode?.tagName && keysIn(card.parentNode).size <= 1) card = card.parentNode
+    // remonte jusqu'au plus grand bloc ne contenant que cette annonce, sans aller jusqu'au corps de l'email
+    // (email à une seule annonce : le corps contient aussi l'aperçu, l'en-tête et le pied de page)
+    while (
+      card.parentNode?.tagName &&
+      !/^(body|html)$/i.test(card.parentNode.tagName) &&
+      keysIn(card.parentNode).size <= 1 &&
+      card.parentNode.text.replace(/\s+/g, ' ').length < 1500
+    )
+      card = card.parentNode
     const r = readCard(job.site, lineList(card), date)
     if (!r) continue
     const id = job.stable ? job.id : hash(`${keyText(r.title)}|${keyText(r.company)}`)

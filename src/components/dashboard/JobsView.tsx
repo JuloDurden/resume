@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import { Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, JobReview, MarkState, ResumeDoc } from '../../types'
 import { useNavigate } from 'react-router-dom'
 import { uid } from '../../lib/ids'
 import { groupJobs } from '../../lib/dedupe'
-import { applyLearning, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
+import { compareSalary, fmtSalary, salaryBenchmarks, salaryOf, type Salary } from '../../lib/salary'
+import { redFlags, type RedFlag } from '../../lib/redflags'
+import { applyLearning, bestReference, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
 import { ClaudeRankModal, MatchProfileModal } from './MatchTools'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -14,7 +16,7 @@ import { useRomeDrawer } from '../RomeDrawer'
 import { AlertsModal } from './AlertsModal'
 import { Segmented, toast } from '../ui'
 
-type Filter = 'new' | 'fav' | 'applied' | 'hidden'
+type Filter = 'new' | 'fav' | 'applied' | 'hidden' | 'out'
 
 const norm = (s: string) =>
   s
@@ -73,10 +75,50 @@ function ExcludeBar({ terms, onChange, count }: { terms: string[]; onChange: (t:
   )
 }
 
+type SalaryInfo = { s: Salary; cmp?: ReturnType<typeof compareSalary> }
+
+function Insights({ salary, flags }: { salary?: SalaryInfo; flags: RedFlag[] }) {
+  return (
+    <div className="insights">
+      <div className="insight-row">
+        <Euro size={13} />
+        {salary ? (
+          <span>
+            Salaire : <strong>{fmtSalary(salary.s)}</strong> brut annuel
+            {salary.cmp ? <span className={`sal-cmp ${salary.cmp.tone}`}> {salary.cmp.label}</span> : <span className="muted"> (pas encore assez d'annonces comparables pour situer ce salaire)</span>}
+          </span>
+        ) : (
+          <span className="muted">Salaire non indiqué dans l'annonce.</span>
+        )}
+      </div>
+      {flags.length > 0 && (
+        <div className="flags">
+          <strong>
+            <Flag size={13} /> Points à surveiller ({flags.length})
+          </strong>
+          <ul>
+            {flags.map((f) => (
+              <li key={f.label} className={`lvl${f.level}`}>
+                <b>{f.label}</b>
+                {f.quote && <em> {f.quote}</em>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
   const pct = (v: number) => `${Math.round(v * 100)} %`
   return (
     <div className="match-details">
+      {m.out && (
+        <p className="match-out">
+          <AlertTriangle size={13} /> Hors critères : {m.out}. Note ramenée à 0.
+        </p>
+      )}
       <div className="match-chips">
         <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
           <Target size={12} /> Intitulé {pct(m.title.v)}
@@ -135,7 +177,7 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
   )
 }
 
-function JobCard({ item, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
+function JobCard({ item, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
   return (
@@ -177,9 +219,15 @@ function JobCard({ item, others, mark, onMark, alertNames, onApply, onTailor, is
             {item.worktime ? `, ${item.worktime.toLowerCase()}` : ''}
           </span>
         )}
-        {item.salary && (
-          <span>
-            <Euro size={12} /> {item.salary}
+        {(salary || item.salary) && (
+          <span className={salary?.cmp ? `sal-cmp ${salary.cmp.tone}` : undefined} title={salary?.cmp?.label}>
+            <Euro size={12} /> {salary ? fmtSalary(salary.s) : item.salary}
+            {salary?.cmp?.tone === 'low' ? ' ↓' : salary?.cmp?.tone === 'high' ? ' ↑' : ''}
+          </span>
+        )}
+        {flags.length > 0 && (
+          <span className={`jc-flags lvl${Math.max(...flags.map((f) => f.level))}`} title={flags.map((f) => f.label).join(', ')}>
+            <Flag size={12} /> {flags.length} point{flags.length > 1 ? 's' : ''} à surveiller
           </span>
         )}
         <span>
@@ -207,6 +255,7 @@ function JobCard({ item, others, mark, onMark, alertNames, onApply, onTailor, is
       {open && (
         <div className="jc-open">
           {match && <MatchDetails m={match} review={review} />}
+          <Insights salary={salary} flags={flags} />
           {item.fullText ? (
             <details className="jc-full" open>
               <summary>Texte complet de l'annonce</summary>
@@ -254,9 +303,14 @@ function JobCard({ item, others, mark, onMark, alertNames, onApply, onTailor, is
           </>
         ) : (
           mark !== 'applied' && (
-            <button className="btn sm ghost" onClick={() => onMark('hidden')} title="Ne plus afficher cette annonce">
-              <EyeOff size={13} /> Masquer
-            </button>
+            <>
+              <button className="btn sm ghost" onClick={() => onMark('hidden')} title="Ne plus afficher cette annonce (récupérable dans « Masquées »)">
+                <EyeOff size={13} /> Masquer
+              </button>
+              <button className="btn sm ghost danger icon-only" onClick={() => onMark('deleted')} title="Supprimer définitivement cette annonce">
+                <Trash2 size={14} />
+              </button>
+            </>
           )
         )}
       </div>
@@ -326,15 +380,6 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const gitems = useMemo(() => groups.map((g) => g.item), [groups])
   const names = useMemo<Record<string, string>>(() => ({ email: 'Alerte email', ...Object.fromEntries(watch.alerts.map((a) => [a.id, a.keywords])) }), [watch.alerts])
   const markOf = groupMark
-  const counts = useMemo(() => {
-    const c = { new: 0, fav: 0, applied: 0, hidden: 0 }
-    for (const i of gitems) {
-      const m = markOf(i.id)
-      if (m === 'none') c.new++
-      else if (m !== 'deleted') c[m]++
-    }
-    return c
-  }, [gitems, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
   const nq = q.trim().toLowerCase()
   const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume'), [docsMap])
   const profile = useMemo(() => resolveProfile(watch.profile, cvs, watch.alerts), [watch.profile, cvs, watch.alerts, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -345,10 +390,38 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   }, [watch.marks, feed])
   const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchItem(i, profile), i, learned)])), [gitems, profile, geoTick, learned]) // eslint-disable-line react-hooks/exhaustive-deps
   const reviews = watch.reviews ?? {}
+  // repère de salaire : médiane des annonces reçues pour le même métier visé
+  const familyOf = (i: FeedItem) => (matches[i.id] && matches[i.id].title.v >= 0.6 ? matches[i.id].title.target : undefined)
+  const benches = useMemo(() => salaryBenchmarks(gitems, familyOf), [gitems, matches]) // eslint-disable-line react-hooks/exhaustive-deps
+  const salaries = useMemo(
+    () =>
+      Object.fromEntries(
+        gitems.map((i) => {
+          const s = salaryOf(i)
+          const f = familyOf(i)
+          return [i.id, s ? { s, cmp: compareSalary(s, f ? benches.get(f) : undefined) } : undefined]
+        }),
+      ),
+    [gitems, benches], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const flagsOf = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, redFlags(i)])), [gitems])
   const rank = (i: FeedItem) => reviews[i.id]?.score ?? matches[i.id]?.score ?? 0
+  // onglet de chaque annonce : son marquage, ou « hors critères » (note 0) si elle n'est pas encore triée
+  const tabOf = (id: string): Filter => {
+    const m = markOf(id)
+    if (m === 'none') return matches[id]?.out ? 'out' : 'new'
+    return m as Filter
+  }
+  const counts = useMemo(() => {
+    const c = { new: 0, fav: 0, applied: 0, hidden: 0, out: 0 }
+    for (const i of gitems) {
+      const t = tabOf(i.id)
+      if (t in c) c[t as keyof typeof c]++
+    }
+    return c
+  }, [gitems, watch.marks, matches]) // eslint-disable-line react-hooks/exhaustive-deps
   const filtered = gitems.filter((i) => {
-    const m = markOf(i.id)
-    if (filter === 'new' ? m !== 'none' : m !== filter) return false
+    if (tabOf(i.id) !== filter) return false
     if (alert !== 'all' && !i.alerts.includes(alert)) return false
     if (nq && !`${i.title} ${i.company ?? ''} ${i.location ?? ''}`.toLowerCase().includes(nq)) return false
     return true
@@ -394,19 +467,30 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     onShowOffers()
   }
   const tailor = (i: FeedItem) => {
-    const cv = profile.cv
+    // CV de référence le plus proche de l'annonce, sinon le CV du profil
+    const cv = bestReference(i.title, cvs.filter((d) => d.reference)) ?? profile.cv
     if (!cv) return toast.error('Aucun CV : créez-en un ou choisissez un CV de référence dans « Profil »')
     const o = offerFor(i)
     const now = Date.now()
     const title = i.title.replace(/\s*[(-]?\s*\b[hfHF]\s*\/\s*[hfHF](\s*\/\s*\w+)?\s*\)?/g, '').replace(/\s*\((cdi|cdd)\)\s*$/i, '').trim()
-    const copy: ResumeDoc = { ...structuredClone(cv), id: uid(), name: [title, o.company].filter(Boolean).join(' - '), offerId: o.id, createdAt: now, updatedAt: now, header: { ...cv.header, title } }
+    const copy: ResumeDoc = { ...structuredClone(cv), reference: undefined, id: uid(), name: [title, o.company].filter(Boolean).join(' - '), offerId: o.id, createdAt: now, updatedAt: now, header: { ...cv.header, title } }
     addDoc(copy)
     navigate(`/cv/${copy.id}?claude=tailor`)
-    toast.ok('CV créé pour cette offre : copiez le prompt d\'adaptation pour Claude')
+    toast.ok(`CV créé à partir de « ${cv.name} » : copiez le prompt d'adaptation pour Claude`)
   }
 
   const noAlerts = !watch.alerts.length
-  const linksAlert = watch.alerts.find((a) => a.id === alert) ?? watch.alerts[0]
+  // une ligne de liens par métier : chaque alerte, et chaque intitulé d'une alerte à plusieurs intitulés
+  const linkLines = (alert === 'all' || alert === 'email' ? watch.alerts : watch.alerts.filter((a) => a.id === alert))
+    .filter((a) => a.active !== false)
+    .flatMap((a) =>
+      a.keywords
+        .split(/,|;|\||\s+ou\s+/i)
+        .map((k) => k.trim())
+        .filter(Boolean)
+        .map((k) => ({ key: `${a.id}-${k}`, label: k, alert: { ...a, keywords: k } })),
+    )
+    .filter((l, i, arr) => arr.findIndex((x) => x.label.toLowerCase() === l.label.toLowerCase()) === i)
   return (
     <>
       <div className="jobs-head">
@@ -418,6 +502,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
             { value: 'fav', label: `Favoris (${counts.fav})` },
             { value: 'applied', label: `Candidatures (${counts.applied})` },
             { value: 'hidden', label: `Masquées (${counts.hidden})` },
+            { value: 'out', label: `Hors critères (${counts.out})`, title: 'Offres en présentiel au-delà de votre périmètre de recherche (note 0)' },
           ]}
         />
         <div className="row-gap">
@@ -527,7 +612,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
               ) : (
                 <>
                   <span className="muted small">Veille du {new Date(feed.updatedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                  {filter === 'hidden' && (
+                  {(filter === 'hidden' || filter === 'out') && (
                     <button className="btn sm ghost danger" onClick={() => removeAll(shownIds)}>
                       <Trash2 size={13} /> Tout supprimer
                     </button>
@@ -550,22 +635,27 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ) : shown.length ? (
             <div className="job-list">
               {shown.map((i) => (
-                <JobCard key={i.id} item={i} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                <JobCard key={i.id} item={i} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
               ))}
             </div>
           ) : (
             <div className="empty-state">
-              <p>{filter === 'new' ? 'Toutes les annonces ont été triées.' : 'Rien ici pour le moment.'}</p>
+              <p>{filter === 'new' ? 'Toutes les annonces ont été triées.' : filter === 'out' ? 'Aucune offre hors de votre périmètre.' : 'Rien ici pour le moment.'}</p>
             </div>
           )}
 
-          {linksAlert && (
-            <div className="quick-links">
-              <span className="muted small">Chercher aussi « {linksAlert.keywords.split(',')[0]} » sur :</span>
-              {searchLinks(linksAlert).map((l) => (
-                <a key={l.site} href={l.url} target="_blank" rel="noreferrer">
-                  {l.site} <ExternalLink size={11} />
-                </a>
+          {linkLines.length > 0 && (
+            <div className="quick-links-block">
+              <span className="muted small">Chercher aussi sur les autres sites (une ligne par métier de vos alertes) :</span>
+              {linkLines.map(({ key, alert: a, label }) => (
+                <div key={key} className="quick-links">
+                  <span className="ql-name">{label}</span>
+                  {searchLinks(a).map((l) => (
+                    <a key={l.site} href={l.url} target="_blank" rel="noreferrer">
+                      {l.site} <ExternalLink size={11} />
+                    </a>
+                  ))}
+                </div>
               ))}
             </div>
           )}

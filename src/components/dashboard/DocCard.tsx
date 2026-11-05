@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, Copy, FileJson, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { Bookmark, BookmarkMinus, Briefcase, Copy, FileJson, FilePlus2, MoreVertical, Pencil, Trash2 } from 'lucide-react'
 import type { AnyDoc } from '../../types'
 import { useDocs } from '../../store/documents'
 import { docTitle } from '../../lib/offers'
@@ -57,7 +57,7 @@ export function DocCard({ doc, width = 210, compact }: { doc: AnyDoc; width?: nu
   const [linking, setLinking] = useState(false)
   const { title, company } = docTitle(doc, offer)
   return (
-    <div className={`doc-card${compact ? ' compact' : ''}`}>
+    <div className={`doc-card${compact ? ' compact' : ''}${doc.kind === 'resume' && doc.reference ? ' reference' : ''}`}>
       <button className="doc-thumb" onClick={() => navigate(openPath(doc))} aria-label={`Ouvrir ${doc.name}`}>
         <DocThumb doc={doc} width={width} />
       </button>
@@ -65,6 +65,11 @@ export function DocCard({ doc, width = 210, compact }: { doc: AnyDoc; width?: nu
         <div>
           <div className="doc-badges">
             <span className={`kind-badge ${doc.kind}`}>{doc.kind === 'resume' ? 'CV' : 'Lettre'}</span>
+            {doc.kind === 'resume' && doc.reference && (
+              <span className="ref-badge" title="CV de référence : à dupliquer pour chaque candidature">
+                <Bookmark size={11} /> Référence
+              </span>
+            )}
             {company && (
               <span className="company-badge" title={company}>
                 {offer && <OfferLogo offer={offer} size={14} />}
@@ -104,6 +109,20 @@ export function DocCard({ doc, width = 210, compact }: { doc: AnyDoc; width?: nu
               >
                 Rattacher à une offre
               </MenuItem>
+              {doc.kind === 'resume' && doc.reference && (
+                <MenuItem
+                  icon={<FilePlus2 size={14} />}
+                  onClick={() => {
+                    close()
+                    const id = duplicate(doc.id)
+                    if (!id) return
+                    update(id, (d) => ({ ...d, name: `${doc.name.replace(/\s*\(référence\)$/i, '')} - candidature` }))
+                    navigate(`/cv/${id}`)
+                  }}
+                >
+                  Nouveau CV depuis cette référence
+                </MenuItem>
+              )}
               <MenuItem
                 icon={<Copy size={14} />}
                 onClick={() => {
@@ -114,6 +133,18 @@ export function DocCard({ doc, width = 210, compact }: { doc: AnyDoc; width?: nu
               >
                 Dupliquer
               </MenuItem>
+              {doc.kind === 'resume' && (
+                <MenuItem
+                  icon={doc.reference ? <BookmarkMinus size={14} /> : <Bookmark size={14} />}
+                  onClick={() => {
+                    close()
+                    update(doc.id, (d) => ({ ...d, reference: !doc.reference }))
+                    toast.ok(doc.reference ? 'Retiré des CV de référence' : 'CV de référence : dupliquez-le pour chaque candidature')
+                  }}
+                >
+                  {doc.reference ? 'Retirer des CV de référence' : 'Définir comme CV de référence'}
+                </MenuItem>
+              )}
               <MenuItem
                 icon={<FileJson size={14} />}
                 onClick={() => {

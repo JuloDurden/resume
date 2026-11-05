@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BellRing, Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
 import type { ResumeDoc } from '../types'
+import { uid } from '../lib/ids'
 import { useDocs } from '../store/documents'
 import { TEMPLATES } from '../data/templates'
 import { newLetter, newResume } from '../data/factory'
@@ -25,6 +26,9 @@ function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void 
   const add = useDocs((s) => s.add)
   const navigate = useNavigate()
   const previews = useMemo(() => TEMPLATES.map((t) => ({ t, doc: newResume(t.id, true) })), [])
+  const docsMap = useDocs((s) => s.docs)
+  const refs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume' && !!d.reference), [docsMap])
+  const [fromRef, setFromRef] = useState<string | null>(null)
   return (
     <Modal
       open={open}
@@ -39,7 +43,9 @@ function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void 
           <button
             className="btn primary"
             onClick={() => {
-              const d = newResume(tpl, sample, name.trim() || 'Mon CV')
+              const ref = refs.find((r) => r.id === fromRef)
+              const now = Date.now()
+              const d = ref ? { ...structuredClone(ref), id: uid(), reference: undefined, offerId: undefined, name: name.trim() || `${ref.name} - candidature`, createdAt: now, updatedAt: now } : newResume(tpl, sample, name.trim() || 'Mon CV')
               add(d)
               onClose()
               navigate(`/cv/${d.id}`)
@@ -66,9 +72,33 @@ function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void 
             />
           </Field>
         </div>
+        {refs.length > 0 && (
+          <>
+            <h3 className="modal-h3">Partir d'un de mes CV de référence</h3>
+            <div className="template-grid wide">
+              {refs.map((r) => (
+                <button
+                  key={r.id}
+                  className={`template-card${fromRef === r.id ? ' on' : ''}`}
+                  onClick={() => {
+                    setFromRef(r.id)
+                    setName(`${r.name} - candidature`)
+                  }}
+                >
+                  <DocThumb doc={r} width={170} />
+                  <div className="tc-meta">
+                    <strong>{r.name}</strong>
+                    <span>{r.header.title}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <h3 className="modal-h3">Ou partir d'un modèle vierge</h3>
+          </>
+        )}
         <div className="template-grid wide">
           {previews.map(({ t, doc }) => (
-            <button key={t.id} className={`template-card${tpl === t.id ? ' on' : ''}`} onClick={() => setTpl(t.id)}>
+            <button key={t.id} className={`template-card${!fromRef && tpl === t.id ? ' on' : ''}`} onClick={() => { setTpl(t.id); setFromRef(null) }}>
               <DocThumb doc={doc} width={170} />
               <div className="tc-meta">
                 <strong>{t.name}</strong>
@@ -135,7 +165,7 @@ export default function Dashboard() {
   const hydrated = useDocs((s) => s.hydrated)
   const lastBackup = useDocs((s) => s.lastBackup)
   const { importDocs, markBackup } = useDocs.getState()
-  const [filter, setFilter] = useState<'all' | 'resume' | 'letter'>('all')
+  const [filter, setFilter] = useState<'all' | 'reference' | 'resume' | 'letter'>('all')
   const [view, setView] = useState<'docs' | 'offers' | 'jobs'>(() => {
     const v = localStorage.getItem('resume-dash-view')
     return v === 'offers' || v === 'jobs' ? v : 'docs'
@@ -150,7 +180,11 @@ export default function Dashboard() {
 
   const docs = useMemo(() => Object.values(docsMap).sort((a, b) => b.updatedAt - a.updatedAt), [docsMap])
   const resumes = useMemo(() => docs.filter((d): d is ResumeDoc => d.kind === 'resume'), [docs])
-  const shown = docs.filter((d) => filter === 'all' || d.kind === filter)
+  const refs = useMemo(() => resumes.filter((d) => d.reference), [resumes])
+  // CV de référence en tête de liste
+  const shown = docs
+    .filter((d) => filter === 'all' || (filter === 'reference' ? d.kind === 'resume' && d.reference : d.kind === filter))
+    .sort((a, b) => Number(b.kind === 'resume' && !!b.reference) - Number(a.kind === 'resume' && !!a.reference))
   const needBackup = !syncOn && docs.length > 0 && (!lastBackup || Date.now() - lastBackup > 14 * 86400000)
 
   const backup = () => {
@@ -259,6 +293,7 @@ export default function Dashboard() {
           onChange={setFilter}
           options={[
             { value: 'all', label: `Tous (${docs.length})` },
+            { value: 'reference', label: `CV de référence (${refs.length})`, title: 'Vos CV modèles par type de poste, à dupliquer pour chaque candidature' },
             { value: 'resume', label: `CV (${resumes.length})` },
             { value: 'letter', label: `Lettres (${docs.length - resumes.length})` },
           ]}

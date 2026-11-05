@@ -103,6 +103,47 @@ export async function installWatch(c: SyncConfig): Promise<boolean> {
   return a || m || b
 }
 
+const FILES: [string, string][] = [
+  ['veille/fetch.mjs', fetchScript],
+  ['veille/mail.mjs', mailScript],
+  ['.github/workflows/veille.yml', workflow],
+]
+
+/** État de la tâche dans le dépôt : absente, ancienne version, ou à jour. */
+export async function watchStatus(c: SyncConfig): Promise<'missing' | 'outdated' | 'ok'> {
+  let outdated = false
+  for (const [path, content] of FILES) {
+    try {
+      const cur = await api<{ content: string }>(c, `/contents/${path}?ref=${c.branch}`)
+      if (atob(cur.content.replace(/\n/g, '')) !== atob(b64(content))) outdated = true
+    } catch (e) {
+      if (e instanceof GitHubError && e.status === 404) {
+        if (path.endsWith('veille.yml')) return 'missing'
+        outdated = true
+      } else throw e
+    }
+  }
+  return outdated ? 'outdated' : 'ok'
+}
+
+/** Met à jour la tâche si elle est installée et ancienne (une fois par version de l'application). */
+export async function autoUpdateWatch(c: SyncConfig, build: string): Promise<boolean> {
+  const KEY = 'resume-watch-updated'
+  try {
+    if (localStorage.getItem(KEY) === build) return false
+  } catch {
+    return false
+  }
+  const st = await watchStatus(c)
+  if (st === 'outdated') await installWatch(c)
+  try {
+    localStorage.setItem(KEY, build)
+  } catch {
+    /* ignore */
+  }
+  return st === 'outdated'
+}
+
 export async function watchInstalled(c: SyncConfig): Promise<boolean> {
   try {
     await api(c, `/contents/.github/workflows/veille.yml?ref=${c.branch}`)

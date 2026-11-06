@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import { Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, JobReview, MarkState, ResumeDoc } from '../../types'
 import { useNavigate } from 'react-router-dom'
 import { uid } from '../../lib/ids'
 import { groupJobs } from '../../lib/dedupe'
-import { compareSalary, fmtSalary, salaryBenchmarks, salaryOf, type Salary } from '../../lib/salary'
+import { benchFor, compareSalary, fmtK, fmtSalary, salaryBenchmarks, salaryOf, type Salary, type SalaryBench } from '../../lib/salary'
 import { redFlags, type RedFlag } from '../../lib/redflags'
-import { applyLearning, prefFor, bestReference, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
+import { applyLearning, titleSimilarity, locationOf, regionOf, REGIONS, prefFor, bestReference, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
 import { ClaudeRankModal, MatchProfileModal } from './MatchTools'
+import { AddJobModal } from './AddJobModal'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { useSync } from '../../store/sync'
 import { ago, offerFromItem, searchLinks } from '../../lib/watch'
 import { useRomeDrawer } from '../RomeDrawer'
 import { AlertsModal } from './AlertsModal'
-import { Segmented, toast } from '../ui'
+import { Modal, Segmented, toast } from '../ui'
 
 type Filter = 'new' | 'fav' | 'applied' | 'hidden' | 'out'
 
@@ -25,53 +26,102 @@ const norm = (s: string) =>
     .toLowerCase()
 
 /** Vrai si l'annonce contient un des termes exclus (au début d'un mot, sans tenir compte des accents). */
-export function excluded(item: FeedItem, terms: string[]): boolean {
+export function excluded(item: FeedItem, terms: string[], titleOnly = false): boolean {
   if (!terms.length) return false
-  const hay = ` ${norm(`${item.title} ${item.company ?? ''} ${item.contract ?? ''}`).replace(/[^a-z0-9]+/g, ' ')} `
+  const hay = ` ${norm(titleOnly ? item.title : `${item.title} ${item.company ?? ''} ${item.contract ?? ''}`).replace(/[^a-z0-9]+/g, ' ')} `
   return terms.some((t) => {
     const k = norm(t).replace(/[^a-z0-9]+/g, ' ').trim()
     return k && hay.includes(` ${k}`)
   })
 }
 
-function ExcludeBar({ terms, onChange, count }: { terms: string[]; onChange: (t: string[]) => void; count: number }) {
+function TermInput({ terms, onAdd, placeholder }: { terms: string[]; onAdd: (t: string[]) => void; placeholder: string }) {
   const [v, setV] = useState('')
   const add = () => {
     const parts = v
       .split(',')
       .map((x) => x.trim())
       .filter((x) => x && !terms.some((t) => norm(t) === norm(x)))
-    if (parts.length) onChange([...terms, ...parts])
+    if (parts.length) onAdd(parts)
     setV('')
   }
   return (
+    <input
+      className="exclude-input"
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+          e.preventDefault()
+          add()
+        }
+      }}
+      onBlur={add}
+      placeholder={placeholder}
+    />
+  )
+}
+
+/** Filtre rapide (le temps de la visite) : titre, entreprise ou contrat. Une épingle le rend définitif. */
+function ExcludeBar({ terms, onChange, count, onPin, banned, onManage }: { terms: string[]; onChange: (t: string[]) => void; count: number; onPin: (t: string) => void; banned: number; onManage: () => void }) {
+  return (
     <div className="exclude-bar">
-      <span className="muted small">
-        <Ban size={13} /> Exclure :
+      <span className="muted small" title="Masque le temps de la visite les annonces dont le titre, l'entreprise ou le contrat contient ces mots">
+        <Ban size={13} /> Filtrer :
       </span>
       {terms.map((t) => (
         <span key={t} className="exclude-chip">
           {t}
-          <button title={`Ne plus exclure « ${t} »`} onClick={() => onChange(terms.filter((x) => x !== t))}>
+          <button title={`Exclure « ${t} » définitivement (titre des annonces)`} onClick={() => onPin(t)}>
+            <Pin size={12} />
+          </button>
+          <button title={`Ne plus filtrer « ${t} »`} onClick={() => onChange(terms.filter((x) => x !== t))}>
             <X size={12} />
           </button>
         </span>
       ))}
-      <input
-        className="exclude-input"
-        value={v}
-        onChange={(e) => setV(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ',') {
-            e.preventDefault()
-            add()
-          }
-        }}
-        onBlur={add}
-        placeholder={terms.length ? 'Ajouter un terme' : 'ex. alternance, B2B, stage (Entrée pour valider)'}
-      />
-      {count > 0 && <span className="muted small">{count} annonce{count > 1 ? 's' : ''} exclue{count > 1 ? 's' : ''}</span>}
+      <TermInput terms={terms} onAdd={(p) => onChange([...terms, ...p])} placeholder={terms.length ? 'Ajouter un mot' : 'Filtre rapide : ex. alternance, B2B (Entrée pour valider)'} />
+      {count > 0 && <span className="muted small">{count} masquée{count > 1 ? 's' : ''} par le filtre</span>}
+      <button className="btn sm ghost" onClick={onManage} title="Mots qui retirent définitivement les annonces dont le titre les contient">
+        <ShieldBan size={14} /> Mots exclus ({banned})
+      </button>
     </div>
+  )
+}
+
+/** Liste des mots exclus définitivement, avec le nombre d'annonces retirées par chacun. */
+function BannedModal({ open, onClose, terms, onChange, all }: { open: boolean; onClose: () => void; terms: string[]; onChange: (t: string[]) => void; all: FeedItem[] }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Mots exclus définitivement">
+      <div className="form-stack">
+        <p className="muted small">
+          Toute annonce dont le <strong>titre</strong> contient un de ces mots est retirée de la liste, sans être supprimée : retirez le mot pour la voir à nouveau. Les favoris et les candidatures ne sont jamais retirés. La liste est synchronisée entre vos navigateurs.
+        </p>
+        <div className="exclude-bar">
+          <TermInput terms={terms} onAdd={(p) => onChange([...terms, ...p])} placeholder="Ajouter un mot, ex. immobilier (Entrée pour valider)" />
+        </div>
+        {terms.length ? (
+          <ul className="banned-list">
+            {terms.map((t) => {
+              const n = all.filter((i) => excluded(i, [t], true)).length
+              return (
+                <li key={t}>
+                  <strong>{t}</strong>
+                  <span className="muted small">
+                    {n} annonce{n > 1 ? 's' : ''} retirée{n > 1 ? 's' : ''}
+                  </span>
+                  <button className="btn sm ghost" onClick={() => onChange(terms.filter((x) => x !== t))}>
+                    <Eye size={13} /> Retirer le mot
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="muted small">Aucun mot exclu pour le moment.</p>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -81,20 +131,25 @@ const findUrl = (i: FeedItem) => {
   return `https://www.google.com/search?q=${encodeURIComponent([`"${title}"`, i.company, (i.location ?? '').replace(/\(.*?\)/g, '').trim(), 'emploi'].filter(Boolean).join(' '))}`
 }
 
-type SalaryInfo = { s: Salary; cmp?: ReturnType<typeof compareSalary> }
+type SalaryInfo = { s?: Salary; cmp?: ReturnType<typeof compareSalary>; bench?: SalaryBench }
+const benchLabel = (b: SalaryBench) => `médiane « ${b.family} »${b.region ? `, ${REGIONS[b.region] ?? 'région'}` : ', toutes régions'} : ${fmtK(b.median)} (${b.n} annonces)`
 
 function Insights({ salary, flags }: { salary?: SalaryInfo; flags: RedFlag[] }) {
   return (
     <div className="insights">
       <div className="insight-row">
         <Euro size={13} />
-        {salary ? (
+        {salary?.s ? (
           <span>
             Salaire : <strong>{fmtSalary(salary.s)}</strong> brut annuel
             {salary.cmp ? <span className={`sal-cmp ${salary.cmp.tone}`}> {salary.cmp.label}</span> : <span className="muted"> (pas encore assez d'annonces comparables pour situer ce salaire)</span>}
           </span>
+        ) : salary?.bench ? (
+          <span>
+            Salaire non indiqué. Repère : <strong>{fmtK(salary.bench.median)}</strong> brut annuel, {benchLabel(salary.bench).replace(/ : .*?\(/, ' (')}
+          </span>
         ) : (
-          <span className="muted">Salaire non indiqué dans l'annonce.</span>
+          <span className="muted">Salaire non indiqué, et pas encore assez d'annonces comparables pour donner un repère.</span>
         )}
       </div>
       {flags.length > 0 && (
@@ -216,22 +271,33 @@ function JobCard({ item, degraded, salary, flags, others, mark, onMark, alertNam
         </button>
       </div>
       <div className="jc-meta">
-        {item.location && (
-          <span>
-            <MapPin size={12} /> {item.location}
-          </span>
-        )}
+        {(() => {
+          const w = locationOf(item)
+          return w.loc ? (
+            <span title={w.fromText ? `Le site indique « ${item.location ?? 'aucun lieu'} » ; lieu lu dans le texte de l'annonce` : undefined}>
+              <MapPin size={12} /> {w.loc}
+              {w.fromText ? ' *' : ''}
+            </span>
+          ) : null
+        })()}
         {item.contract && (
           <span>
             <Briefcase size={12} /> {item.contract}
             {item.worktime ? `, ${item.worktime.toLowerCase()}` : ''}
           </span>
         )}
-        {(salary || item.salary) && (
+        {salary?.s || item.salary ? (
           <span className={salary?.cmp ? `sal-cmp ${salary.cmp.tone}` : undefined} title={salary?.cmp?.label}>
-            <Euro size={12} /> {salary ? fmtSalary(salary.s) : item.salary}
+            <Euro size={12} /> {salary?.s ? fmtSalary(salary.s) : item.salary}
             {salary?.cmp?.tone === 'low' ? ' ↓' : salary?.cmp?.tone === 'high' ? ' ↑' : ''}
+            {salary?.bench && <span className="muted"> · médiane {fmtK(salary.bench.median)}</span>}
           </span>
+        ) : (
+          salary?.bench && (
+            <span className="muted" title={`Salaire non indiqué. ${benchLabel(salary.bench)}`}>
+              <Euro size={12} /> ≈ {fmtK(salary.bench.median)} (médiane)
+            </span>
+          )
         )}
         {flags.length > 0 && (
           <span className={`jc-flags lvl${Math.max(...flags.map((f) => f.level))}`} title={flags.map((f) => f.label).join(', ')}>
@@ -373,11 +439,22 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   }, [markSeen])
   void seenAt
 
+  // mots exclus définitivement (titre, synchronisés) et filtre rapide (le temps de la visite)
   const terms = useMemo(() => watch.excludes ?? [], [watch.excludes])
-  const all = useMemo(() => (feed?.items ?? []).filter((i) => watch.marks[i.id]?.s !== 'deleted'), [feed, watch.marks])
+  const [quick, setQuick] = useState<string[]>([])
+  const [bannedOpen, setBannedOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  // annonces de la veille + annonces ajoutées à la main pas encore traitées par la veille
+  const all = useMemo(() => {
+    const fromFeed = feed?.items ?? []
+    const ids = new Set(fromFeed.map((i) => i.id))
+    return [...(watch.manual ?? []).filter((m) => !ids.has(m.id)), ...fromFeed].filter((i) => watch.marks[i.id]?.s !== 'deleted')
+  }, [feed, watch.marks, watch.manual])
   // les termes exclus ne cachent pas les favoris ni les candidatures
-  const items = useMemo(() => all.filter((i) => ['fav', 'applied'].includes(watch.marks[i.id]?.s ?? '') || !excluded(i, terms)), [all, terms, watch.marks])
-  const excludedCount = all.length - items.length
+  const kept = (i: FeedItem) => ['fav', 'applied'].includes(watch.marks[i.id]?.s ?? '')
+  const unbanned = useMemo(() => all.filter((i) => kept(i) || !excluded(i, terms, true)), [all, terms, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
+  const items = useMemo(() => unbanned.filter((i) => kept(i) || !excluded(i, quick)), [unbanned, quick, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
+  const excludedCount = unbanned.length - items.length
   // une même offre reçue par plusieurs sites : une seule carte
   const groups = useMemo(() => groupJobs(items), [items])
   const groupOf = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups])
@@ -390,12 +467,12 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const titlesOf = (ids: string[]) => Object.fromEntries(expand(ids).map((id) => [id, items.find((i) => i.id === id)?.title ?? '']))
   const markGroup = (ids: string[], st: MarkState) => markMany(expand(ids), st, titlesOf(ids))
   const gitems = useMemo(() => groups.map((g) => g.item), [groups])
-  const names = useMemo<Record<string, string>>(() => ({ email: 'Alerte email', ...Object.fromEntries(watch.alerts.map((a) => [a.id, a.keywords])) }), [watch.alerts])
+  const names = useMemo<Record<string, string>>(() => ({ email: 'Alerte email', manual: 'Ajout manuel', ...Object.fromEntries(watch.alerts.map((a) => [a.id, a.keywords])) }), [watch.alerts])
   const markOf = groupMark
   const nq = q.trim().toLowerCase()
   const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume'), [docsMap])
   const profile = useMemo(() => resolveProfile(watch.profile, cvs, watch.alerts), [watch.profile, cvs, watch.alerts, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => geocode([...items.map((i) => i.location), watch.alerts[0]?.commune], () => setGeoTick((t) => t + 1)), [items, watch.alerts])
+  useEffect(() => geocode([...items.map((i) => locationOf(i).loc), ...(feed?.salaryLog ?? []).map((e) => e.location), watch.alerts[0]?.commune], () => setGeoTick((t) => t + 1)), [items, watch.alerts, feed, geoTick])
   const learned = useMemo(() => {
     const titles = new Map((feed?.items ?? []).map((i) => [i.id, i.title]))
     return learnFromMarks(Object.fromEntries(Object.entries(watch.marks).map(([id, m]) => [id, m.t ? m : { ...m, t: titles.get(id) }])))
@@ -404,14 +481,20 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const reviews = watch.reviews ?? {}
   // repère de salaire : médiane des annonces reçues pour le même métier visé
   const familyOf = (i: FeedItem) => (matches[i.id] && matches[i.id].title.v >= 0.6 ? matches[i.id].title.target : undefined)
-  const benches = useMemo(() => salaryBenchmarks(gitems, familyOf), [gitems, matches]) // eslint-disable-line react-hooks/exhaustive-deps
+  const benches = useMemo(() => {
+    // annonces en cours + historique de l'année (annonces supprimées comprises)
+    const seen = new Set(gitems.map((i) => i.id))
+    const past: FeedItem[] = (feed?.salaryLog ?? []).filter((e) => !seen.has(e.id)).map((e) => ({ id: e.id, title: e.title, location: e.location, salary: e.salary, alerts: [], url: '', source: '' }))
+    const fam = (i: FeedItem) => matches[i.id] ? familyOf(i) : (() => { const t = profile.targets.map((x) => [x, titleSimilarity(i.title, x)] as const).sort((a, b) => b[1] - a[1])[0]; return t && t[1] >= 0.6 ? t[0] : undefined })()
+    return salaryBenchmarks([...gitems, ...past], fam, regionOf)
+  }, [gitems, matches, geoTick, feed, profile]) // eslint-disable-line react-hooks/exhaustive-deps
   const salaries = useMemo(
     () =>
       Object.fromEntries(
         gitems.map((i) => {
           const s = salaryOf(i)
-          const f = familyOf(i)
-          return [i.id, s ? { s, cmp: compareSalary(s, f ? benches.get(f) : undefined) } : undefined]
+          const bench = benchFor(benches, familyOf(i), regionOf(i))
+          return [i.id, s ? { s, bench, cmp: compareSalary(s, bench, (c) => REGIONS[c] ?? 'région') } : bench ? { bench } : undefined]
         }),
       ),
     [gitems, benches], // eslint-disable-line react-hooks/exhaustive-deps
@@ -440,7 +523,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   })
   const shown = sort === 'score' ? [...filtered].sort((a, b) => rank(b) - rank(a)) : filtered
 
-  useEffect(() => setSelected(new Set()), [filter, alert, q, terms])
+  useEffect(() => setSelected(new Set()), [filter, alert, q, terms, quick])
   const shownIds = shown.map((i) => i.id)
   const sel = shownIds.filter((id) => selected.has(id))
   const allSel = shownIds.length > 0 && sel.length === shownIds.length
@@ -518,6 +601,9 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ]}
         />
         <div className="row-gap">
+          <button className="btn" onClick={() => setAddOpen(true)} title="Ajouter une annonce trouvée ailleurs, depuis son lien">
+            <Plus size={16} /> Ajouter une annonce
+          </button>
           <button className="btn" onClick={() => setProfileOpen(true)} title="CV de référence, métiers visés, diplôme, domicile">
             <Target size={16} /> Mon profil
           </button>
@@ -580,7 +666,18 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
                 />
               </div>
             </div>
-            <ExcludeBar terms={terms} onChange={setExcludes} count={excludedCount} />
+            <ExcludeBar
+              terms={quick}
+              onChange={setQuick}
+              count={excludedCount}
+              banned={terms.length}
+              onManage={() => setBannedOpen(true)}
+              onPin={(t) => {
+                setQuick(quick.filter((x) => x !== t))
+                if (!terms.some((x) => norm(x) === norm(t))) setExcludes([...terms, t])
+                toast.ok(`« ${t} » exclu définitivement : gérez la liste dans « Mots exclus »`)
+              }}
+            />
           </div>
 
           {feed?.status === 'error' && (
@@ -674,6 +771,15 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
         </>
       )}
       <AlertsModal open={settings} onClose={() => setSettings(false)} />
+      <AddJobModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={() => {
+          setFilter('new')
+          setQ('')
+        }}
+      />
+      <BannedModal open={bannedOpen} onClose={() => setBannedOpen(false)} terms={terms} onChange={setExcludes} all={all} />
       <MatchProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ClaudeRankModal open={claudeOpen} onClose={() => setClaudeOpen(false)} items={[...filtered].sort((a, b) => (matches[b.id]?.score ?? 0) - (matches[a.id]?.score ?? 0)).map((i) => ({ ...i, score: matches[i.id]?.score }))} />
     </>

@@ -48,33 +48,46 @@ export interface SalaryBench {
   median: number
   n: number
   family: string
+  /** région de la médiane (absente : toutes régions confondues) */
+  region?: string
 }
 
-/** Médiane des salaires (milieu de fourchette) par métier visé, à partir des annonces reçues. */
-export function salaryBenchmarks(items: FeedItem[], familyOf: (i: FeedItem) => string | undefined): Map<string, SalaryBench> {
+const median = (v: number[]) => {
+  const s = [...v].sort((a, b) => a - b)
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2
+}
+
+/** Médianes des salaires (milieu de fourchette) par métier visé, par région et toutes régions confondues. */
+export function salaryBenchmarks(items: FeedItem[], familyOf: (i: FeedItem) => string | undefined, regionOf: (i: FeedItem) => string | undefined = () => undefined): Map<string, SalaryBench> {
   const by = new Map<string, number[]>()
+  const push = (k: string, v: number) => by.set(k, [...(by.get(k) ?? []), v])
   for (const i of items) {
     const f = familyOf(i)
     const s = salaryOf(i)
     if (!f || !s) continue
     const mid = (s.min + s.max) / 2
     if (mid < 20000) continue // stages et alternances faussent la médiane
-    by.set(f, [...(by.get(f) ?? []), mid])
+    push(`${f}|*`, mid)
+    const r = regionOf(i)
+    if (r) push(`${f}|${r}`, mid)
   }
   const out = new Map<string, SalaryBench>()
-  for (const [family, v] of by) {
+  for (const [k, v] of by) {
     if (v.length < 3) continue
-    const s = [...v].sort((a, b) => a - b)
-    const median = s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2
-    out.set(family, { median, n: v.length, family })
+    const [family, region] = k.split('|')
+    out.set(k, { median: median(v), n: v.length, family, region: region === '*' ? undefined : region })
   }
   return out
 }
 
-export function compareSalary(s: Salary, b?: SalaryBench): { tone: 'low' | 'ok' | 'high'; label: string } | undefined {
+/** Médiane la plus précise disponible : même métier et même région, sinon même métier. */
+export const benchFor = (b: Map<string, SalaryBench>, family?: string, region?: string) => (family ? (region && b.get(`${family}|${region}`)) || b.get(`${family}|*`) : undefined)
+
+export function compareSalary(s: Salary, b?: SalaryBench, regionName?: (code: string) => string): { tone: 'low' | 'ok' | 'high'; label: string } | undefined {
   if (!b) return undefined
   const mid = (s.min + s.max) / 2
   const r = mid / b.median
   const tone = r < 0.88 ? 'low' : r > 1.12 ? 'high' : 'ok'
-  return { tone, label: `${tone === 'low' ? 'Sous' : tone === 'high' ? 'Au-dessus de' : 'Dans'} la médiane « ${b.family} » : ${fmtK(b.median)} (${b.n} annonces)` }
+  const where = b.region && regionName ? `, ${regionName(b.region)}` : ''
+  return { tone, label: `${tone === 'low' ? 'Sous' : tone === 'high' ? 'Au-dessus de' : 'Dans'} la médiane « ${b.family} »${where} : ${fmtK(b.median)} (${b.n} annonces)` }
 }

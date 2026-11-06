@@ -296,6 +296,8 @@ export interface WatchState {
   /** profil utilisé pour l'indice de correspondance */
   profile?: MatchProfile
   profileAt?: number
+  /** annonces ajoutées à la main depuis leur lien */
+  manual?: FeedItem[]
   /** avis de Claude sur certaines annonces */
   reviews?: Record<string, JobReview>
   /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
@@ -364,5 +366,7 @@ export interface Feed {
   alerts?: number
   /** sites constatés en mode dégradé au dernier passage (nom d'hôte, date) */
   sources?: { degraded?: Record<string, string> }
+  /** salaires vus dans les annonces de l'année (repères par métier et région) */
+  salaryLog?: { id: string; at: string; title: string; location?: string; salary: string }[]
   items: FeedItem[]
 }

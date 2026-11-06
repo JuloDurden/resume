@@ -71,18 +71,21 @@ export function defaultTargets(alerts: Alert[], doc?: ResumeDoc): string[] {
 /* ---------- géolocalisation (geo.api.gouv.fr, mise en cache) ---------- */
 
 const GEO_KEY = 'resume-geo'
-let geoCache: Record<string, { lat: number; lon: number } | null> = {}
+export type GeoPoint = { lat: number; lon: number; reg?: string }
+let geoCache: Record<string, GeoPoint | null> = {}
 try {
   geoCache = JSON.parse(localStorage.getItem(GEO_KEY) ?? '{}')
 } catch {
   geoCache = {}
 }
 const pending = new Map<string, Promise<void>>()
+/** lieux introuvables pendant cette session (réseau) : pas de nouvel essai avant rechargement */
+const failed = new Set<string>()
 
 /** Nom de commune exploitable à partir d'un lieu d'annonce (« Montpellier (34) », « 34 - MONTPELLIER »...). */
 export function placeName(loc?: string): string | undefined {
   if (!loc) return undefined
-  if (/distance|t[ée]l[ée]travail|remote|^france$|occitanie|r[ée]gion/i.test(loc)) return undefined
+  if (/distance|t[ée]l[ée]travail|remote|^\s*france\s*$|^(occitanie|[iî]le-de-france|r[ée]gion)/i.test(loc)) return undefined
   const s = loc
     .replace(/\(.*?\)/g, ' ')
     .replace(/^\s*\d{2,3}\s*-\s*/, '')
@@ -94,29 +97,78 @@ export function placeName(loc?: string): string | undefined {
   return s.length > 1 ? s : undefined
 }
 
-export function geoOf(loc?: string): { lat: number; lon: number } | null | undefined {
+/** Département indiqué dans un lieu : « (92) », « 34 - Montpellier », « 33185 ». */
+export function deptOf(loc?: string): string | undefined {
+  if (!loc) return undefined
+  const m = /\((\d{2}|2[AB]|97\d)\)|^\s*(\d{2}|2[AB])\s*-|\b(\d{2})\d{3}\b/i.exec(loc)
+  return (m?.[1] ?? m?.[2] ?? m?.[3])?.toUpperCase()
+}
+
+/**
+ * Lieu indiqué dans le texte de l'annonce : « basé à La Défense (92) », « Localisation : Le Haillan (33) »,
+ * « Lieu de travail : Toulouse ». Utile quand le site n'affiche que « France » ou une région.
+ */
+export function textLocation(i: FeedItem): string | undefined {
+  const t = `${i.fullText ?? ''}\n${i.description ?? ''}`
+  const re =
+    /(?:[Bb]as[ée]e?s?\s+(?:à|a|au|sur|en|dans)|[Ll]ocalisation\s*:|[Ll]ieu\s+de\s+travail\s*:|[Ll]ieu\s*:|[Ll]ocalis[ée]e?\s+(?:à|a|au)|[Ss]itu[ée]e?\s+(?:à|a|au)|[Pp]oste\s+(?:situ[ée]\s+|bas[ée]\s+)?(?:à|a|sur))\s*(?:la ville de\s+)?((?:[A-ZÉÈÎÂ][\wÀ-ÿ'’-]*|de|du|des|la|le|les|sur|en|l['’])(?:[ \t-]+(?:[A-ZÉÈÎÂ][\wÀ-ÿ'’-]*|de|du|des|la|le|les|sur|en|l['’]))*(?:\s*\(\s*(?:\d{2,3}|2[AB])\s*\))?)/g
+  for (const m of t.matchAll(re)) {
+    const v = m[1].replace(/\s+(de|du|des|la|le|les|sur|en|l['’])$/i, '').trim()
+    if (v.length < 3 || /^(France|Remote|Télétravail|Paris et|Notre|Nos|Votre|Vous|Le|La|Les)$/i.test(v)) continue
+    return v
+  }
+  return undefined
+}
+
+/** Lieu à retenir : celui du site, sauf s'il est générique (« France », une région) et que le texte précise mieux. */
+export function locationOf(i: FeedItem): { loc?: string; fromText: boolean } {
+  if (placeName(i.location)) return { loc: i.location, fromText: false }
+  const t = textLocation(i)
+  return t ? { loc: t, fromText: true } : { loc: i.location, fromText: false }
+}
+
+export function geoOf(loc?: string): GeoPoint | null | undefined {
   const k = placeName(loc)
-  if (!k) return null
-  return geoCache[strip(k)]
+  const byName = k ? geoCache[strip(k)] : null
+  if (byName) return byName
+  // commune inconnue (« La Défense ») : centre de la principale commune du département
+  const d = deptOf(loc)
+  if (d) return geoCache[`dep:${d}`] ?? (byName === null ? undefined : byName)
+  return k ? byName : null
 }
 
 /** Géolocalise les lieux inconnus ; appelle onDone quand de nouvelles positions sont connues. */
 export function geocode(locs: (string | undefined)[], onDone: () => void) {
-  const todo = [...new Set(locs.map(placeName).filter((x): x is string => !!x))].filter((k) => !(strip(k) in geoCache) && !pending.has(strip(k))).slice(0, 40)
+  const names = [...new Set(locs.map(placeName).filter((x): x is string => !!x))].filter((k) => !(strip(k) in geoCache) && !pending.has(strip(k)) && !failed.has(strip(k)))
+  const depts = [...new Set(locs.map(deptOf).filter((x): x is string => !!x))].filter((d) => !(`dep:${d}` in geoCache) && !pending.has(`dep:${d}`) && !failed.has(`dep:${d}`))
+  const todo: [string, () => Promise<void>][] = [
+    ...names.slice(0, 40).map((name): [string, () => Promise<void>] => [
+      strip(name),
+      async () => {
+        const r = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(name)}&fields=centre,codeRegion&boost=population&limit=1`)
+        const c = ((await r.json()) as { centre?: { coordinates: [number, number] }; codeRegion?: string }[])[0]
+        geoCache[strip(name)] = c?.centre ? { lon: c.centre.coordinates[0], lat: c.centre.coordinates[1], reg: c.codeRegion } : null
+      },
+    ]),
+    ...depts.slice(0, 20).map((d): [string, () => Promise<void>] => [
+      `dep:${d}`,
+      async () => {
+        const r = await fetch(`https://geo.api.gouv.fr/departements/${d}/communes?fields=centre,population,codeRegion`)
+        const list = ((await r.json()) as { centre?: { coordinates: [number, number] }; population?: number; codeRegion?: string }[]).sort((a, b) => (b.population ?? 0) - (a.population ?? 0))
+        const c = list[0]
+        geoCache[`dep:${d}`] = c?.centre ? { lon: c.centre.coordinates[0], lat: c.centre.coordinates[1], reg: c.codeRegion } : null
+      },
+    ]),
+  ]
   if (!todo.length) return
-  const run = async (name: string) => {
-    try {
-      const r = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(name)}&fields=centre&boost=population&limit=1`)
-      const c = ((await r.json()) as { centre?: { coordinates: [number, number] } }[])[0]?.centre?.coordinates
-      geoCache[strip(name)] = c ? { lon: c[0], lat: c[1] } : null
-    } catch {
-      /* réessai à la prochaine ouverture */
-    }
-  }
   Promise.all(
-    todo.map((n) => {
-      const p = run(n).finally(() => pending.delete(strip(n)))
-      pending.set(strip(n), p)
+    todo.map(([k, run]) => {
+      const p = run()
+        .catch(() => {
+          failed.add(k) // réessai à la prochaine ouverture
+        })
+        .finally(() => pending.delete(k))
+      pending.set(k, p)
       return p
     }),
   ).then(() => {
@@ -128,6 +180,13 @@ export function geocode(locs: (string | undefined)[], onDone: () => void) {
     onDone()
   })
 }
+
+export const REGIONS: Record<string, string> = {
+  '11': 'Île-de-France', '24': 'Centre-Val de Loire', '27': 'Bourgogne-Franche-Comté', '28': 'Normandie', '32': 'Hauts-de-France', '44': 'Grand Est', '52': 'Pays de la Loire', '53': 'Bretagne', '75': 'Nouvelle-Aquitaine', '76': 'Occitanie', '84': 'Auvergne-Rhône-Alpes', '93': "Provence-Alpes-Côte d'Azur", '94': 'Corse',
+}
+
+/** Région d'une annonce (code INSEE), si son lieu est géolocalisé. */
+export const regionOf = (i: FeedItem) => geoOf(locationOf(i).loc)?.reg
 
 const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
   const r = Math.PI / 180
@@ -308,14 +367,18 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
   let place: MatchResult['place'] = { v: 0.6, label: i.location ?? 'Lieu non précisé' }
   let out: string | undefined
   const remote = remoteOf(i, text)
-  if (/distance|t[ée]l[ée]travail|remote/i.test(`${i.location ?? ''} ${i.worktime ?? ''}`)) place = { v: 0.85, label: 'Télétravail' }
+  const where = locationOf(i)
+  if (/distance|t[ée]l[ée]travail|remote/i.test(`${i.location ?? ''} ${i.worktime ?? ''}`) && !where.fromText) place = { v: 0.85, label: 'Télétravail' }
   else if (p.home) {
-    const g = geoOf(i.location)
+    const g = geoOf(where.loc)
     if (g) {
       const d = Math.round(km(p.home, g))
       const max = p.maxKm ?? 50
       place = { v: d <= 15 ? 1 : d <= 30 ? 0.85 : d <= max ? 0.6 : remote === 'full' ? 0.75 : remote === 'partial' ? 0.3 : 0, label: `${d} km${d > max && remote ? remote === 'full' ? ', télétravail complet' : ', télétravail partiel' : ''}` }
-      if (d > max && !remote) out = `À ${d} km, au-delà de votre périmètre de ${max} km, sans télétravail mentionné`
+      if (where.fromText) place.label += ` (${where.loc}, lu dans l'annonce)`
+      if (d > max && !remote) out = `À ${d} km${where.fromText ? ` (${where.loc}, lieu lu dans le texte)` : ''}, au-delà de votre périmètre de ${max} km, sans télétravail mentionné`
+      // hybride très loin : quelques jours sur site par semaine restent intenables
+      else if (d > max * 2 && remote === 'partial') out = `À ${d} km, en hybride : trop loin pour les jours sur site`
     }
   }
 
@@ -399,7 +462,7 @@ export function applyLearning(r: MatchResult, i: FeedItem, learned: Learned): Ma
 }
 
 /** Pour les tests : position connue d'une commune. */
-export const geocodeCacheForTests = (name: string, pos: { lat: number; lon: number }) => {
+export const geocodeCacheForTests = (name: string, pos: GeoPoint) => {
   geoCache[strip(name)] = pos
 }
 

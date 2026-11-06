@@ -42,7 +42,8 @@ describe('périmètre de recherche', () => {
     const far = matchItem(item({ title: 'Product Owner', location: 'Paris' }), pp)
     expect(far.score).toBe(0)
     expect(far.out).toBeTruthy()
-    expect(matchItem(item({ title: 'Product Owner', location: 'Paris', fullText: 'Poste en hybride, 2 jours de télétravail par semaine. '.repeat(8) }), pp).score).toBeGreaterThan(0)
+    // hybride à 600 km : intenable pour les jours sur site
+    expect(matchItem(item({ title: 'Product Owner', location: 'Paris', fullText: 'Poste en hybride, 2 jours de télétravail par semaine. '.repeat(8) }), pp).score).toBe(0)
     expect(matchItem(item({ title: 'Product Owner', location: 'Paris', worktime: 'À distance' }), pp).score).toBeGreaterThan(40)
     expect(matchItem(item({ title: 'Product Owner', location: 'Paris', fullText: 'Télétravail : Non. '.repeat(20) }), pp).score).toBe(0)
   })
@@ -74,5 +75,23 @@ describe("expérience demandée", () => {
     expect(t('Bac+3')).toBeUndefined()
     expect(t('Bac +5')?.required).toBe(5)
     expect(t('Bac+4')?.required).toBe(4)
+  })
+})
+
+describe('lieu lu dans le texte', () => {
+  it('trouve « basé à » et « Localisation : »', async () => {
+    const { textLocation, locationOf, deptOf } = await import('../lib/match')
+    expect(textLocation(item({ fullText: 'Poste à pourvoir dès que possible - CDI basé à La Défense (92). Vous rejoignez...' }))).toBe('La Défense (92)')
+    expect(textLocation(item({ fullText: 'Localisation : Le Haillan (33).' }))).toBe('Le Haillan (33)')
+    expect(textLocation(item({ fullText: 'Lieu de travail : Toulouse, avec 2 jours de télétravail.' }))).toBe('Toulouse')
+    expect(locationOf(item({ location: 'France', fullText: 'Poste basé à Lyon.' }))).toEqual({ loc: 'Lyon', fromText: true })
+    expect(locationOf(item({ location: 'Montpellier', fullText: 'Poste basé à Lyon.' })).loc).toBe('Montpellier')
+    expect(deptOf('La Défense (92)')).toBe('92')
+  })
+  it('écarte une offre parisienne affichée « France »', async () => {
+    const { geocodeCacheForTests } = await import('../lib/match')
+    geocodeCacheForTests('dep:92', { lat: 48.89, lon: 2.24 })
+    const m = matchItem(item({ title: 'Product Owner', location: 'France', fullText: 'Poste à pourvoir dès que possible - CDI basé à La Défense (92). '.repeat(5) }), { ...p, home: { lat: 43.53, lon: 3.86, nom: 'X' }, maxKm: 50 })
+    expect(m.score).toBe(0)
   })
 })

@@ -24,8 +24,15 @@ export function mergeWatch(a?: WatchState, b?: WatchState): WatchState | undefin
       reviews[id] = r
       reviewsChanged = true
     }
-  const same = newer === a && prof === a && !reviewsChanged && Object.keys(marks).length === Object.keys(a.marks).length && Object.entries(b.marks).every(([id, m]) => a.marks[id] && a.marks[id].at >= m.at)
-  return same ? a : { alerts: newer.alerts, alertsAt: newer.alertsAt, excludes: newer.excludes, profile: prof.profile, profileAt: prof.profileAt, reviews, marks }
+  const manual = [...(a.manual ?? [])]
+  let manualChanged = false
+  for (const m of b.manual ?? [])
+    if (!manual.some((x) => x.id === m.id)) {
+      manual.push(m)
+      manualChanged = true
+    }
+  const same = newer === a && prof === a && !reviewsChanged && !manualChanged && Object.keys(marks).length === Object.keys(a.marks).length && Object.entries(b.marks).every(([id, m]) => a.marks[id] && a.marks[id].at >= m.at)
+  return same ? a : { alerts: newer.alerts, alertsAt: newer.alertsAt, excludes: newer.excludes, profile: prof.profile, profileAt: prof.profileAt, reviews, manual, marks }
 }
 
 /** Durée de conservation des suppressions (pour qu'un appareil resté hors ligne ne fasse pas revenir un document supprimé). */

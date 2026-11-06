@@ -32,8 +32,23 @@ const notes = []
 const sources = { ...(prev.sources ?? {}) }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * Historique des salaires vus dans les annonces (un an), pour donner un repère par métier et par région
+ * même après la suppression des annonces. L'application lit et interprète ces extraits.
+ */
+function salaryLog(items) {
+  const year = Date.now() - 365 * 86400000
+  const log = new Map((prev.salaryLog ?? []).filter((e) => new Date(e.at).getTime() >= year).map((e) => [e.id, e]))
+  for (const i of items) {
+    const snippet = i.salary || /(?:salaire|r[ée]mun[ée]ration|package)[^\n]{0,140}/i.exec(i.fullText ?? '')?.[0]
+    if (!snippet || !/\d/.test(snippet) || log.has(i.id)) continue
+    log.set(i.id, { id: i.id, at: i.date ?? new Date().toISOString(), title: i.title, location: i.location, salary: snippet.slice(0, 160) })
+  }
+  return [...log.values()].slice(-3000)
+}
+
 async function save(status, items) {
-  const feed = { updatedAt: new Date().toISOString(), status, errors, notes, alerts: alerts.length, sources, items }
+  const feed = { updatedAt: new Date().toISOString(), status, errors, notes, alerts: alerts.length, sources, salaryLog: salaryLog(items), items }
   await writeFile('data/feed.json', JSON.stringify(feed, null, 1) + '\n')
   console.log(`${status} : ${items.length} annonce(s), ${errors.length} erreur(s)`)
   for (const e of [...notes, ...errors]) console.log(' -', e)
@@ -348,6 +363,10 @@ if (hasMail) {
   }
 }
 
+// annonces ajoutées à la main dans l'application : texte récupéré et lien vérifié comme les autres
+const MANUAL = 'manual'
+for (const m of watch.manual ?? []) if (m?.id && m.url) add({ ...m, alerts: undefined }, MANUAL)
+
 if (!alerts.length) notes.push('Aucune alerte active.')
 else {
   try {
@@ -387,7 +406,7 @@ else {
 
 const now = new Date().toISOString().slice(0, 10)
 const limit = Date.now() - KEEP_DAYS * 86400000
-const active = new Set([...alerts.map((a) => a.id), ...(hasMail ? [MAIL_ALERT] : [])])
+const active = new Set([...alerts.map((a) => a.id), MANUAL, ...(hasMail ? [MAIL_ALERT] : [])])
 // les annonces en favori ou en candidature restent, même si leur alerte a été supprimée
 const marked = (id) => ['fav', 'applied'].includes(watch.marks?.[id]?.s)
 // annonces supprimées depuis l'application : retirées définitivement de la liste

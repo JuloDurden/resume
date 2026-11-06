@@ -6,7 +6,7 @@ import { uid } from '../../lib/ids'
 import { groupJobs } from '../../lib/dedupe'
 import { compareSalary, fmtSalary, salaryBenchmarks, salaryOf, type Salary } from '../../lib/salary'
 import { redFlags, type RedFlag } from '../../lib/redflags'
-import { applyLearning, bestReference, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
+import { applyLearning, prefFor, bestReference, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
 import { ClaudeRankModal, MatchProfileModal } from './MatchTools'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -75,6 +75,12 @@ function ExcludeBar({ terms, onChange, count }: { terms: string[]; onChange: (t:
   )
 }
 
+/** Recherche web de l'offre (intitulé, entreprise, ville), quand le lien de l'email ne mène plus à l'annonce. */
+const findUrl = (i: FeedItem) => {
+  const title = i.title.replace(/\s*[(-]?\s*\b[hfHF]\s*\/\s*[hfHF](\s*\/\s*\w+)?\s*\)?/g, '').trim()
+  return `https://www.google.com/search?q=${encodeURIComponent([`"${title}"`, i.company, (i.location ?? '').replace(/\(.*?\)/g, '').trim(), 'emploi'].filter(Boolean).join(' '))}`
+}
+
 type SalaryInfo = { s: Salary; cmp?: ReturnType<typeof compareSalary> }
 
 function Insights({ salary, flags }: { salary?: SalaryInfo; flags: RedFlag[] }) {
@@ -131,7 +137,9 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
         ) : (
           <span className="na" title="Le texte complet de l'annonce n'est pas disponible">Compétences : texte indisponible</span>
         )}
-        <span className={m.level.kind === 'junior' ? 'ok' : m.level.kind === 'senior' ? 'no' : 'mid'}>{m.level.label}</span>
+        <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte)`}>
+          {m.level.label}
+        </span>
         <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'}>
           <MapPin size={12} /> {m.place.label}
         </span>
@@ -177,7 +185,7 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
   )
 }
 
-function JobCard({ item, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
+function JobCard({ item, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
   return (
@@ -252,6 +260,7 @@ function JobCard({ item, salary, flags, others, mark, onMark, alertNames, onAppl
           </span>
         ))}
       </div>
+      {degraded && <p className="jc-degraded">Le site {item.source.replace(' (alerte email)', '')} est en mode dégradé en ce moment : ses liens peuvent afficher « offre indisponible ». Réessayez plus tard ou utilisez « Retrouver ».</p>}
       {open && (
         <div className="jc-open">
           {match && <MatchDetails m={match} review={review} />}
@@ -278,8 +287,11 @@ function JobCard({ item, salary, flags, others, mark, onMark, alertNames, onAppl
         <button className="btn sm claude" onClick={onTailor} title="Crée la candidature et une copie de votre CV de référence, puis ouvre l'adaptation avec Claude">
           <Wand2 size={13} /> CV adapté
         </button>
-        <a className="btn sm" href={item.url} target="_blank" rel="noreferrer">
-          <ExternalLink size={13} /> Annonce
+        <a className="btn sm" href={item.url} target="_blank" rel="noreferrer" title={degraded ? 'Le site est en mode dégradé : le lien peut afficher « offre indisponible » sans que l\'offre soit supprimée' : undefined}>
+          <ExternalLink size={13} /> Annonce{degraded ? ' ⚠' : ''}
+        </a>
+        <a className="btn sm ghost" href={findUrl(item)} target="_blank" rel="noreferrer" title="Lien cassé ou annonce introuvable : retrouver l'offre ailleurs (site de l'employeur, autres sites d'emploi)">
+          <Search size={13} /> Retrouver
         </a>
         {(
           <button className="btn sm ghost" onClick={() => setOpen((o) => !o)}>
@@ -388,7 +400,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     const titles = new Map((feed?.items ?? []).map((i) => [i.id, i.title]))
     return learnFromMarks(Object.fromEntries(Object.entries(watch.marks).map(([id, m]) => [id, m.t ? m : { ...m, t: titles.get(id) }])))
   }, [watch.marks, feed])
-  const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchItem(i, profile), i, learned)])), [gitems, profile, geoTick, learned]) // eslint-disable-line react-hooks/exhaustive-deps
+  const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchItem(i, profile, prefFor(i, watch.alerts)), i, learned)])), [gitems, profile, geoTick, learned, watch.alerts]) // eslint-disable-line react-hooks/exhaustive-deps
   const reviews = watch.reviews ?? {}
   // repère de salaire : médiane des annonces reçues pour le même métier visé
   const familyOf = (i: FeedItem) => (matches[i.id] && matches[i.id].title.v >= 0.6 ? matches[i.id].title.target : undefined)
@@ -635,7 +647,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ) : shown.length ? (
             <div className="job-list">
               {shown.map((i) => (
-                <JobCard key={i.id} item={i} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                <JobCard key={i.id} item={i} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
               ))}
             </div>
           ) : (

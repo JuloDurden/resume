@@ -37,7 +37,9 @@ export function redFlags(i: FeedItem): RedFlag[] {
   }
   // annonce détaillée, mais sans un mot de salaire
   if (i.fullText && i.fullText.length > 800 && !salaryOf(i) && !/salaire|r[ée]mun[ée]ration|k€|€/i.test(i.fullText)) out.push({ label: 'Salaire non mentionné', level: 1 })
-  // texte complet très court : missions floues
-  if (i.fullText && i.fullText.length < 500) out.push({ label: 'Missions peu détaillées', level: 1 })
+  // annonce longue qui ne décrit jamais le poste : missions floues (un texte court ou absent n'est pas signalé,
+  // il vient souvent d'un site qui ne livre qu'un résumé)
+  if (i.fullText && i.fullText.length > 900 && !/missions?|responsabilit|vous (serez|aurez|devrez|prendrez|pilotez|piloterez|assurez|assurerez|g[ée]rez|g[ée]rerez|animez|animerez|participez|participerez|travaillez|travaillerez|interviendrez|accompagnez|accompagnerez|r[ée]digez|r[ée]digerez)|votre r[ôo]le|au quotidien|activit[ée]s principales|t[âa]ches/i.test(i.fullText))
+    out.push({ label: 'Missions floues', level: 1 })
   return out
 }

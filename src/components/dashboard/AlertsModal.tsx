@@ -59,6 +59,17 @@ function AlertCard({ alert, onChange, onDelete }: { alert: Alert; onChange: (p: 
         <Field label="Lieu">
           <CommuneInput alert={alert} onChange={onChange} />
         </Field>
+        <Field label="Niveau visé" hint="Sert à noter les annonces de ce métier.">
+          <Select
+            value={alert.level ?? 'any'}
+            onChange={(v) => onChange({ level: v })}
+            options={[
+              { value: 'junior', label: 'Junior ou débutant (2 ans max.)' },
+              { value: 'any', label: 'Tous niveaux' },
+              { value: 'senior', label: 'Confirmé ou management (pas de junior)' },
+            ]}
+          />
+        </Field>
         <Field label="Rayon">
           <Select value={alert.distance ?? 30} onChange={(v) => onChange({ distance: v })} options={[10, 20, 30, 50, 100].map((d) => ({ value: d, label: `${d} km` }))} />
         </Field>

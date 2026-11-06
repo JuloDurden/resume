@@ -282,6 +282,8 @@ export interface Alert {
   departement?: string
   contracts?: string[]
   active?: boolean
+  /** niveau visé : junior (0 à 2 ans), tous niveaux, ou confirmé / management */
+  level?: 'junior' | 'any' | 'senior'
 }
 
 export type MarkState = 'fav' | 'hidden' | 'applied' | 'deleted' | 'none'
@@ -360,5 +362,7 @@ export interface Feed {
   errors?: string[]
   notes?: string[]
   alerts?: number
+  /** sites constatés en mode dégradé au dernier passage (nom d'hôte, date) */
+  sources?: { degraded?: Record<string, string> }
   items: FeedItem[]
 }

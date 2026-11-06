@@ -12,7 +12,7 @@ const NEWSLETTER = [
 ]
 
 /** Change à chaque évolution de la lecture : les annonces des emails sont alors relues. */
-export const PARSER_VERSION = 5
+export const PARSER_VERSION = 6
 
 /** Expéditeurs d'alertes emploi. */
 export const SENDERS = [
@@ -94,7 +94,8 @@ function matchJob(url) {
     const id = m[1] ?? m[2]
     // lien sans identifiant stable (Jobijoba) : on garde le lien de redirection du site, sans le suivi de l'email
     const direct = /https:\/\/www\.jobijoba\.com\/fr\/mail_redirect\/\S+/.exec(u)?.[0]
-    return { site: p.site, id, url: p.url ? p.url(id) : (direct ?? url), stable: !!p.url }
+    // Jobijoba : on garde le lien d'origine de l'email (sa redirection directe expire vite)
+    return { site: p.site, id, url: p.url ? p.url(id) : url.replace(/&amp;/g, '&') || direct, stable: !!p.url }
   }
   return null
 }

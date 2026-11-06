@@ -3640,3 +3640,11 @@ button.followup-badge {
 .doc-card.reference {
   border-color: #f2d48a;
 }
+.jc-degraded {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12.5px;
+}

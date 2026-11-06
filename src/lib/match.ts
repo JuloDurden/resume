@@ -141,7 +141,7 @@ export interface MatchResult {
   score: number
   title: { v: number; target?: string }
   skills: { v: number; matched: string[]; total: number } | null
-  level: { v: number; label: string; kind: 'junior' | 'neutral' | 'mid' | 'senior' }
+  level: { v: number; label: string; kind: 'junior' | 'neutral' | 'mid' | 'senior'; quote?: string; pref: LevelPref }
   place: { v: number; label: string }
   degree?: { required: number; strict: boolean; factor: number }
   /** hors critères (note 0) : raison */
@@ -150,42 +150,133 @@ export interface MatchResult {
   learned?: number
 }
 
-const JUNIOR = /\bjunior\b|d[ée]butant|premi[eè]re exp[ée]rience|premier emploi|jeune(s)? dipl[oô]m|\bstages?\b|stagiaire|alternan|apprenti|sans exp[ée]rience|\b[01] [àa] [23] ans\b|reconversion/i
-const SENIOR = /\bsenior\b|\bsr\b|\bexpert(e)?\b|\bexp[ée]riment[ée](e)?\b|\bconfirm[ée](e)?\b|\blead\b|\bhead of\b|\bdirect(eur|rice|or)\b|\bprincipal\b|\bstaff\b|\bmanager de managers\b/i
+/** Niveau d'expérience recherché pour une alerte. */
+export type LevelPref = 'junior' | 'any' | 'senior'
 
-function levelOf(i: FeedItem, text: string): MatchResult['level'] {
-  const fl = i.facts?.level ?? ''
-  if (JUNIOR.test(i.title) || /premier emploi|d[ée]butant|stage/i.test(fl)) return { v: 1, label: 'Poste junior ou débutant accepté', kind: 'junior' }
-  if (SENIOR.test(i.title) || /directeur/i.test(fl)) return { v: 0.1, label: 'Poste senior', kind: 'senior' }
-  const years = [...text.matchAll(/(\d{1,2})\s*(?:\+\s*)?(?:à\s*\d+\s*)?(?:ans|années)\s*(?:minimum\s*)?(?:d['’]\s*|de\s+)?(?:exp[ée]rience|exp[ée]rience)/gi)].map((m) => Number(m[1])).filter((n) => n < 25)
-  const y = years.length ? Math.max(...years) : 0
-  if (JUNIOR.test(text) && y < 3) return { v: 0.95, label: 'Débutants acceptés', kind: 'junior' }
-  if (y >= 5) return { v: 0.15, label: `${y} ans d'expérience demandés`, kind: 'senior' }
-  if (y >= 3 || /confirm/i.test(fl) || SENIOR.test(text.slice(0, 1500))) return { v: 0.45, label: y ? `${y} ans d'expérience demandés` : 'Profil confirmé recherché', kind: 'mid' }
-  return { v: 0.65, label: 'Niveau non précisé', kind: 'neutral' }
+const NUMS: Record<string, number> = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, quinze: 15 }
+const N = String.raw`(\d{1,2}|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|quinze)`
+const toN = (x: string) => (/^\d+$/.test(x) ? Number(x) : NUMS[x] ?? NaN)
+
+export interface Experience {
+  /** années minimum demandées (0 = débutant accepté) */
+  min?: number
+  max?: number
+  kind: 'junior' | 'neutral' | 'mid' | 'senior'
+  label: string
+  /** extrait de l'annonce */
+  quote?: string
 }
 
+/**
+ * Expérience demandée : on cherche, phrase par phrase, « expérience » ou « expérimenté » et ce qui l'accompagne
+ * (« 3 à 5 ans », « au moins 2 années », « première expérience », « 5+ years »), plus junior, senior, débutant, confirmé.
+ */
+export function experienceOf(title: string, text: string, level?: string): Experience {
+  const t = strip(title)
+  if (/\b(junior|debutant|debutante|jr)\b|premier emploi|jeune diplome|\bstage\b|stagiaire|alternan|apprenti/.test(t)) return { min: 0, max: 2, kind: 'junior', label: 'Poste junior ou débutant' }
+  if (/\b(senior|sr|expert|experte|experimente|experimentee|confirme|confirmee|lead|principal|staff)\b|head of|\bdirect(eur|rice|or)\b/.test(t)) return { min: 5, kind: 'senior', label: 'Poste senior (intitulé)' }
+  const fl = strip(level ?? '')
+  if (/premier emploi|debutant|stage/.test(fl)) return { min: 0, max: 2, kind: 'junior', label: `LinkedIn : ${level}` }
+  if (/directeur|cadre dirigeant/.test(fl)) return { min: 8, kind: 'senior', label: `LinkedIn : ${level}` }
+
+  const sentences = strip(text).replace(/\s+/g, ' ').split(/(?<=[.!?;•\n])\s+|\s[-•]\s/)
+  let found: Experience | undefined
+  const keep = (e: Experience) => {
+    // on garde l'exigence la plus forte trouvée dans l'annonce
+    if (!found || (e.min ?? 0) > (found.min ?? 0) || (found.kind === 'neutral' && e.kind !== 'neutral')) found = e
+  }
+  for (const sRaw of sentences) {
+    if (!/experien|experiment|\bans\b|annees?|years?|junior|senior|debutant|confirme/.test(sRaw)) continue
+    const s = sRaw.slice(0, 400)
+    const q = sRaw.slice(0, 160)
+    const hasExp = /experien|experiment|years? of|years? experience|\bxp\b|pratique|anciennete/.test(s)
+    if (hasExp) {
+      const range = new RegExp(String.raw`\b${N}\s*(?:a|-|ou|/)\s*${N}\s*(?:ans|annees?|years?)`).exec(s)
+      const single = new RegExp(String.raw`(?:minimum|au moins|plus de|min\.?|>\s*)?\s*\b${N}\s*(\+)?\s*(?:ans|annees?|years?)(?:\s+minimum)?`).exec(s)
+      if (range) {
+        const a = toN(range[1])
+        const b2 = toN(range[2])
+        if (a < 25 && b2 < 30) keep({ min: a, max: b2, kind: a >= 5 ? 'senior' : a >= 3 ? 'mid' : 'junior', label: `${a} à ${b2} ans d'expérience`, quote: q })
+        continue
+      }
+      // « depuis 20 ans », « plus de 30 ans d'existence » : l'entreprise, pas le candidat
+      if (single && !/depuis|existence|cree|fond|histoire|leader|plus de \d+ ans d.experience dans (le|la|les) (secteur|domaine)/.test(s.slice(Math.max(0, single.index - 30), single.index + 40))) {
+        const n = toN(single[1])
+        if (n < 25) {
+          keep({ min: n, kind: n >= 5 ? 'senior' : n >= 3 ? 'mid' : 'junior', label: `${n}${single[2] ? '+' : ''} an${n > 1 ? 's' : ''} d'expérience minimum`, quote: q })
+          continue
+        }
+      }
+      if (/premiere experience|1ere experience|debutant|sans experience|aucune experience|jeune diplome|experience (n.est pas|non) (exigee|requise|obligatoire)|une experience (en|dans|sur|de) [^.]{0,40}(serait|est) un (plus|atout)/.test(s)) {
+        keep({ min: 0, max: 2, kind: 'junior', label: 'Première expérience ou débutant accepté', quote: q })
+        continue
+      }
+      if (/(deuxieme|seconde|2e|2eme) experience/.test(s)) {
+        keep({ min: 2, max: 3, kind: 'junior', label: 'Deuxième expérience', quote: q })
+        continue
+      }
+      if (/(solide|significative|longue|forte|confirmee|reussie de plusieurs|importante) experience|experience (solide|significative|confirmee|importante|averee)|experimente|profil (senior|confirme)/.test(s)) {
+        keep({ min: 4, kind: 'mid', label: 'Expérience significative demandée', quote: q })
+        continue
+      }
+    }
+    if (/\bjunior\b|debutants? (accepte|bienvenu)/.test(s)) keep({ min: 0, max: 2, kind: 'junior', label: 'Junior ou débutant accepté', quote: q })
+    else if (/\bsenior\b|profil confirme/.test(s)) keep({ min: 5, kind: 'senior', label: 'Profil senior recherché', quote: q })
+  }
+  return found ?? { kind: 'neutral', label: 'Expérience non précisée' }
+}
+
+/** Note du niveau selon ce que vous visez pour l'alerte : junior (0 à 2 ans), tous niveaux, ou confirmé / management. */
+export function levelScore(e: Experience, pref: LevelPref): number {
+  const min = e.min ?? (e.kind === 'neutral' ? undefined : 0)
+  if (pref === 'junior') {
+    if (e.kind === 'neutral') return 0.6
+    if ((min ?? 0) <= 2) return 1
+    if ((min ?? 0) <= 3) return 0.5
+    if ((min ?? 0) <= 4) return 0.3
+    return 0.1
+  }
+  if (pref === 'senior') {
+    if (e.kind === 'junior') return 0.1
+    if (e.kind === 'neutral') return 0.7
+    if ((min ?? 0) >= 5) return 1
+    return (min ?? 0) >= 3 ? 0.85 : 0.5
+  }
+  return e.kind === 'neutral' ? 0.7 : (min ?? 0) >= 8 ? 0.4 : 0.8
+}
+
+function levelOf(i: FeedItem, text: string, pref: LevelPref): MatchResult['level'] {
+  const e = experienceOf(i.title, text, i.facts?.level ?? i.experience)
+  return { v: levelScore(e, pref), label: e.label, kind: e.kind, quote: e.quote, pref }
+}
+
+/**
+ * Diplôme demandé. On tolère un niveau au-dessus du vôtre (bac+3 pour un bac+2) ; au-delà, la note baisse,
+ * fortement si l'exigence est ferme.
+ */
 function degreeOf(text: string, mine: number): MatchResult['degree'] {
   const t = strip(text)
   let req = 0
   let strict = false
-  for (const m of t.matchAll(/bac\s*\+\s*(\d)|\b(master|ingenieur|grande ecole|doctorat)\b/g)) {
-    const n = m[1] ? Number(m[1]) : m[2] === 'doctorat' ? 8 : 5
+  for (const m of t.matchAll(/bac\s*\+\s*(\d)(?:\s*(?:\/|a|ou|-)\s*\+?\s*(\d))?|\b(master|mba|ingenieur|grande ecole|doctorat|\bm2\b|niveau 7|rncp 7)\b/g)) {
+    const n = m[1] ? Number(m[1]) : m[3] === 'doctorat' ? 8 : 5
     if (n > 8) continue
-    const ctx = t.slice(Math.max(0, m.index! - 60), m.index! + 60)
+    const ctx = t.slice(Math.max(0, m.index! - 70), m.index! + 70)
     // « ingénieur » seul est souvent un intitulé, pas un diplôme demandé
-    if (m[2] === 'ingenieur' && !/diplom|ecole|formation/.test(ctx)) continue
-    if (!/exig|requis|obligatoire|minimum|imperati|indispensable|formation|diplom|titulaire|niveau|issu|cursus|vous avez|vous etes|profil/.test(ctx)) continue
+    if (m[3] === 'ingenieur' && !/diplom|ecole|formation/.test(ctx)) continue
+    if (!/exig|requis|obligatoire|minimum|imperati|indispensable|formation|diplom|titulaire|niveau|issu|cursus|vous avez|vous etes|profil|de type|souhait/.test(ctx)) continue
     if (n > req) {
       req = n
-      strict = /exig|requis|obligatoire|imperati|indispensable|minimum/.test(ctx) && !/ou equivalent|ou experience/.test(ctx)
+      strict = /exig|requis|obligatoire|imperati|indispensable|minimum/.test(ctx) && !/ou equivalent|ou experience|equivalence/.test(ctx)
     }
   }
-  if (!req || req <= mine) return undefined
-  return { required: req, strict, factor: strict ? 0.55 : 0.8 }
+  const ok = mine + 1
+  if (!req || req <= ok) return undefined
+  const gap = req - ok
+  return { required: req, strict, factor: strict ? (gap >= 2 ? 0.4 : 0.55) : gap >= 2 ? 0.6 : 0.75 }
 }
 
-export function matchItem(i: FeedItem, p: ProfileData): MatchResult {
+export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'): MatchResult {
   const body = [i.fullText ?? '', i.description ?? '', i.facts?.education ?? '', i.facts?.experience ?? '', i.facts?.skills ?? ''].join('\n')
   const text = `${i.title}\n${body}`
 
@@ -211,7 +302,7 @@ export function matchItem(i: FeedItem, p: ProfileData): MatchResult {
     skills = { v: Math.min(1, matched.length / Math.min(total, 8)), matched, total }
   }
 
-  const level = levelOf(i, text)
+  const level = levelOf(i, text, pref)
 
   // distance au domicile ; au-delà du périmètre, une offre en présentiel est hors critères
   let place: MatchResult['place'] = { v: 0.6, label: i.location ?? 'Lieu non précisé' }
@@ -232,7 +323,7 @@ export function matchItem(i: FeedItem, p: ProfileData): MatchResult {
 
   // sans texte complet, les compétences comptent pour une valeur moyenne : une annonce peu détaillée n'est pas avantagée
   const base = (title.v * 35 + (skills ? skills.v : 0.45) * 25 + level.v * 20 + place.v * 20) / 100
-  const score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * (level.kind === 'senior' ? 0.85 : 1))
+  const score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * (level.v <= 0.15 ? 0.85 : 1))
   return { score, title, skills, level, place, degree, out }
 }
 
@@ -310,6 +401,20 @@ export function applyLearning(r: MatchResult, i: FeedItem, learned: Learned): Ma
 /** Pour les tests : position connue d'une commune. */
 export const geocodeCacheForTests = (name: string, pos: { lat: number; lon: number }) => {
   geoCache[strip(name)] = pos
+}
+
+/** Niveau visé pour une annonce : celui de l'alerte qui l'a trouvée, ou de l'alerte dont un intitulé est le plus proche. */
+export function prefFor(i: FeedItem, alerts: Alert[]): LevelPref {
+  const direct = alerts.find((a) => i.alerts.includes(a.id) && a.level)
+  if (direct?.level) return direct.level
+  let best: { v: number; level: LevelPref } | undefined
+  for (const a of alerts)
+    for (const k of a.keywords.split(/,|;|\||\s+ou\s+/i)) {
+      if (!k.trim() || /^junior$/i.test(k.trim())) continue
+      const v = titleSimilarity(i.title, k)
+      if (v >= 0.5 && (!best || v > best.v)) best = { v, level: a.level ?? 'any' }
+    }
+  return best?.level ?? 'any'
 }
 
 /** Proximité de deux intitulés (0 à 1) : part des mots de b retrouvés dans a, synonymes compris. */

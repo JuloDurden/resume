@@ -26,6 +26,8 @@ const watch = await readJson('data/watch.json', {})
 const prev = await readJson('data/feed.json', { items: [] })
 const alerts = (watch.alerts ?? []).filter((a) => a.active !== false && (a.keywords ?? '').trim())
 const errors = []
+// sites constatés en mode dégradé lors de ce passage
+if (prev.sources?.degraded) delete prev.sources.degraded
 const notes = []
 const sources = { ...(prev.sources ?? {}) }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -486,6 +488,11 @@ async function inspect(i) {
     if (r.status === 404 || r.status === 410) return { online: false }
     if (!r.ok) return { online: undefined } // bloqué ou indisponible : on ne conclut pas
     const final = r.url
+    // site en mode dégradé (France Travail « secours ») : on ne conclut pas, l'offre existe peut-être encore
+    if (/secours|maintenance|indisponib/i.test(final)) {
+      sources.degraded = { ...(sources.degraded ?? {}), [new URL(i.url).hostname]: new Date().toISOString() }
+      return { online: undefined }
+    }
     // redirigé vers une page de recherche : l'annonce a disparu
     if (/choisirleservicepublic/.test(i.url) && !/offre-emploi/.test(final)) return { online: false }
     if (/hellowork/.test(i.url) && !/emplois\/\d+/.test(final)) return { online: false }
@@ -504,6 +511,15 @@ async function inspect(i) {
 
 {
   const day = Date.now() - 20 * 3600000
+  // sonde : France Travail renvoie-t-il vers son site de secours en ce moment ?
+  const ft = items.find((i) => /candidat\.francetravail\.fr\/offres/.test(i.url ?? ''))
+  if (ft)
+    try {
+      const r = await fetch(ft.url, { redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0 (veille Resume)' } })
+      if (/secours|maintenance/i.test(r.headers.get('location') ?? '')) sources.degraded = { ...(sources.degraded ?? {}), 'candidat.francetravail.fr': new Date().toISOString() }
+    } catch {
+      /* réseau : sans conclusion */
+    }
   // contrôle quotidien, et tout de suite pour les annonces dont on n'a pas encore le texte
   const todo = items
     .filter((i) => CHECKABLE.test(i.url ?? '') && !i.closed && (new Date(i.checkedAt ?? 0).getTime() < day || (!i.fullText && !i.textTried)))

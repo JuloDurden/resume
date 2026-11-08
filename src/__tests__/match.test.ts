@@ -95,3 +95,14 @@ describe('lieu lu dans le texte', () => {
     expect(m.score).toBe(0)
   })
 })
+
+describe('cas réels', () => {
+  it('Business Analyst Synanto : 5 ans demandés malgré « Premier emploi » sur LinkedIn', async () => {
+    const { experienceOf } = await import('../lib/match')
+    const text = 'PROFIL RECHERCHÉ\n\nVous disposez de minimum 5 ans d\'expérience sur un poste similaire.\n\nVous Maitrisez\n\n• les outils de gestion de projet (Jira, Confluence) ;\n\nNiveau hiérarchique : Premier emploi'
+    expect(experienceOf('Business Analyst', text, 'Premier emploi')).toMatchObject({ min: 5, kind: 'senior' })
+    const m = matchItem(item({ title: 'Business Analyst', fullText: text.repeat(3), facts: { level: 'Premier emploi' } }), p, 'junior')
+    expect(m.score).toBeLessThan(60)
+    expect(experienceOf('Business Analyst', 'Rejoignez-nous.', 'Premier emploi').kind).toBe('junior')
+  })
+})

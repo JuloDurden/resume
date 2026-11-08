@@ -234,9 +234,9 @@ export function experienceOf(title: string, text: string, level?: string): Exper
   const t = strip(title)
   if (/\b(junior|debutant|debutante|jr)\b|premier emploi|jeune diplome|\bstage\b|stagiaire|alternan|apprenti/.test(t)) return { min: 0, max: 2, kind: 'junior', label: 'Poste junior ou débutant' }
   if (/\b(senior|sr|expert|experte|experimente|experimentee|confirme|confirmee|lead|principal|staff)\b|head of|\bdirect(eur|rice|or)\b/.test(t)) return { min: 5, kind: 'senior', label: 'Poste senior (intitulé)' }
+  // le niveau affiché par le site (« Niveau hiérarchique : Premier emploi » sur LinkedIn) est souvent mal renseigné
+  // par le recruteur : il ne sert que si le texte ne dit rien de l'expérience demandée
   const fl = strip(level ?? '')
-  if (/premier emploi|debutant|stage/.test(fl)) return { min: 0, max: 2, kind: 'junior', label: `LinkedIn : ${level}` }
-  if (/directeur|cadre dirigeant/.test(fl)) return { min: 8, kind: 'senior', label: `LinkedIn : ${level}` }
 
   const sentences = strip(text).replace(/\s+/g, ' ').split(/(?<=[.!?;•\n])\s+|\s[-•]\s/)
   let found: Experience | undefined
@@ -282,7 +282,10 @@ export function experienceOf(title: string, text: string, level?: string): Exper
     if (/\bjunior\b|debutants? (accepte|bienvenu)/.test(s)) keep({ min: 0, max: 2, kind: 'junior', label: 'Junior ou débutant accepté', quote: q })
     else if (/\bsenior\b|profil confirme/.test(s)) keep({ min: 5, kind: 'senior', label: 'Profil senior recherché', quote: q })
   }
-  return found ?? { kind: 'neutral', label: 'Expérience non précisée' }
+  if (found) return found
+  if (/premier emploi|debutant|stage/.test(fl)) return { min: 0, max: 2, kind: 'junior', label: `Niveau indiqué par le site : ${level}` }
+  if (/directeur|cadre dirigeant/.test(fl)) return { min: 8, kind: 'senior', label: `Niveau indiqué par le site : ${level}` }
+  return { kind: 'neutral', label: 'Expérience non précisée' }
 }
 
 /** Note du niveau selon ce que vous visez pour l'alerte : junior (0 à 2 ans), tous niveaux, ou confirmé / management. */
@@ -386,7 +389,10 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
 
   // sans texte complet, les compétences comptent pour une valeur moyenne : une annonce peu détaillée n'est pas avantagée
   const base = (title.v * 35 + (skills ? skills.v : 0.45) * 25 + level.v * 20 + place.v * 20) / 100
-  const score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * (level.v <= 0.15 ? 0.85 : 1))
+  // niveau incompatible avec celui visé (5 ans demandés pour une recherche junior, poste junior pour une recherche
+  // confirmée) : la note baisse nettement, comme pour un diplôme exigé trop élevé
+  const levelFactor = level.v <= 0.15 ? 0.6 : level.v <= 0.35 ? 0.8 : 1
+  const score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * levelFactor)
   return { score, title, skills, level, place, degree, out }
 }
 

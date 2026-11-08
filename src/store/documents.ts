@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { del, get, set } from 'idb-keyval'
-import type { Alert, AnyDoc, FeedItem, JobReview, MarkState, MatchProfile, Offer, WatchState } from '../types'
+import type { Alert, AnyDoc, Company, FeedItem, JobReview, MarkState, MatchProfile, Offer, WatchState } from '../types'
 import { uid } from '../lib/ids'
 import { migrate } from '../lib/migrate'
 import { EMPTY_WATCH, differs, mergeData, type DataSet } from '../lib/merge'
@@ -48,6 +48,8 @@ export interface DocsState {
   setProfile: (p: MatchProfile) => void
   addReviews: (r: Record<string, JobReview>) => void
   addManual: (i: FeedItem) => void
+  setCompanies: (c: Company[]) => void
+  setText: (id: string, text: string) => void
   removeOffer: (id: string) => void
   /** Fusionne des données venues d'ailleurs (GitHub, autre onglet) sans jamais écraser une modification plus récente. Renvoie true si l'état local a changé. */
   mergeIn: (data: DataSet) => boolean
@@ -159,6 +161,14 @@ export const useDocs = create<DocsState>()(
           return { watch: { ...s.watch, marks } }
         }),
       setProfile: (profile) => setState((s) => ({ watch: { ...s.watch, profile, profileAt: Date.now() } })),
+      setCompanies: (companies) => setState((s) => ({ watch: { ...s.watch, companies, companiesAt: Date.now() } })),
+      setText: (id, text) =>
+        setState((s) => {
+          const texts = { ...(s.watch.texts ?? {}) }
+          if (text.trim()) texts[id] = text.trim().slice(0, 7000)
+          else delete texts[id]
+          return { watch: { ...s.watch, texts } }
+        }),
       addManual: (i) => setState((s) => ({ watch: { ...s.watch, manual: [...(s.watch.manual ?? []).filter((x) => x.id !== i.id), i] } })),
       addReviews: (r) => setState((s) => ({ watch: { ...s.watch, reviews: { ...(s.watch.reviews ?? {}), ...r } } })),
       setExcludes: (terms) => setState((s) => ({ watch: { ...s.watch, excludes: terms, alertsAt: Date.now() } })),

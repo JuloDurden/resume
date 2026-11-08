@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BellRing, Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
+import { Globe, BellRing, Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
 import type { ResumeDoc } from '../types'
 import { uid } from '../lib/ids'
 import { useDocs } from '../store/documents'
@@ -9,6 +9,7 @@ import { newLetter, newResume } from '../data/factory'
 import { download, parseBackup, toJson } from '../lib/export'
 import { DocThumb } from '../components/DocThumb'
 import { DocCard } from '../components/dashboard/DocCard'
+import { SitesView } from '../components/dashboard/SitesView'
 import { OffersView } from '../components/dashboard/OffersView'
 import { JobsView } from '../components/dashboard/JobsView'
 import { useFeed } from '../store/feed'
@@ -166,9 +167,9 @@ export default function Dashboard() {
   const lastBackup = useDocs((s) => s.lastBackup)
   const { importDocs, markBackup } = useDocs.getState()
   const [filter, setFilter] = useState<'all' | 'reference' | 'resume' | 'letter'>('all')
-  const [view, setView] = useState<'docs' | 'offers' | 'jobs'>(() => {
+  const [view, setView] = useState<'docs' | 'offers' | 'jobs' | 'sites'>(() => {
     const v = localStorage.getItem('resume-dash-view')
-    return v === 'offers' || v === 'jobs' ? v : 'docs'
+    return v === 'offers' || v === 'jobs' || v === 'sites' ? v : 'docs'
   })
   const newJobs = useFeed((s) => (s.feed?.items ?? []).filter((i) => i.firstSeen && new Date(i.firstSeen).getTime() > s.seenAt).length)
   const offersCount = useDocs((s) => Object.keys(s.offers).length)
@@ -279,9 +280,14 @@ export default function Dashboard() {
         <button className={view === 'jobs' ? 'on' : ''} onClick={() => setView('jobs')}>
           <BellRing size={16} /> Annonces {newJobs > 0 && view !== 'jobs' && <em className="badge-new">{newJobs}</em>}
         </button>
+        <button className={view === 'sites' ? 'on' : ''} onClick={() => setView('sites')}>
+          <Globe size={16} /> Sites et entreprises
+        </button>
       </div>
 
-      {view === 'jobs' ? (
+      {view === 'sites' ? (
+        <SitesView />
+      ) : view === 'jobs' ? (
         <JobsView onShowOffers={() => setView('offers')} />
       ) : view === 'offers' ? (
         <OffersView />

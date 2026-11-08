@@ -205,6 +205,8 @@ export interface MatchResult {
   degree?: { required: number; strict: boolean; factor: number }
   /** hors critères (note 0) : raison */
   out?: string
+  /** texte complet non lu : note plafonnée */
+  capped?: number
   /** ajustement selon vos choix passés */
   learned?: number
 }
@@ -392,8 +394,16 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
   // niveau incompatible avec celui visé (5 ans demandés pour une recherche junior, poste junior pour une recherche
   // confirmée) : la note baisse nettement, comme pour un diplôme exigé trop élevé
   const levelFactor = level.v <= 0.15 ? 0.6 : level.v <= 0.35 ? 0.8 : 1
-  const score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * levelFactor)
-  return { score, title, skills, level, place, degree, out }
+  let score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * levelFactor)
+  // sans le texte complet, ni l'expérience ni le diplôme demandés ne sont connus : la note est plafonnée
+  const CAP = 70
+  const hasText = (i.fullText?.length ?? 0) > 600 && !i.facts?.summaryOnly
+  let capped: number | undefined
+  if (!hasText && score > CAP) {
+    score = CAP
+    capped = CAP
+  }
+  return { score, title, skills, level, place, degree, out, capped }
 }
 
 const NO_REMOTE = /(pas de|sans|aucun)\s+t[ée]l[ée]travail|t[ée]l[ée]travail\s*:\s*(non|aucun|0|pas)|100\s*%\s*(sur site|pr[ée]sentiel)|full on.?site/i
@@ -464,7 +474,7 @@ export function applyLearning(r: MatchResult, i: FeedItem, learned: Learned): Ma
   if (!n) return r
   const adj = Math.round(12 * (sum / n))
   if (!adj) return r
-  return { ...r, score: Math.max(0, Math.min(100, r.score + adj)), learned: adj }
+  return { ...r, score: Math.max(0, Math.min(r.capped ?? 100, r.score + adj)), learned: adj }
 }
 
 /** Pour les tests : position connue d'une commune. */

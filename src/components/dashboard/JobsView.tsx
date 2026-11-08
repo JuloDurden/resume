@@ -12,7 +12,7 @@ import { AddJobModal } from './AddJobModal'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { useSync } from '../../store/sync'
-import { ago, offerFromItem, searchLinks } from '../../lib/watch'
+import { ago, offerFromItem } from '../../lib/watch'
 import { useRomeDrawer } from '../RomeDrawer'
 import { AlertsModal } from './AlertsModal'
 import { Modal, Segmented, toast } from '../ui'
@@ -171,10 +171,61 @@ function Insights({ salary, flags }: { salary?: SalaryInfo; flags: RedFlag[] }) 
   )
 }
 
+/** Coller le texte d'une annonce que le site ne fournit pas (France Travail, Glassdoor...) : la note est recalculée. */
+function PasteText({ item }: { item: FeedItem & { pasted?: boolean } }) {
+  const setText = useDocs((s) => s.setText)
+  const [open, setOpen] = useState(false)
+  const [v, setV] = useState('')
+  const short = !item.fullText || item.fullText.length < 600 || !!item.facts?.summaryOnly
+  if (!short && !item.pasted) return null
+  if (item.pasted && !open)
+    return (
+      <p className="muted small">
+        Texte collé par vous.{' '}
+        <button className="link" onClick={() => setText(item.id, '')}>
+          Retirer
+        </button>
+      </p>
+    )
+  return open ? (
+    <div className="paste-box">
+      <textarea className="input" rows={7} value={v} onChange={(e) => setV(e.target.value)} placeholder="Ouvrez l'annonce, copiez tout son texte (Ctrl+A, Ctrl+C) et collez-le ici." autoFocus />
+      <div className="row-gap">
+        <button
+          className="btn sm primary"
+          disabled={v.trim().length < 200}
+          onClick={() => {
+            setText(item.id, v)
+            setOpen(false)
+            toast.ok('Texte enregistré : note recalculée')
+          }}
+        >
+          Enregistrer le texte
+        </button>
+        <button className="btn sm ghost" onClick={() => setOpen(false)}>
+          Annuler
+        </button>
+      </div>
+    </div>
+  ) : (
+    <p className="muted small">
+      {item.fullText ? 'Seul un résumé de cette annonce a pu être lu.' : "Le site ne fournit pas le texte de cette annonce."}{' '}
+      <button className="link" onClick={() => setOpen(true)}>
+        Coller le texte de l'annonce
+      </button>
+    </p>
+  )
+}
+
 function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
   const pct = (v: number) => `${Math.round(v * 100)} %`
   return (
     <div className="match-details">
+      {!!m.capped && (
+        <p className="match-capped">
+          <AlertTriangle size={13} /> Texte complet de l'annonce non lu : expérience et diplôme demandés inconnus, note plafonnée à {m.capped}. Collez le texte ci-dessous pour une note juste.
+        </p>
+      )}
       {m.out && (
         <p className="match-out">
           <AlertTriangle size={13} /> Hors critères : {m.out}. Note ramenée à 0.
@@ -262,8 +313,9 @@ function JobCard({ item, degraded, salary, flags, others, mark, onMark, alertNam
           </span>
         )}
         {match && (
-          <button className={`match-badge ${scoreClass(match.score)}`} title="Indice de correspondance avec votre profil (détails)" onClick={() => setOpen((o) => !o)}>
+          <button className={`match-badge ${scoreClass(match.score)}${match.capped ? ' capped' : ''}`} title={match.capped ? `Note plafonnée à ${match.capped} : texte complet de l'annonce non lu (détails)` : 'Indice de correspondance avec votre profil (détails)'} onClick={() => setOpen((o) => !o)}>
             {match.score}
+            {match.capped ? '?' : ''}
           </button>
         )}
         <button className={`icon-btn${mark === 'fav' ? ' fav' : ''}`} title={mark === 'fav' ? 'Retirer des favoris' : 'Mettre en favori'} onClick={() => onMark(mark === 'fav' ? 'none' : 'fav')}>
@@ -339,7 +391,7 @@ function JobCard({ item, degraded, salary, flags, others, mark, onMark, alertNam
           ) : (
             item.description && <p className="jc-desc">{item.description}</p>
           )}
-          {!item.fullText && <p className="muted small">Texte complet non disponible pour ce site : ouvrez l'annonce pour la lire en entier.</p>}
+          <PasteText item={item} />
         </div>
       )}
       <div className="jc-actions">
@@ -448,8 +500,11 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const all = useMemo(() => {
     const fromFeed = feed?.items ?? []
     const ids = new Set(fromFeed.map((i) => i.id))
-    return [...(watch.manual ?? []).filter((m) => !ids.has(m.id)), ...fromFeed].filter((i) => watch.marks[i.id]?.s !== 'deleted')
-  }, [feed, watch.marks, watch.manual])
+    const texts = watch.texts ?? {}
+    return [...(watch.manual ?? []).filter((m) => !ids.has(m.id)), ...fromFeed]
+      .filter((i) => watch.marks[i.id]?.s !== 'deleted')
+      .map((i) => (texts[i.id] ? { ...i, fullText: texts[i.id], facts: { ...i.facts, summaryOnly: false }, pasted: true } : i))
+  }, [feed, watch.marks, watch.manual, watch.texts])
   // les termes exclus ne cachent pas les favoris ni les candidatures
   const kept = (i: FeedItem) => ['fav', 'applied'].includes(watch.marks[i.id]?.s ?? '')
   const unbanned = useMemo(() => all.filter((i) => kept(i) || !excluded(i, terms, true)), [all, terms, watch.marks]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -575,17 +630,6 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   }
 
   const noAlerts = !watch.alerts.length
-  // une ligne de liens par métier : chaque alerte, et chaque intitulé d'une alerte à plusieurs intitulés
-  const linkLines = (alert === 'all' || alert === 'email' ? watch.alerts : watch.alerts.filter((a) => a.id === alert))
-    .filter((a) => a.active !== false)
-    .flatMap((a) =>
-      a.keywords
-        .split(/,|;|\||\s+ou\s+/i)
-        .map((k) => k.trim())
-        .filter(Boolean)
-        .map((k) => ({ key: `${a.id}-${k}`, label: k, alert: { ...a, keywords: k } })),
-    )
-    .filter((l, i, arr) => arr.findIndex((x) => x.label.toLowerCase() === l.label.toLowerCase()) === i)
   return (
     <>
       <div className="jobs-head">
@@ -753,21 +797,6 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
             </div>
           )}
 
-          {linkLines.length > 0 && (
-            <div className="quick-links-block">
-              <span className="muted small">Chercher aussi sur les autres sites (une ligne par métier de vos alertes) :</span>
-              {linkLines.map(({ key, alert: a, label }) => (
-                <div key={key} className="quick-links">
-                  <span className="ql-name">{label}</span>
-                  {searchLinks(a).map((l) => (
-                    <a key={l.site} href={l.url} target="_blank" rel="noreferrer">
-                      {l.site} <ExternalLink size={11} />
-                    </a>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
       <AlertsModal open={settings} onClose={() => setSettings(false)} />

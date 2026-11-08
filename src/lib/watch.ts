@@ -4,6 +4,8 @@ import { newOffer } from './offers'
 import fetchScript from '../../veille/fetch.mjs?raw'
 import workflow from '../../veille/veille.yml?raw'
 import mailScript from '../../veille/mail.mjs?raw'
+import careerScript from '../../veille/career.mjs?raw'
+import browserScript from '../../veille/browser.mjs?raw'
 
 /** Types de contrat de l'API France Travail. */
 export const CONTRACTS: { value: string; label: string }[] = [
@@ -96,18 +98,20 @@ async function putFile(c: SyncConfig, path: string, content: string, message: st
 }
 
 /** Installe (ou met à jour) le script et la tâche programmée dans le dépôt de sauvegarde. */
-export async function installWatch(c: SyncConfig): Promise<boolean> {
-  const a = await putFile(c, 'veille/fetch.mjs', fetchScript, 'Veille : script de récupération des annonces')
-  const m = await putFile(c, 'veille/mail.mjs', mailScript, 'Veille : lecture des alertes email')
-  const b = await putFile(c, '.github/workflows/veille.yml', workflow, 'Veille : tâche programmée')
-  return a || m || b
-}
-
 const FILES: [string, string][] = [
   ['veille/fetch.mjs', fetchScript],
   ['veille/mail.mjs', mailScript],
+  ['veille/career.mjs', careerScript],
+  ['veille/browser.mjs', browserScript],
   ['.github/workflows/veille.yml', workflow],
 ]
+
+/** Installe ou met à jour les fichiers de la veille dans le dépôt privé (le workflow en dernier). */
+export async function installWatch(c: SyncConfig): Promise<boolean> {
+  let changed = false
+  for (const [path, content] of FILES) if (await putFile(c, path, content, `Veille : ${path}`)) changed = true
+  return changed
+}
 
 /** État de la tâche dans le dépôt : absente, ancienne version, ou à jour. */
 export async function watchStatus(c: SyncConfig): Promise<'missing' | 'outdated' | 'ok'> {

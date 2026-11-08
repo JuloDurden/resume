@@ -296,12 +296,27 @@ export interface WatchState {
   /** profil utilisé pour l'indice de correspondance */
   profile?: MatchProfile
   profileAt?: number
+  /** pages carrières d'entreprises lues par la veille */
+  companies?: Company[]
+  companiesAt?: number
+  /** texte d'annonce collé à la main (quand le site ne le fournit pas) */
+  texts?: Record<string, string>
   /** annonces ajoutées à la main depuis leur lien */
   manual?: FeedItem[]
   /** avis de Claude sur certaines annonces */
   reviews?: Record<string, JobReview>
   /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
   marks: Record<string, { s: MarkState; at: number; t?: string }>
+}
+
+export interface Company {
+  id: string
+  name: string
+  /** page carrières ou page d'un logiciel de recrutement (Lever, Greenhouse, SmartRecruiters...) */
+  url: string
+  /** toutes les offres, même hors de vos recherches */
+  all?: boolean
+  active?: boolean
 }
 
 export interface MatchProfile {
@@ -351,7 +366,7 @@ export interface FeedItem {
   /** texte complet de l'annonce, récupéré par la veille */
   fullText?: string
   textTried?: boolean
-  facts?: { education?: string; experience?: string; skills?: string; level?: string }
+  facts?: { education?: string; experience?: string; skills?: string; level?: string; summaryOnly?: boolean }
   url: string
   source: string
   contact?: { name?: string; email?: string }
@@ -365,7 +380,7 @@ export interface Feed {
   notes?: string[]
   alerts?: number
   /** sites constatés en mode dégradé au dernier passage (nom d'hôte, date) */
-  sources?: { degraded?: Record<string, string> }
+  sources?: { degraded?: Record<string, string>; companies?: Record<string, { at: string; url: string; jobs: number; kept: number; method: string; error?: string }> }
   /** salaires vus dans les annonces de l'année (repères par métier et région) */
   salaryLog?: { id: string; at: string; title: string; location?: string; salary: string }[]
   items: FeedItem[]

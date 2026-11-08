@@ -106,3 +106,13 @@ describe('cas réels', () => {
     expect(experienceOf('Business Analyst', 'Rejoignez-nous.', 'Premier emploi').kind).toBe('junior')
   })
 })
+
+describe('annonce sans texte', () => {
+  it('plafonne la note à 70', () => {
+    const m = matchItem(item({ title: 'Product Owner junior', location: 'Montpellier' }), p, 'junior')
+    expect(m.score).toBeLessThanOrEqual(70)
+    expect(m.capped).toBe(70)
+    const full = matchItem(item({ title: 'Product Owner junior', fullText: 'Vous gérez le backlog dans Jira, animez les rituels Scrum et le recueil des besoins. Première expérience acceptée. '.repeat(8) }), p, 'junior')
+    expect(full.capped).toBeUndefined()
+  })
+})

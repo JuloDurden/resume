@@ -40,8 +40,8 @@ const cityKey = (l?: string) =>
 /** Les sigles d'entreprise s'écrivent souvent en entier ailleurs (« LEA » et « LEA Recrutement »). */
 const sameCompany = (a: string, b: string) => !!a && !!b && (a === b || a.startsWith(`${b} `) || b.startsWith(`${a} `) || a.replace(/ /g, '') === b.replace(/ /g, ''))
 
-/** Annonce la plus riche en premier : texte complet, puis description, puis date la plus ancienne. */
-const richness = (i: FeedItem) => (i.fullText ? 4 : 0) + (i.description && i.description.length > 120 ? 2 : 0) + (i.salary ? 1 : 0) + (i.contract ? 0.5 : 0)
+/** Annonce la plus riche en premier : site de l'entreprise, texte complet, puis description, puis date la plus ancienne. */
+const richness = (i: FeedItem) => (i.source.startsWith('Site de ') ? 10 : 0) + (i.fullText ? 4 : 0) + (i.description && i.description.length > 120 ? 2 : 0) + (i.salary ? 1 : 0) + (i.contract ? 0.5 : 0)
 
 export function groupJobs(items: FeedItem[]): JobGroup[] {
   const groups: { members: FeedItem[]; title: string; companies: string[]; city: string }[] = []

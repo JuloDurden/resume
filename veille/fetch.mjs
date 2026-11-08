@@ -344,9 +344,10 @@ let fetched = 0
 const MAIL_ALERT = 'email'
 const add = (item, alertId) => {
   fetched++
+  const ids = [alertId].flat()
   const cur = known.get(item.id)
-  if (cur) Object.assign(cur, item, { alerts: [...new Set([...(cur.alerts ?? []), alertId])], firstSeen: cur.firstSeen })
-  else known.set(item.id, { ...item, alerts: [alertId], firstSeen: new Date().toISOString() })
+  if (cur) Object.assign(cur, item, { alerts: [...new Set([...(cur.alerts ?? []), ...ids])], firstSeen: cur.firstSeen })
+  else known.set(item.id, { ...item, alerts: ids, firstSeen: new Date().toISOString() })
 }
 
 const hasMail = !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
@@ -366,6 +367,24 @@ if (hasMail) {
 // annonces ajoutées à la main dans l'application : texte récupéré et lien vérifié comme les autres
 const MANUAL = 'manual'
 for (const m of watch.manual ?? []) if (m?.id && m.url) add({ ...m, alerts: undefined }, MANUAL)
+
+// pages carrières des entreprises suivies
+const companies = (watch.companies ?? []).filter((c) => c?.url && c.active !== false)
+if (companies.length) {
+  try {
+    const { readCareers } = await import('./career.mjs')
+    // une offre est retenue si son intitulé contient au moins 60 % des mots d'un des intitulés d'une alerte
+    const groupsOf = alerts.map((a) => ({ id: a.id, groups: variants(a.keywords).map((v) => [...new Set(words(v).map((w) => (w.length <= 3 ? w : stem(w))))]).filter((g) => g.length) }))
+    const keep = (title) => {
+      const tw = words(title)
+      const has = (s) => tw.some((w) => (s.length <= 3 ? w === s : w.startsWith(s)))
+      return groupsOf.filter((a) => a.groups.some((g) => g.filter(has).length >= Math.max(1, Math.ceil(g.length * 0.6)))).map((a) => a.id)
+    }
+    await readCareers({ companies, keep, add, notes, sources, prevStatus: prev.sources?.companies })
+  } catch (e) {
+    errors.push(`Pages carrières : ${e.message}`)
+  }
+}
 
 if (!alerts.length) notes.push('Aucune alerte active.')
 else {
@@ -406,13 +425,16 @@ else {
 
 const now = new Date().toISOString().slice(0, 10)
 const limit = Date.now() - KEEP_DAYS * 86400000
-const active = new Set([...alerts.map((a) => a.id), MANUAL, ...(hasMail ? [MAIL_ALERT] : [])])
+const active = new Set([...alerts.map((a) => a.id), MANUAL, 'company', ...(hasMail ? [MAIL_ALERT] : [])])
+const companyIds = new Set((watch.companies ?? []).map((c) => c.id))
 // les annonces en favori ou en candidature restent, même si leur alerte a été supprimée
 const marked = (id) => ['fav', 'applied'].includes(watch.marks?.[id]?.s)
 // annonces supprimées depuis l'application : retirées définitivement de la liste
 const removed = (id) => watch.marks?.[id]?.s === 'deleted'
 const items = [...known.values()]
   .filter((i) => !removed(i.id))
+  // entreprise retirée de la liste : ses offres disparaissent
+  .filter((i) => !i.id.startsWith('co-') || [...companyIds].some((id) => i.id.startsWith(`co-${id}-`)))
   .map((i) => ({ ...i, alerts: (i.alerts ?? []).filter((x) => active.has(x)) }))
   .filter((i) => (i.alerts.length || marked(i.id)) && (i.until ? i.until >= now : new Date(i.date ?? i.firstSeen).getTime() >= limit))
   .sort((x, y) => (y.date ?? '').localeCompare(x.date ?? ''))
@@ -422,7 +444,9 @@ const items = [...known.values()]
 
 // Signes qu'une annonce n'est plus en ligne, par site (vérification une fois par jour et par annonce).
 const GONE = /n['’]est plus (disponible|en ligne|active|accessible)|n['’]existe plus|a été (pourvue|supprimée|retirée|clôturée)|offre (expirée|clôturée|pourvue|dépubliée)|plus d['’]acceptation de candidatures|n['’]accepte plus de candidatures|no longer accepting applications|this job is no longer available|page (introuvable|non trouvée)/i
-const CHECKABLE = /choisirleservicepublic|francetravail|hellowork|linkedin|welcometothejungle|cadremploi/
+const CHECKABLE = /choisirleservicepublic|francetravail|hellowork|linkedin|welcometothejungle|cadremploi|jobijoba|apec\.fr|^https:\/\/(?!.*glassdoor)/
+// pages construites par script : affichées par un navigateur pour en lire le texte
+const RENDERED = /francetravail|jobijoba|apec\.fr|welcometothejungle/
 
 /* ---------- texte complet des annonces ---------- */
 
@@ -488,7 +512,10 @@ async function extractText(url, html) {
       // France Travail : le détail est chargé par script, seule la description courte (meta) est servie
       if (!out.length && /francetravail/.test(url)) {
         const meta = root.querySelector('meta[name=description]')?.getAttribute('content')
-        if (meta) out.push(decodeHtml(meta))
+        if (meta) {
+          out.push(decodeHtml(meta))
+          facts.summaryOnly = true
+        }
       }
     } catch {
       /* module absent : pas d'extraction */
@@ -499,7 +526,32 @@ async function extractText(url, html) {
 }
 
 /** Vérifie que l'annonce est en ligne et récupère son texte. online : true, false ou undefined (inconnu). */
+/** Texte absent, ou simple résumé (France Travail) : on essaie encore, au plus 4 fois. */
+const needsText = (i) => (!i.fullText || i.facts?.summaryOnly) && (i.textTries ?? 0) < 4
+
+/** Vérification et lecture avec un navigateur (sites construits par script). undefined : navigateur indisponible. */
+async function inspectRendered(i) {
+  const { render } = await import('./browser.mjs')
+  const r = await render(i.url)
+  if (!r) return undefined
+  if (r.status === 404 || r.status === 410) return { online: false }
+  if (/secours|maintenance/i.test(r.url) || /service indisponible/i.test(r.text.slice(0, 3000))) {
+    sources.degraded = { ...(sources.degraded ?? {}), [new URL(i.url).hostname]: new Date().toISOString() }
+    return { online: undefined }
+  }
+  if (/francetravail/.test(i.url) && !/detail/.test(r.url)) return { online: false }
+  const visible = r.html.slice(0, 800000).replace(/<(form|script|style|select|label|template|noscript)\b[\s\S]*?<\/\1>/gi, ' ')
+  const online = !GONE.test(visible)
+  if (!online) return { online }
+  const x = await extractText(r.url, r.html)
+  return { online, ...x, rendered: true }
+}
+
 async function inspect(i) {
+  if (RENDERED.test(i.url)) {
+    const r = await inspectRendered(i).catch(() => undefined)
+    if (r) return r
+  }
   const ctl = new AbortController()
   const t = setTimeout(() => ctl.abort(), 12000)
   try {
@@ -520,7 +572,7 @@ async function inspect(i) {
     // on ignore les formulaires (ex. « signaler une offre : l'offre n'existe plus »), scripts et styles
     const visible = raw.slice(0, 600000).replace(/<(form|script|style|select|label|template|noscript)\b[\s\S]*?<\/\1>/gi, ' ')
     const online = !GONE.test(visible)
-    return { online, ...(online && !i.fullText ? await extractText(i.url, raw) : {}) }
+    return { online, ...(online && needsText(i) ? await extractText(i.url, raw) : {}) }
   } catch {
     return { online: undefined }
   } finally {
@@ -541,7 +593,7 @@ async function inspect(i) {
     }
   // contrôle quotidien, et tout de suite pour les annonces dont on n'a pas encore le texte
   const todo = items
-    .filter((i) => CHECKABLE.test(i.url ?? '') && !i.closed && (new Date(i.checkedAt ?? 0).getTime() < day || (!i.fullText && !i.textTried)))
+    .filter((i) => CHECKABLE.test(i.url ?? '') && !i.closed && (new Date(i.checkedAt ?? 0).getTime() < day || (needsText(i) && new Date(i.checkedAt ?? 0).getTime() < Date.now() - 2.5 * 3600000)))
     .slice(0, 150)
   let gone = 0
   let texts = 0
@@ -556,19 +608,26 @@ async function inspect(i) {
           gone++
           return
         }
-        if (!i.fullText) {
+        if (needsText(i)) {
           i.textTried = true
-          if (r.text) {
+          i.textTries = (i.textTries ?? 0) + 1
+          // un texte complet remplace un résumé, jamais l'inverse
+          if (r.text && (!i.fullText || !r.facts?.summaryOnly)) {
             i.fullText = r.text
+            i.facts = r.facts && Object.values(r.facts).some(Boolean) ? r.facts : undefined
             texts++
           }
-          if (r.facts && Object.values(r.facts).some(Boolean)) i.facts = r.facts
         }
       }),
     )
     if (/linkedin/.test(todo[k]?.url ?? '')) await sleep(300)
   }
   if (todo.length) notes.push(`Vérification : ${todo.length} lien(s) contrôlé(s), ${gone} annonce(s) retirée(s), ${texts} texte(s) complet(s) récupéré(s).`)
+}
+{
+  const { closeBrowser, renders } = await import('./browser.mjs')
+  if (renders()) notes.push(`Navigateur : ${renders()} page(s) affichée(s).`)
+  await closeBrowser()
 }
 // les annonces retirées ne restent que si elles sont en favori ou en candidature (signalées « expirée »)
 for (let k = items.length - 1; k >= 0; k--) if (items[k].closed && !marked(items[k].id)) items.splice(k, 1)

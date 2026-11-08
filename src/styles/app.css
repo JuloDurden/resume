@@ -3670,3 +3670,108 @@ button.followup-badge {
 .exclude-bar > .btn {
   margin-left: auto;
 }
+.match-badge.capped {
+  outline: 1.5px dashed currentColor;
+  outline-offset: -3px;
+}
+.match-capped {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12.5px;
+}
+.match-capped svg {
+  flex: none;
+  margin-top: 2px;
+}
+.paste-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.paste-box textarea {
+  width: 100%;
+  font-size: 13px;
+}
+.sites-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sites-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sites-card h3 {
+  margin: 0;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sites-card .quick-links {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.company-add {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 10px;
+  align-items: end;
+}
+.company-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.company-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.company-row.off {
+  opacity: 0.55;
+}
+.cr-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.cr-main a {
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.cr-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ok);
+}
+.cr-status.err {
+  color: var(--error);
+}
+.ok-text {
+  color: var(--ok);
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .company-add {
+    grid-template-columns: 1fr;
+  }
+}

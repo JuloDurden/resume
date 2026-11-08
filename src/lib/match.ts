@@ -19,6 +19,11 @@ const SYN: Record<string, string> = {
   operationnel: 'operation', operationnelle: 'operation', operations: 'operation', ops: 'operation',
   transformation: 'transformation', amoa: 'moa', moa: 'moa',
 }
+/** Mots de métier : présents dans l'intitulé mais absents de vos métiers visés, ils signalent un autre métier. */
+const DOMAIN = new Set(
+  ['marketing', 'commercial', 'commerciale', 'sales', 'vente', 'vendeur', 'business developer', 'data', 'developpeur', 'developer', 'developpement', 'ingenieur', 'engineer', 'technicien', 'comptable', 'comptabilite', 'finance', 'financier', 'juridique', 'juriste', 'achat', 'achats', 'logistique', 'communication', 'design', 'designer', 'artist', 'artiste', 'graphiste', 'qa', 'test', 'devops', 'reseau', 'reseaux', 'securite', 'cybersecurite', 'infrastructure', 'rh', 'recrutement', 'paie', 'community', 'social', 'immobilier', 'chantier', 'travaux', 'production', 'industriel', 'maintenance', 'animation', 'audio', 'level', 'game'].map((w) => SYN[w] ?? stem(w)),
+)
+
 const IGNORE = /^(h|f|x|nb|ng|hf|fh|cdi|cdd|de|la|le|les|des|du|en|et|a|au|aux|un|une|pour|chez)$/
 
 const words = (s: string) =>
@@ -90,6 +95,7 @@ export function placeName(loc?: string): string | undefined {
     .replace(/\(.*?\)/g, ' ')
     .replace(/^\s*\d{2,3}\s*-\s*/, '')
     .replace(/,.*$/, '')
+    .replace(/\s+-\s+(france|belgique|suisse|luxembourg)\b.*$/i, '')
     .replace(/\bville de\s+/i, '')
     .replace(/\bcedex\b.*$/i, '')
     .replace(/\d{5}/g, ' ')
@@ -198,7 +204,7 @@ const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) =>
 
 export interface MatchResult {
   score: number
-  title: { v: number; target?: string }
+  title: { v: number; target?: string; other?: string }
   skills: { v: number; matched: string[]; total: number } | null
   level: { v: number; label: string; kind: 'junior' | 'neutral' | 'mid' | 'senior'; quote?: string; pref: LevelPref }
   place: { v: number; label: string }
@@ -347,20 +353,28 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
   // intitulé : part des mots du métier visé retrouvés dans le titre
   const tw = canonSet(i.title)
   let title: MatchResult['title'] = { v: 0 }
+  // mots qui changent de métier (« Product Marketing Manager » n'est pas « Product Manager »)
+  const targetWords = new Set(p.targets.flatMap((t) => [...canonSet(t)]))
+  const otherDomain = words(i.title).find((w) => canon(w).some((c) => DOMAIN.has(c) && !targetWords.has(c)))
   for (const t of p.targets) {
     const w = [...canonSet(t)]
     if (!w.length) continue
-    const v = w.filter((x) => tw.has(x)).length / w.length
-    if (v > title.v) title = { v, target: t }
+    let v = w.filter((x) => tw.has(x)).length / w.length
+    if (otherDomain) v *= 0.5
+    if (v > title.v) title = { v, target: t, other: otherDomain }
   }
 
   // compétences : seulement si l'annonce a un vrai texte
   let skills: MatchResult['skills'] = null
   if (body.trim().length > 250 && p.skills.length) {
     const hay = canonSet(text)
+    const seq = ` ${words(text).flatMap(canon).join(' ')} `
     const matched = p.skills.filter((s) => {
-      const w = [...canonSet(s)]
-      return w.length && w.filter((x) => hay.has(x)).length / w.length >= 0.6
+      const w = words(s).flatMap(canon)
+      if (!w.length) return false
+      // compétence en plusieurs mots (« Google AI Professional », « gestion de projet ») : l'expression entière, mots dans l'ordre
+      if (w.length >= 2) return seq.includes(` ${w.join(' ')} `)
+      return hay.has(w[0])
     })
     const total = p.skills.length
     skills = { v: Math.min(1, matched.length / Math.min(total, 8)), matched, total }

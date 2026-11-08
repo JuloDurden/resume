@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
-import type { FeedItem, JobReview, MarkState, ResumeDoc } from '../../types'
+import { Link2, Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import type { FeedItem, JobReview, MarkState, Offer, ResumeDoc } from '../../types'
 import { useNavigate } from 'react-router-dom'
 import { uid } from '../../lib/ids'
-import { groupJobs } from '../../lib/dedupe'
+import { companyKey, groupJobs, titleKey } from '../../lib/dedupe'
+import { JOB_STATUS } from '../../lib/jobs'
 import { benchFor, compareSalary, fmtK, fmtSalary, salaryBenchmarks, salaryOf, type Salary, type SalaryBench } from '../../lib/salary'
 import { redFlags, type RedFlag } from '../../lib/redflags'
 import { applyLearning, titleSimilarity, locationOf, regionOf, REGIONS, prefFor, bestReference, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
@@ -171,6 +172,41 @@ function Insights({ salary, flags }: { salary?: SalaryInfo; flags: RedFlag[] }) 
   )
 }
 
+/** Rattacher l'annonce à une candidature déjà créée (offres triées par proximité avec l'annonce). */
+function LinkPicker({ offers, item, onPick }: { offers: Offer[]; item: FeedItem; onPick: (o: Offer) => void }) {
+  const [open, setOpen] = useState(false)
+  const sorted = useMemo(
+    () => [...offers].sort((a, b) => Number(companyKey(b.company) === companyKey(item.company)) - Number(companyKey(a.company) === companyKey(item.company)) || titleSimilarity(item.title, b.title ?? '') - titleSimilarity(item.title, a.title ?? '')),
+    [offers, item],
+  )
+  return (
+    <span className="link-picker">
+      <button className="btn sm ghost" onClick={() => setOpen((o) => !o)} title="Vous avez déjà postulé : rattacher cette annonce à la candidature existante">
+        <Link2 size={13} /> Déjà postulé
+      </button>
+      {open && (
+        <div className="menu link-menu">
+          {sorted.slice(0, 12).map((o) => (
+            <button
+              key={o.id}
+              className="menu-item"
+              onClick={() => {
+                setOpen(false)
+                onPick(o)
+              }}
+            >
+              <strong>{o.title ?? 'Sans titre'}</strong>
+              <span className="muted small">
+                {o.company ?? ''} · {JOB_STATUS[o.status ?? 'todo']}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  )
+}
+
 /** Coller le texte d'une annonce que le site ne fournit pas (France Travail, Glassdoor...) : la note est recalculée. */
 function PasteText({ item }: { item: FeedItem & { pasted?: boolean } }) {
   const setText = useDocs((s) => s.setText)
@@ -235,6 +271,7 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
         <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
           <Target size={12} /> Intitulé {pct(m.title.v)}
           {m.title.target && m.title.v > 0 ? ` (${m.title.target})` : ''}
+          {m.title.other ? `, autre métier : « ${m.title.other} »` : ''}
         </span>
         {m.skills ? (
           <span className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}>
@@ -291,7 +328,7 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
   )
 }
 
-function JobCard({ item, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
+function JobCard({ item, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
   return (
@@ -395,13 +432,25 @@ function JobCard({ item, degraded, salary, flags, others, mark, onMark, alertNam
         </div>
       )}
       <div className="jc-actions">
-        {mark === 'applied' ? (
+        {linked?.sure ? (
+          <span className="applied-badge" title={linked.offer.title}>
+            Candidature : {JOB_STATUS[linked.offer.status ?? 'todo'].toLowerCase()}
+          </span>
+        ) : linked ? (
+          <span className="link-suggest">
+            Déjà une candidature « {linked.offer.title} » ?{' '}
+            <button className="btn sm" onClick={() => onLink(linked.offer)}>
+              <Link2 size={13} /> Rattacher
+            </button>
+          </span>
+        ) : mark === 'applied' ? (
           <span className="applied-badge">Candidature créée</span>
         ) : (
           <button className="btn sm primary" onClick={onApply}>
             Créer la candidature
           </button>
         )}
+        {!linked?.sure && mark !== 'applied' && offers.length > 0 && <LinkPicker offers={offers} item={item} onPick={onLink} />}
         <button className="btn sm claude" onClick={onTailor} title="Crée la candidature et une copie de votre CV de référence, puis ouvre l'adaptation avec Claude">
           <Wand2 size={13} /> CV adapté
         </button>
@@ -454,6 +503,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const markSeen = useFeed((s) => s.markSeen)
   const watch = useDocs((s) => s.watch)
   const saveOffer = useDocs((s) => s.saveOffer)
+  const offers = useDocs((s) => s.offers)
   const addDoc = useDocs((s) => s.add)
   const navigate = useNavigate()
   const markMany = useDocs((s) => s.markMany)
@@ -557,7 +607,32 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const flagsOf = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, redFlags(i)])), [gitems])
   const rank = (i: FeedItem) => reviews[i.id]?.score ?? matches[i.id]?.score ?? 0
   // onglet de chaque annonce : son marquage, ou « hors critères » (note 0) si elle n'est pas encore triée
+  // candidature déjà créée pour cette annonce : liée (veille, rattachement manuel) ou même poste chez la même entreprise
+  const offersList = useMemo(() => Object.values(offers), [offers])
+  const linkedOffer = useMemo(() => {
+    const map: Record<string, { offer: Offer; sure: boolean }> = {}
+    for (const g of groups) {
+      const ids = g.members.map((m) => m.id)
+      const sure = offersList.find((o) => (o.sourceId && ids.includes(o.sourceId)) || o.jobIds?.some((x) => ids.includes(x)))
+      if (sure) {
+        map[g.id] = { offer: sure, sure: true }
+        continue
+      }
+      const ck = companyKey(g.item.company)
+      const tk = titleKey(g.item.title)
+      const same = (o: Offer) => { const oc = companyKey(o.company); return !!oc && (oc === ck || oc.startsWith(`${ck} `) || ck.startsWith(`${oc} `)) }
+      const exact = ck ? offersList.find((o) => same(o) && titleKey(o.title ?? '') === tk) : undefined
+      if (exact) {
+        map[g.id] = { offer: exact, sure: true }
+        continue
+      }
+      const guess = ck ? offersList.find((o) => same(o) && titleSimilarity(g.item.title, o.title ?? '') >= 0.6 && titleSimilarity(o.title ?? '', g.item.title) >= 0.6) : undefined
+      if (guess) map[g.id] = { offer: guess, sure: false }
+    }
+    return map
+  }, [groups, offersList])
   const tabOf = (id: string): Filter => {
+    if (linkedOffer[id]?.sure) return 'applied'
     const m = markOf(id)
     if (m === 'none') return matches[id]?.out ? 'out' : 'new'
     return m as Filter
@@ -604,12 +679,19 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   /** Candidature de l'annonce (créée une seule fois, même si l'annonce existe sur plusieurs sites). */
   const offerFor = (i: FeedItem) => {
     const ids = expand([i.id])
-    const existing = Object.values(useDocs.getState().offers).find((o) => o.sourceId && ids.includes(o.sourceId))
+    const existing = Object.values(useDocs.getState().offers).find((o) => (o.sourceId && ids.includes(o.sourceId)) || o.jobIds?.some((x) => ids.includes(x)))
     if (existing) return existing
     const o = offerFromItem(i)
     saveOffer(o)
     markGroup([i.id], 'applied')
     return o
+  }
+  /** Rattache l'annonce (et ses doublons) à une candidature existante. */
+  const linkTo = (i: FeedItem, o: Offer) => {
+    const ids = expand([i.id])
+    saveOffer({ ...o, jobIds: [...new Set([...(o.jobIds ?? []), ...ids])], description: o.description || i.fullText || i.description, url: o.url || i.url })
+    markGroup([i.id], 'applied')
+    toast.ok(`Annonce rattachée à votre candidature « ${o.title ?? o.company ?? ''} »`)
   }
   const apply = (i: FeedItem) => {
     offerFor(i)
@@ -788,7 +870,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ) : shown.length ? (
             <div className="job-list">
               {shown.map((i) => (
-                <JobCard key={i.id} item={i} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                <JobCard key={i.id} item={i} linked={linkedOffer[i.id]} offers={offersList} onLink={(o) => linkTo(i, o)} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
               ))}
             </div>
           ) : (

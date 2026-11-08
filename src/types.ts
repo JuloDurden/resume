@@ -188,6 +188,8 @@ export interface Offer extends JobTarget {
   followUps?: number[]
   /** relances désactivées pour cette offre */
   noFollowUp?: boolean
+  /** annonces de la veille rattachées à cette candidature */
+  jobIds?: string[]
   /** préparation d'entretien rédigée par Claude */
   interview?: InterviewPrep
 }

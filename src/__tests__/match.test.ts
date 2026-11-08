@@ -116,3 +116,21 @@ describe('annonce sans texte', () => {
     expect(full.capped).toBeUndefined()
   })
 })
+
+describe('intitulé et compétences', () => {
+  it("un autre métier dans l'intitulé divise la note d'intitulé", () => {
+    const pp = { ...p, targets: ['Product Manager', 'Product Owner'] }
+    const m = matchItem(item({ title: 'Product Marketing Manager W/M/NB' }), pp)
+    expect(m.title.v).toBe(0.5)
+    expect(m.title.other).toBe('marketing')
+    expect(matchItem(item({ title: 'Product Manager H/F' }), pp).title.v).toBe(1)
+  })
+  it('une compétence en plusieurs mots doit apparaître en entier', () => {
+    const pp = { ...p, skills: ['Google AI Professional', 'Jira', 'gestion de projet'] }
+    const text = 'Professional services company using Google Workspace and AI tools. Jira daily. '.repeat(6)
+    const m = matchItem(item({ title: 'Product Owner', fullText: text }), pp)
+    expect(m.skills?.matched).toEqual(['Jira'])
+    const m2 = matchItem(item({ title: 'Product Owner', fullText: 'Vous assurez la gestion de projet et la certification Google AI Professional est un plus. '.repeat(6) }), pp)
+    expect(m2.skills?.matched).toEqual(['Google AI Professional', 'gestion de projet'])
+  })
+})

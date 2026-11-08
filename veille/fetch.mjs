@@ -477,7 +477,7 @@ async function extractText(url, html) {
   for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     let data
     try {
-      data = JSON.parse(m[1])
+      data = JSON.parse(m[1].replace(/[\u0000-\u001f]+/g, ' '))
     } catch {
       continue
     }

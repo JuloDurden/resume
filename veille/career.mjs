@@ -8,6 +8,8 @@ import { render } from './browser.mjs'
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36'
 const EVERY_H = 6
+/** version de la lecture : changer pour relire toutes les pages carrières au prochain passage */
+const CAREER_V = 2
 const MAX_DETAILS = 30
 const hash = (s) => createHash('sha1').update(s).digest('hex').slice(0, 12)
 
@@ -135,7 +137,12 @@ const ATS = [
       const xml = await r.text()
       return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(([, it]) => {
         const tag = (n) => decode(new RegExp(`<${n}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${n}>`).exec(it)?.[1] ?? '')
-        return { title: tag('title'), url: tag('link'), date: tag('pubDate') ? new Date(tag('pubDate')).toISOString() : undefined, location: tag('tt:location') || tag('location'), text: htmlText(tag('description')) }
+        // lieu : <tt:location><tt:city>Montpellier</tt:city><tt:zip>34000</tt:zip>...</tt:location>
+        const loc = tag('tt:location')
+        const sub = (n) => new RegExp(`<tt:${n}>([^<]*)</tt:${n}>`).exec(loc)?.[1]?.trim()
+        const city = sub('city') || sub('name')
+        const zip = sub('zip')
+        return { title: tag('title'), url: tag('link'), date: tag('pubDate') ? new Date(tag('pubDate')).toISOString() : undefined, location: city ? `${city}${zip ? ` (${zip.slice(0, 2)})` : ''}` : htmlText(loc) || undefined, text: htmlText(tag('description')) }
       })
     },
   },
@@ -156,6 +163,21 @@ const POSTING = (href) => {
     return false
   }
 }
+/** Contenu principal d'une page (sans menus, en-tête ni pied de page). */
+async function mainText(html) {
+  try {
+    const { parse } = await import('node-html-parser')
+    const root = parse(html)
+    root.querySelectorAll('script,style,noscript,nav,header,footer,aside,form,[role=navigation],[class*=cookie],[id*=cookie],[class*=menu],[class*=breadcrumb]').forEach((e) => e.remove())
+    const cands = root.querySelectorAll('article,main,[class*=job],[class*=offre],[class*=offer],[class*=annonce],[class*=description],[class*=content],[id*=content]')
+    const best = cands.map((e) => ({ e, n: e.structuredText.length })).sort((a, b) => b.n - a.n)[0]
+    const el = best && best.n > 300 ? best.e : root.querySelector('body') ?? root
+    return el.structuredText.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 7000)
+  } catch {
+    return htmlText(html)
+  }
+}
+
 /** Page d'offre sans données structurées : on vérifie qu'elle ressemble à une annonce. */
 const LOOKS_LIKE_JOB = /(profil recherch|vos missions|missions principales|description du poste|le poste|type de contrat|\bCDI\b|\bCDD\b|job description|responsibilities|requirements|qualifications)/i
 const NOT_JOB = /linkedin|facebook|twitter|x\.com|instagram|youtube|glassdoor|indeed\.|mailto:|tel:|\.pdf$|politique|privacy|cookie|mentions|login|connexion|signup|inscription|spontan/i
@@ -164,7 +186,8 @@ const NAV_TEXT = /^(voir|en savoir|d[ée]couvr|postuler|candidater|toutes? les|n
 function jobPosting(html) {
   for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
-      const d = JSON.parse(m[1])
+      // certains sites laissent des retours à la ligne bruts dans les chaînes : JSON tolérant
+      const d = JSON.parse(m[1].replace(/[\u0000-\u001f]+/g, ' '))
       const list = [d, ...(Array.isArray(d) ? d : []), ...(d?.['@graph'] ?? [])].flat()
       const jp = list.find((x) => x && (x['@type'] === 'JobPosting' || (Array.isArray(x['@type']) && x['@type'].includes('JobPosting'))))
       if (jp) return jp
@@ -180,6 +203,7 @@ function fromPosting(jp, url) {
   const place = typeof loc === 'string' ? loc : [loc?.addressLocality, loc?.postalCode ? `(${String(loc.postalCode).slice(0, 2)})` : ''].filter(Boolean).join(' ')
   const sal = jp.baseSalary?.value
   return {
+    employer: typeof jp.hiringOrganization === 'string' ? jp.hiringOrganization : jp.hiringOrganization?.name,
     title: htmlText(jp.title ?? jp.name ?? ''),
     location: place || undefined,
     contract: [jp.employmentType].flat().filter(Boolean).join(', ') || undefined,
@@ -249,11 +273,11 @@ export async function readCareers({ companies, keep, add, notes, sources, prevSt
   for (const c of companies) {
     if (!c?.url || !c.id) continue
     const last = status[c.id]
-    if (last?.at && last.url === c.url && last.all === !!c.all && Date.now() - new Date(last.at).getTime() < EVERY_H * 3600000 && !last.error) {
+    if (last?.at && last.v === CAREER_V && last.url === c.url && last.all === !!c.all && Date.now() - new Date(last.at).getTime() < EVERY_H * 3600000 && !last.error) {
       // lu récemment : les offres déjà connues restent dans la liste
       continue
     }
-    const st = { at: new Date().toISOString(), url: c.url, all: !!c.all, jobs: 0, kept: 0, method: '' }
+    const st = { at: new Date().toISOString(), v: CAREER_V, url: c.url, all: !!c.all, jobs: 0, kept: 0, method: '' }
     try {
       const ats = ATS.find((a) => a.re.test(c.url))
       let offers = []
@@ -282,16 +306,16 @@ export async function readCareers({ companies, keep, add, notes, sources, prevSt
           details++
           const p = await page(o.url)
           let jp = jobPosting(p.html)
-          let textFallback = ''
-          if (!jp) {
+          let textFallback = p.html ? await mainText(p.html) : ''
+          if (!jp && textFallback.length < 400) {
             const r = await render(o.url)
             if (r) {
               jp = jobPosting(r.html)
-              textFallback = r.text
+              textFallback = await mainText(r.html)
             }
           }
-          if (!jp && !LOOKS_LIKE_JOB.test(textFallback || htmlText(p.html))) continue
-          Object.assign(o, jp ? fromPosting(jp, o.url) : { text: (textFallback || htmlText(p.html)).slice(0, 7000) })
+          if (!jp && !LOOKS_LIKE_JOB.test(textFallback)) continue
+          Object.assign(o, jp ? fromPosting(jp, o.url) : { text: textFallback })
           alertIds = keep(o.title ?? '')
           if (!c.all && !alertIds.length) continue
         } else if (o.detail && !o.text && details < MAX_DETAILS) {
@@ -305,7 +329,8 @@ export async function readCareers({ companies, keep, add, notes, sources, prevSt
           {
             id: `co-${c.id}-${hash(o.url)}`,
             title: o.title,
-            company: c.name,
+            // site d'annonces (AFJV...) : l'employeur réel est indiqué dans l'offre
+            company: o.employer && o.employer.toLowerCase() !== c.name.toLowerCase() ? o.employer : c.name,
             location: o.location || undefined,
             contract: o.contract || undefined,
             salary: o.salary || undefined,

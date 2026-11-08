@@ -22,7 +22,7 @@ export const titleKey = (t: string) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
 
-const companyKey = (c?: string) =>
+export const companyKey = (c?: string) =>
   strip(c ?? '')
     .replace(/\d[.,]\d\s*★/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')

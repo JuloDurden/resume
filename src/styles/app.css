@@ -3800,3 +3800,148 @@ button.followup-badge {
   border-radius: 10px;
   padding: 3px 4px 3px 10px;
 }
+.match-chips .track {
+  background: #eef0fb;
+  color: #3730a3;
+}
+.badge-track {
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.8;
+  text-transform: none;
+}
+.btn.xs {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  gap: 4px;
+}
+.profile-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.track-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.track-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.track-card:hover {
+  border-color: #c7cbe8;
+  background: #fafbff;
+}
+.track-parcours {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.track-parcours ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.exp-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.exp-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.exp-tracks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.track-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink-3);
+}
+.track-toggle.on {
+  background: #eef0fb;
+  border-color: #c7cbe8;
+  color: #3730a3;
+  font-weight: 600;
+}
+.exp-rome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rome-pick .rome-hits {
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 4px;
+}
+.rome-pick .menu-item {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rome-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fafafa;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.rome-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rome-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.rome-pill {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.rome-pill.key {
+  border-color: #c7cbe8;
+}
+.rome-pill.on {
+  background: #3730a3;
+  border-color: #3730a3;
+  color: #fff;
+}

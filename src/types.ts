@@ -331,6 +331,32 @@ export interface MatchProfile {
   home?: { nom: string; lat: number; lon: number }
   /** périmètre de recherche en km : au-delà, une offre sans télétravail a la note 0 */
   maxKm?: number
+  /** profils de recherche (IT junior, management confirmé...) : chaque annonce est notée face à chacun, la meilleure note l'emporte */
+  tracks?: MatchTrack[]
+  /** parcours : chaque expérience des CV (clé entreprise|année de début) rattachée à un métier ROME, ses compétences et ses profils */
+  experiences?: Record<string, ExperienceLink>
+}
+
+export interface MatchTrack {
+  id: string
+  name: string
+  targets: string[]
+  /** niveau visé dans ce profil (sinon celui de l'alerte) */
+  level?: 'junior' | 'any' | 'senior'
+  /** CV de référence de ce profil (compétences, CV adapté) */
+  cvId?: string
+  /** compétences ajoutées à la main */
+  skills?: string[]
+}
+
+export interface ExperienceLink {
+  /** code ROME du métier exercé */
+  rome?: string
+  romeLabel?: string
+  /** savoir-faire ROME retenus pour cette expérience */
+  skills?: string[]
+  /** profils de recherche auxquels cette expérience compte (années d'expérience, compétences) */
+  tracks?: string[]
 }
 
 export interface JobReview {

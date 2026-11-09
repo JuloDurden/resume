@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedItem } from '../types'
-import { matchItem, placeName } from '../lib/match'
+import { levelScore, matchBest, matchItem, placeName } from '../lib/match'
+import { trackYears } from '../lib/tracks'
 
 const p = { targets: ['Product Owner', 'Chef de projet digital', 'Business Analyst'], skills: ['Jira', 'Agile', 'Scrum', 'Recueil des besoins', 'Power BI'], degree: 2 }
 const item = (o: Partial<FeedItem>): FeedItem => ({ id: 'x', alerts: [], title: '', url: '', source: '', ...o })
@@ -132,5 +133,37 @@ describe('intitulé et compétences', () => {
     expect(m.skills?.matched).toEqual(['Jira'])
     const m2 = matchItem(item({ title: 'Product Owner', fullText: 'Vous assurez la gestion de projet et la certification Google AI Professional est un plus. '.repeat(6) }), pp)
     expect(m2.skills?.matched).toEqual(['Google AI Professional', 'gestion de projet'])
+  })
+})
+
+describe('profils de recherche', () => {
+  const tracks = [
+    { id: 'it', name: 'IT', targets: ['Product Owner'], skills: ['Jira'], romeSkills: [], level: 'junior' as const, years: 1 },
+    { id: 'mg', name: 'Management', targets: ["Responsable d'exploitation"], skills: [], romeSkills: ['Encadrer et coordonner une équipe', 'Définir les plannings et congés de ses équipes'], level: 'senior' as const, years: 18 },
+  ]
+  const text = "Vous encadrez une équipe de 25 agents terrain et organisez les plannings des équipes. Expérience significative dans l'encadrement d'équipes opérationnelles. ".repeat(6)
+  it("note l'annonce avec le profil qui lui correspond le mieux", () => {
+    const m = matchBest(item({ title: "Responsable d'exploitation H/F", fullText: text }), { ...p, tracks })
+    expect(m.track?.id).toBe('mg')
+    expect(m.score).toBeGreaterThanOrEqual(70)
+    expect(m.skills?.matched).toContain('Encadrer et coordonner une équipe')
+    expect(m.skills?.matched).toContain('Définir les plannings et congés de ses équipes')
+    const po = matchBest(item({ title: 'Product Owner junior', fullText: 'Gestion du backlog dans Jira, première expérience acceptée. '.repeat(15) }), { ...p, tracks })
+    expect(po.track?.id).toBe('it')
+  })
+  it("baisse la note quand l'expérience demandée dépasse nettement la vôtre", () => {
+    const e = { min: 5, kind: 'senior' as const, label: '' }
+    expect(levelScore(e, 'any', 1)).toBeLessThan(0.4)
+    expect(levelScore(e, 'senior', 18)).toBe(1)
+  })
+  it("compte les années d'un profil sans doubler les périodes communes", () => {
+    const pool = [
+      { key: 'a|2007', title: 'A', company: 'a', start: { year: 2007, month: 1 }, end: { year: 2025, month: 12 }, months: 0 },
+      { key: 'b|2002', title: 'B', company: 'b', start: { year: 2002, month: 5 }, end: { year: 2007, month: 1 }, months: 0 },
+      { key: 'c|2010', title: 'C', company: 'c', start: { year: 2010 }, end: { year: 2011 }, months: 0 },
+    ]
+    const links = { 'a|2007': { tracks: ['mg'] }, 'b|2002': { tracks: ['mg'] }, 'c|2010': { tracks: ['mg'] } }
+    expect(trackYears('mg', pool, links)).toBeCloseTo(23.7, 0)
+    expect(trackYears('it', pool, links)).toBe(0)
   })
 })

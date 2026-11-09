@@ -1,6 +1,7 @@
 // Indice de correspondance entre une annonce et le profil (CV de référence + métiers visés).
 // Calcul local, sans service externe : intitulé, compétences, niveau du poste, distance, diplôme demandé.
 import type { Alert, FeedItem, MatchProfile, ResumeDoc } from '../types'
+import { experiencePool, trackRomeSkills, trackYears } from './tracks'
 import { stem, strip } from './ats'
 import { STOPWORDS } from './stopwords'
 
@@ -39,15 +40,42 @@ function canon(w: string): string[] {
   return [SYN[w] ?? stem(w)]
 }
 const canonSet = (s: string) => new Set(words(s).flatMap(canon))
+/** forme courte d'un mot (« encadrez », « encadrer », « encadrement ») pour les savoir-faire ROME */
+const short = (w: string) => w.slice(0, 5)
+/** mots d'un savoir-faire (sans la liste des mots vides des annonces, qui écarte « équipe ») */
+const romeWords = (s: string) =>
+  strip(s ?? '')
+    .replace(/['’]/g, ' ')
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 3 && !WEAK.has(w))
+/** mots trop vagues pour signaler un savoir-faire */
+const WEAK = new Set(['assurer', 'mettre', 'oeuvre', 'realiser', 'effectuer', 'participer', 'veiller', 'definir', 'suivre', 'suivi', 'gerer', 'gestion', 'ensemble', 'activite', 'activites', 'operations', 'selon', 'aupres', 'afin', 'cadre', 'dans', 'leurs', 'avec', 'pour', 'leur', 'tous', 'toutes', 'votre', 'vous', 'nous', 'notre', 'sont', 'etre', 'avoir', 'plus', 'tout', 'entre', 'sous', 'vers', 'chez', 'ainsi', 'aussi', 'cette', 'elle', 'elles'])
 
 /* ---------- profil ---------- */
 
 export interface ProfileData {
   targets: string[]
   skills: string[]
+  /** savoir-faire ROME du parcours (phrases longues, retrouvées par leurs mots principaux) */
+  romeSkills?: string[]
+  /** années d'expérience dans ce domaine */
+  years?: number
   degree: number
   home?: { lat: number; lon: number; nom: string }
   maxKm?: number
+  /** profils de recherche ; absent : un seul profil */
+  tracks?: TrackData[]
+}
+
+export interface TrackData {
+  id: string
+  name: string
+  targets: string[]
+  skills: string[]
+  romeSkills: string[]
+  level?: LevelPref
+  years: number
+  cv?: ResumeDoc
 }
 
 /** Compétences du CV, découpées en éléments courts (« Microsoft 365 - SharePoint » donne deux compétences). */
@@ -215,6 +243,8 @@ export interface MatchResult {
   capped?: number
   /** ajustement selon vos choix passés */
   learned?: number
+  /** profil de recherche qui donne la meilleure note */
+  track?: { id: string; name: string }
 }
 
 /** Niveau d'expérience recherché pour une alerte. */
@@ -297,8 +327,10 @@ export function experienceOf(title: string, text: string, level?: string): Exper
 }
 
 /** Note du niveau selon ce que vous visez pour l'alerte : junior (0 à 2 ans), tous niveaux, ou confirmé / management. */
-export function levelScore(e: Experience, pref: LevelPref): number {
+export function levelScore(e: Experience, pref: LevelPref, years?: number): number {
   const min = e.min ?? (e.kind === 'neutral' ? undefined : 0)
+  // expérience demandée bien au-delà de la vôtre dans ce domaine
+  if (pref !== 'junior' && years !== undefined && min !== undefined && min > years + 2) return min > years + 4 ? 0.15 : 0.35
   if (pref === 'junior') {
     if (e.kind === 'neutral') return 0.6
     if ((min ?? 0) <= 2) return 1
@@ -315,9 +347,9 @@ export function levelScore(e: Experience, pref: LevelPref): number {
   return e.kind === 'neutral' ? 0.7 : (min ?? 0) >= 8 ? 0.4 : 0.8
 }
 
-function levelOf(i: FeedItem, text: string, pref: LevelPref): MatchResult['level'] {
+function levelOf(i: FeedItem, text: string, pref: LevelPref, years?: number): MatchResult['level'] {
   const e = experienceOf(i.title, text, i.facts?.level ?? i.experience)
-  return { v: levelScore(e, pref), label: e.label, kind: e.kind, quote: e.quote, pref }
+  return { v: levelScore(e, pref, years), label: e.label, kind: e.kind, quote: e.quote, pref }
 }
 
 /**
@@ -359,14 +391,18 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
   for (const t of p.targets) {
     const w = [...canonSet(t)]
     if (!w.length) continue
-    let v = w.filter((x) => tw.has(x)).length / w.length
+    const hit = w.filter((x) => tw.has(x))
+    let v = hit.length / w.length
+    // seul « responsable / manager / chef / lead » en commun : n'importe quel encadrement, pas forcément le métier
+    if (hit.length && hit.every((x) => x === 'chef')) v = Math.min(v, 0.4)
     if (otherDomain) v *= 0.5
     if (v > title.v) title = { v, target: t, other: otherDomain }
   }
 
   // compétences : seulement si l'annonce a un vrai texte
   let skills: MatchResult['skills'] = null
-  if (body.trim().length > 250 && p.skills.length) {
+  const rome = p.romeSkills ?? []
+  if (body.trim().length > 250 && (p.skills.length || rome.length)) {
     const hay = canonSet(text)
     const seq = ` ${words(text).flatMap(canon).join(' ')} `
     const matched = p.skills.filter((s) => {
@@ -376,11 +412,24 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
       if (w.length >= 2) return seq.includes(` ${w.join(' ')} `)
       return hay.has(w[0])
     })
-    const total = p.skills.length
+    // savoir-faire ROME (« Encadrer et coordonner une équipe ») : les deux tiers de ses mots principaux dans une même phrase
+    const sentences = strip(text)
+      .split(/[.!?;•\n]+|\s[-–]\s/)
+      .map((x) => new Set(romeWords(x).map(short)))
+      .filter((x) => x.size)
+    const mine = new Set(matched.map(strip))
+    for (const r of rome) {
+      if (mine.has(strip(r))) continue
+      const k = [...new Set(romeWords(r).map(short))]
+      if (k.length < 2) continue
+      const need = Math.max(2, Math.ceil(k.length * 0.66))
+      if (sentences.some((set) => k.filter((x) => set.has(x)).length >= need)) matched.push(r)
+    }
+    const total = p.skills.length + rome.length
     skills = { v: Math.min(1, matched.length / Math.min(total, 8)), matched, total }
   }
 
-  const level = levelOf(i, text, pref)
+  const level = levelOf(i, text, pref, p.years)
 
   // distance au domicile ; au-delà du périmètre, une offre en présentiel est hors critères
   let place: MatchResult['place'] = { v: 0.6, label: i.location ?? 'Lieu non précisé' }
@@ -443,14 +492,43 @@ export function resolveProfile(saved: MatchProfile | undefined, docs: ResumeDoc[
     const g = geoOf(alerts[0]?.commune)
     return g ? { ...g, nom: alerts[0].commune! } : undefined
   })()
+  const targets = saved?.targets?.length ? saved.targets : defaultTargets(alerts, cv)
+  const pool = saved?.tracks?.length ? experiencePool(docs) : []
+  const tracks: TrackData[] | undefined = saved?.tracks?.length
+    ? saved.tracks.map((t) => {
+        const tcv = docs.find((d) => d.id === t.cvId) ?? cv
+        return {
+          id: t.id,
+          name: t.name,
+          targets: t.targets,
+          skills: [...new Set([...cvSkills(tcv), ...(t.skills ?? [])])],
+          romeSkills: trackRomeSkills(t.id, saved.experiences),
+          level: t.level,
+          years: trackYears(t.id, pool, saved.experiences),
+          cv: tcv,
+        }
+      })
+    : undefined
   return {
     cv,
-    targets: saved?.targets?.length ? saved.targets : defaultTargets(alerts, cv),
+    targets: tracks ? [...new Set(tracks.flatMap((t) => t.targets))] : targets,
     skills: cvSkills(cv),
     degree: saved?.degree ?? 2,
     home,
     maxKm: saved?.maxKm ?? 50,
+    tracks,
   }
+}
+
+/** Note de l'annonce face à chaque profil de recherche : la meilleure l'emporte. */
+export function matchBest(i: FeedItem, p: ProfileData, alertPref: LevelPref = 'any'): MatchResult {
+  if (!p.tracks?.length) return matchItem(i, p, alertPref)
+  let best: MatchResult | undefined
+  for (const t of p.tracks) {
+    const r = matchItem(i, { ...p, targets: t.targets, skills: t.skills, romeSkills: t.romeSkills, years: t.years }, t.level ?? alertPref)
+    if (!best || r.score > best.score || (r.score === best.score && r.title.v > best.title.v)) best = { ...r, track: { id: t.id, name: t.name } }
+  }
+  return best!
 }
 
 /* ---------- apprentissage à partir de vos choix ---------- */

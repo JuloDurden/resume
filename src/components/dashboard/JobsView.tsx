@@ -7,7 +7,7 @@ import { companyKey, groupJobs, titleKey } from '../../lib/dedupe'
 import { JOB_STATUS } from '../../lib/jobs'
 import { benchFor, compareSalary, fmtK, fmtSalary, salaryBenchmarks, salaryOf, type Salary, type SalaryBench } from '../../lib/salary'
 import { redFlags, type RedFlag } from '../../lib/redflags'
-import { applyLearning, titleSimilarity, locationOf, regionOf, REGIONS, prefFor, bestReference, learnFromMarks, geocode, matchItem, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
+import { applyLearning, titleSimilarity, locationOf, regionOf, REGIONS, prefFor, bestReference, learnFromMarks, geocode, matchBest, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
 import { ClaudeRankModal, MatchProfileModal } from './MatchTools'
 import { AddJobModal } from './AddJobModal'
 import { useDocs } from '../../store/documents'
@@ -268,6 +268,11 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
         </p>
       )}
       <div className="match-chips">
+        {m.track && (
+          <span className="track" title="Profil de recherche qui donne la meilleure note (réglable dans « Mon profil »)">
+            <Briefcase size={12} /> Profil {m.track.name}
+          </span>
+        )}
         <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
           <Target size={12} /> Intitulé {pct(m.title.v)}
           {m.title.target && m.title.v > 0 ? ` (${m.title.target})` : ''}
@@ -280,7 +285,7 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
         ) : (
           <span className="na" title="Le texte complet de l'annonce n'est pas disponible">Compétences : texte indisponible</span>
         )}
-        <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte)`}>
+        <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte ou profil)`}>
           {m.level.label}
         </span>
         <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'}>
@@ -350,9 +355,10 @@ function JobCard({ item, linked, offers, onLink, degraded, salary, flags, others
           </span>
         )}
         {match && (
-          <button className={`match-badge ${scoreClass(match.score)}${match.capped ? ' capped' : ''}`} title={match.capped ? `Note plafonnée à ${match.capped} : texte complet de l'annonce non lu (détails)` : 'Indice de correspondance avec votre profil (détails)'} onClick={() => setOpen((o) => !o)}>
+          <button className={`match-badge ${scoreClass(match.score)}${match.capped ? ' capped' : ''}`} title={match.capped ? `Note plafonnée à ${match.capped} : texte complet de l'annonce non lu (détails)` : `Indice de correspondance avec votre profil${match.track ? ` « ${match.track.name} »` : ''} (détails)`} onClick={() => setOpen((o) => !o)}>
             {match.score}
             {match.capped ? '?' : ''}
+            {match.track && !match.out && <small className="badge-track">{match.track.name}</small>}
           </button>
         )}
         <button className={`icon-btn${mark === 'fav' ? ' fav' : ''}`} title={mark === 'fav' ? 'Retirer des favoris' : 'Mettre en favori'} onClick={() => onMark(mark === 'fav' ? 'none' : 'fav')}>
@@ -582,7 +588,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     const titles = new Map((feed?.items ?? []).map((i) => [i.id, i.title]))
     return learnFromMarks(Object.fromEntries(Object.entries(watch.marks).map(([id, m]) => [id, m.t ? m : { ...m, t: titles.get(id) }])))
   }, [watch.marks, feed])
-  const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchItem(i, profile, prefFor(i, watch.alerts)), i, learned)])), [gitems, profile, geoTick, learned, watch.alerts]) // eslint-disable-line react-hooks/exhaustive-deps
+  const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchBest(i, profile, prefFor(i, watch.alerts)), i, learned)])), [gitems, profile, geoTick, learned, watch.alerts]) // eslint-disable-line react-hooks/exhaustive-deps
   const reviews = watch.reviews ?? {}
   // repère de salaire : médiane des annonces reçues pour le même métier visé
   const familyOf = (i: FeedItem) => (matches[i.id] && matches[i.id].title.v >= 0.6 ? matches[i.id].title.target : undefined)
@@ -700,7 +706,9 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   }
   const tailor = (i: FeedItem) => {
     // CV de référence le plus proche de l'annonce, sinon le CV du profil
-    const cv = bestReference(i.title, cvs.filter((d) => d.reference)) ?? profile.cv
+    // CV du profil de recherche qui correspond le mieux, sinon le CV de référence le plus proche de l'annonce
+    const track = profile.tracks?.find((t) => t.id === matches[i.id]?.track?.id)
+    const cv = (track?.cv?.reference ? track.cv : undefined) ?? bestReference(i.title, cvs.filter((d) => d.reference)) ?? track?.cv ?? profile.cv
     if (!cv) return toast.error('Aucun CV : créez-en un ou choisissez un CV de référence dans « Profil »')
     const o = offerFor(i)
     const now = Date.now()

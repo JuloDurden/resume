@@ -167,3 +167,19 @@ describe('profils de recherche', () => {
     expect(trackYears('it', pool, links)).toBe(0)
   })
 })
+
+describe('nature du poste', () => {
+  const tracks = [
+    { id: 'it', name: 'IT / Produit', targets: ['Product Owner', 'Product Manager'], skills: [], romeSkills: [], level: 'junior' as const, years: 1 },
+    { id: 'mg', name: 'Management', targets: ["Responsable d'équipe", 'Responsable de secteur'], skills: [], romeSkills: [], level: 'senior' as const, years: 18 },
+  ]
+  it("un Product Manager reste un poste produit, même avec « manager » dans l'intitulé et 5 ans demandés", () => {
+    const text = 'Vous définissez la roadmap et priorisez le backlog avec les développeurs. Rédaction des user stories, recette, animation des sprints. 5 ans d’expérience minimum. '.repeat(5)
+    expect(matchBest(item({ title: 'Product Manager', fullText: text }), { ...p, tracks }).track?.id).toBe('it')
+  })
+  it('le profil choisi à la main est respecté', () => {
+    const m = matchBest(item({ title: 'Product Manager' }), { ...p, tracks }, 'any', 'mg')
+    expect(m.track?.id).toBe('mg')
+    expect(m.track?.forced).toBe(true)
+  })
+})

@@ -253,7 +253,7 @@ function PasteText({ item }: { item: FeedItem & { pasted?: boolean } }) {
   )
 }
 
-function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
+function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?: JobReview; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void }) {
   const pct = (v: number) => `${Math.round(v * 100)} %`
   return (
     <div className="match-details">
@@ -269,8 +269,23 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
       )}
       <div className="match-chips">
         {m.track && (
-          <span className="track" title="Profil de recherche qui donne la meilleure note (réglable dans « Mon profil »)">
-            <Briefcase size={12} /> Profil {m.track.name}
+          <span
+            className="track"
+            title={`${m.track.forced ? 'Profil choisi par vous' : "Profil déduit de l'intitulé et des missions décrites"}${m.track.nature?.length ? ` (missions repérées : ${m.track.nature.map((n) => `${n.hits} ${n.label}`).join(', ')})` : ''}`}
+          >
+            <Briefcase size={12} /> Profil{' '}
+            {tracks && onTrack ? (
+              <select className="track-select" value={m.track.forced ? m.track.id : ''} onChange={(e) => onTrack(e.target.value)} onClick={(e) => e.stopPropagation()}>
+                <option value="">{m.track.forced ? 'automatique' : `${m.track.name} (auto)`}</option>
+                {tracks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              m.track.name
+            )}
           </span>
         )}
         <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
@@ -333,7 +348,7 @@ function MatchDetails({ m, review }: { m: MatchResult; review?: JobReview }) {
   )
 }
 
-function JobCard({ item, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
+function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
   return (
@@ -424,7 +439,7 @@ function JobCard({ item, linked, offers, onLink, degraded, salary, flags, others
       {degraded && <p className="jc-degraded">Le site {item.source.replace(' (alerte email)', '')} est en mode dégradé en ce moment : ses liens peuvent afficher « offre indisponible ». Réessayez plus tard ou utilisez « Retrouver ».</p>}
       {open && (
         <div className="jc-open">
-          {match && <MatchDetails m={match} review={review} />}
+          {match && <MatchDetails m={match} review={review} tracks={tracks} onTrack={onTrack} />}
           <Insights salary={salary} flags={flags} />
           {item.fullText ? (
             <details className="jc-full" open>
@@ -509,6 +524,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const markSeen = useFeed((s) => s.markSeen)
   const watch = useDocs((s) => s.watch)
   const saveOffer = useDocs((s) => s.saveOffer)
+  const setTrackFor = useDocs((s) => s.setTrackFor)
   const offers = useDocs((s) => s.offers)
   const addDoc = useDocs((s) => s.add)
   const navigate = useNavigate()
@@ -588,7 +604,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     const titles = new Map((feed?.items ?? []).map((i) => [i.id, i.title]))
     return learnFromMarks(Object.fromEntries(Object.entries(watch.marks).map(([id, m]) => [id, m.t ? m : { ...m, t: titles.get(id) }])))
   }, [watch.marks, feed])
-  const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchBest(i, profile, prefFor(i, watch.alerts)), i, learned)])), [gitems, profile, geoTick, learned, watch.alerts]) // eslint-disable-line react-hooks/exhaustive-deps
+  const matches = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, applyLearning(matchBest(i, profile, prefFor(i, watch.alerts), watch.trackFor?.[i.id]?.v || undefined), i, learned)])), [gitems, profile, geoTick, learned, watch.alerts, watch.trackFor]) // eslint-disable-line react-hooks/exhaustive-deps
   const reviews = watch.reviews ?? {}
   // repère de salaire : médiane des annonces reçues pour le même métier visé
   const familyOf = (i: FeedItem) => (matches[i.id] && matches[i.id].title.v >= 0.6 ? matches[i.id].title.target : undefined)
@@ -878,7 +894,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           ) : shown.length ? (
             <div className="job-list">
               {shown.map((i) => (
-                <JobCard key={i.id} item={i} linked={linkedOffer[i.id]} offers={offersList} onLink={(o) => linkTo(i, o)} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                <JobCard key={i.id} item={i} tracks={profile.tracks} onTrack={(t) => setTrackFor(expand([i.id]), t)} linked={linkedOffer[i.id]} offers={offersList} onLink={(o) => linkTo(i, o)} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
               ))}
             </div>
           ) : (

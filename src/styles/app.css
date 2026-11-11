@@ -3945,3 +3945,12 @@ button.followup-badge {
   border-color: #3730a3;
   color: #fff;
 }
+.track-select {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}

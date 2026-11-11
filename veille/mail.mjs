@@ -12,7 +12,7 @@ const NEWSLETTER = [
 ]
 
 /** Change à chaque évolution de la lecture : les annonces des emails sont alors relues. */
-export const PARSER_VERSION = 6
+export const PARSER_VERSION = 7
 
 /** Expéditeurs d'alertes emploi. */
 export const SENDERS = [
@@ -196,7 +196,9 @@ function readCard(site, L, mailDate) {
     } else r.location = L[1]
     if (L[2] && CONTRACT.test(L[2])) r.contract = L[2]
     if (L[3] && !/non renseign/i.test(L[3]) && /€|euro|salaire|brut|annuel|mensuel/i.test(L[3])) r.salary = L[3]
-    const desc = L.slice(4).filter((l) => !/^Offre n°/i.test(l))
+    const rest = L.slice(4)
+    const end = rest.findIndex((l) => /^Offre n°/i.test(l))
+    const desc = end >= 0 ? rest.slice(0, end) : rest.filter((l) => !/^(voir plus d.offres|g[ée]rer mes alertes|cordialement)/i.test(l))
     if (desc.length) r.description = desc.join(' ')
   } else if (site === 'Glassdoor') {
     const av = L.map((l) => /^avatar$/i.test(l)).lastIndexOf(true)
@@ -256,7 +258,15 @@ export function parseAlertHtml(html, date) {
       card.parentNode.text.replace(/\s+/g, ' ').length < 1500
     )
       card = card.parentNode
-    const r = readCard(job.site, lineList(card), date)
+    let L = lineList(card)
+    // France Travail : la carte commence au lien de l'offre (intitulé, puis entreprise et lieu) ;
+    // un email à une seule offre contient avant lui l'en-tête « France travail » et la salutation
+    if (job.site === 'France Travail') {
+      const first = lineList(a)[0]
+      const at = first ? L.indexOf(first) : -1
+      if (at > 0) L = L.slice(at)
+    }
+    const r = readCard(job.site, L, date)
     if (!r) continue
     const id = job.stable ? job.id : hash(`${keyText(r.title)}|${keyText(r.company)}`)
     // même offre relayée plusieurs fois (Jobijoba) : une seule carte

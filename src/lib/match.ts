@@ -243,8 +243,8 @@ export interface MatchResult {
   capped?: number
   /** ajustement selon vos choix passés */
   learned?: number
-  /** profil de recherche qui donne la meilleure note */
-  track?: { id: string; name: string }
+  /** profil de recherche retenu (nature du poste, ou choix manuel) */
+  track?: { id: string; name: string; forced?: boolean; nature?: Nature[] }
 }
 
 /** Niveau d'expérience recherché pour une alerte. */
@@ -520,15 +520,56 @@ export function resolveProfile(saved: MatchProfile | undefined, docs: ResumeDoc[
   }
 }
 
-/** Note de l'annonce face à chaque profil de recherche : la meilleure l'emporte. */
-export function matchBest(i: FeedItem, p: ProfileData, alertPref: LevelPref = 'any'): MatchResult {
+/* ---------- nature du poste : à quel profil de recherche l'annonce appartient ---------- */
+
+/** Familles de missions : un profil en relève quand son nom ou ses métiers visés y correspondent. */
+const NATURES = [
+  {
+    id: 'produit',
+    label: 'produit / projet',
+    when: /product|owner|produit|business analyst|amoa|\bmoa\b|projet|\bsi\b|systemes? d|numerique|digital|fonctionnel|informatique|developpeur|data|\bit\b/,
+    re: /backlog|roadmap|user ?stor|sprint|scrum|agile|recette|specification|fonctionnalit|\bmvp\b|discovery|prioris|\bjira\b|logiciel|\bsaas\b|application|\bapi\b|vision produit|produit|product|parcours utilisateur|experience utilisateur|\bux\b|cahier des charges|expression (?:de|des) besoins?|besoins? (?:metiers?|fonctionnels?|utilisateurs?)|kanban|developpeurs?|equipes? techniques?|mise en production|tests? fonctionnels?/g,
+  },
+  {
+    id: 'management',
+    label: 'management / exploitation',
+    when: /responsable|manager|chef d.?equipe|exploitation|secteur|agence|encadr|directeur|superviseur|back.?office|commercial|team lead|management/,
+    re: /encadr|manag(?:er|ez|erez) (?:une |l.|les |des |vos |votre )?equipe|management (?:d.|des |de l.)?equipe|anim(?:er|ez|ation) (?:une |l.|les |des |vos |votre |d.)?equipe|recrut|plannings?|exploitation|agents|terrain|p&l|chiffre d.affaires|entretiens? (?:annuels?|individuels?|professionnels?)|hierarchique|effectifs?|productivite|organisation du travail|absenteisme|astreintes?|interimaires|prestataires? sur site|tournees?|chantiers?/g,
+  },
+]
+
+export interface Nature {
+  id: string
+  label: string
+  hits: number
+}
+
+/** Ce que décrit l'annonce : nombre de missions de chaque famille (l'intitulé compte triple). */
+export function natureOf(i: FeedItem): Nature[] {
+  const text = strip(`${i.title} ${i.title} ${i.title} ${i.fullText ?? i.description ?? ''}`)
+  return NATURES.map((n) => ({ id: n.id, label: n.label, hits: (text.match(n.re) ?? []).length }))
+}
+
+const trackNatures = (t: TrackData) => NATURES.filter((n) => n.when.test(strip(`${t.name} ${t.targets.join(' ')}`))).map((n) => n.id)
+
+/**
+ * Note de l'annonce avec le profil de recherche qui lui correspond.
+ * Le profil est choisi d'après la nature du poste (intitulé, missions décrites, compétences), pas d'après la meilleure note :
+ * un poste de Product Owner exigeant 5 ans reste un poste IT / Produit, même s'il serait mieux noté ailleurs.
+ */
+export function matchBest(i: FeedItem, p: ProfileData, alertPref: LevelPref = 'any', forced?: string): MatchResult {
   if (!p.tracks?.length) return matchItem(i, p, alertPref)
-  let best: MatchResult | undefined
-  for (const t of p.tracks) {
+  const nat = natureOf(i)
+  const results = p.tracks.map((t) => {
     const r = matchItem(i, { ...p, targets: t.targets, skills: t.skills, romeSkills: t.romeSkills, years: t.years }, t.level ?? alertPref)
-    if (!best || r.score > best.score || (r.score === best.score && r.title.v > best.title.v)) best = { ...r, track: { id: t.id, name: t.name } }
-  }
-  return best!
+    const kinds = trackNatures(t)
+    const mine = nat.filter((n) => kinds.includes(n.id)).reduce((a, n) => a + n.hits, 0)
+    return { t, r, kinds, mine }
+  })
+  const total = nat.filter((n) => results.some((x) => x.kinds.includes(n.id))).reduce((a, n) => a + n.hits, 0)
+  const affinity = (x: (typeof results)[number]) => 0.45 * x.r.title.v + 0.35 * (total ? x.mine / total : 0.5) + 0.2 * (x.r.skills?.v ?? 0)
+  const chosen = results.find((x) => x.t.id === forced) ?? results.reduce((a, b) => (affinity(b) > affinity(a) ? b : a))
+  return { ...chosen.r, track: { id: chosen.t.id, name: chosen.t.name, forced: chosen.t.id === forced, nature: nat.filter((n) => n.hits > 0) } }
 }
 
 /* ---------- apprentissage à partir de vos choix ---------- */

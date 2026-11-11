@@ -303,6 +303,8 @@ export interface WatchState {
   companiesAt?: number
   /** texte d'annonce collé à la main (quand le site ne le fournit pas) */
   texts?: Record<string, string>
+  /** profil de recherche imposé à une annonce (v vide : choix automatique), avec sa date pour la fusion */
+  trackFor?: Record<string, { v: string; at: number }>
   /** annonces ajoutées à la main depuis leur lien */
   manual?: FeedItem[]
   /** avis de Claude sur certaines annonces */

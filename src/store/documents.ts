@@ -50,6 +50,7 @@ export interface DocsState {
   addManual: (i: FeedItem) => void
   setCompanies: (c: Company[]) => void
   setText: (id: string, text: string) => void
+  setTrackFor: (ids: string[], track: string) => void
   removeOffer: (id: string) => void
   /** Fusionne des données venues d'ailleurs (GitHub, autre onglet) sans jamais écraser une modification plus récente. Renvoie true si l'état local a changé. */
   mergeIn: (data: DataSet) => boolean
@@ -168,6 +169,13 @@ export const useDocs = create<DocsState>()(
           if (text.trim()) texts[id] = text.trim().slice(0, 7000)
           else delete texts[id]
           return { watch: { ...s.watch, texts } }
+        }),
+      setTrackFor: (ids, track) =>
+        setState((s) => {
+          const at = Date.now()
+          const trackFor = { ...(s.watch.trackFor ?? {}) }
+          for (const id of ids) trackFor[id] = { v: track, at }
+          return { watch: { ...s.watch, trackFor } }
         }),
       addManual: (i) => setState((s) => ({ watch: { ...s.watch, manual: [...(s.watch.manual ?? []).filter((x) => x.id !== i.id), i] } })),
       addReviews: (r) => setState((s) => ({ watch: { ...s.watch, reviews: { ...(s.watch.reviews ?? {}), ...r } } })),

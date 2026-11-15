@@ -6,7 +6,7 @@ import { loadFiche, loadRomeIndex, mainTitle, metierscopeUrl, searchRome, type R
 import { uid } from '../../lib/ids'
 import { useDocs } from '../../store/documents'
 import { findCommunes, type Commune } from '../../lib/watch'
-import { cvSkills, resolveProfile } from '../../lib/match'
+import { CONTRACT_TYPES, cvSkills, resolveProfile } from '../../lib/match'
 import { resumeToText } from '../../lib/export'
 import { CLAUDE_URL, copyText, extractJson, jobRankPrompt, type ClaudeReviews } from '../../lib/prompts'
 import { Field, Modal, Segmented, Select, TextArea, TextInput, toast } from '../ui'
@@ -140,7 +140,7 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
   const init = (): MatchProfile => {
     const saved = useDocs.getState().watch.profile
     const r = resolveProfile(saved, cvs, useDocs.getState().watch.alerts)
-    const base: MatchProfile = { cvId: r.cv?.id, targets: r.targets, degree: r.degree, home: r.home, maxKm: r.maxKm, tracks: saved?.tracks, experiences: saved?.experiences }
+    const base: MatchProfile = { cvId: r.cv?.id, targets: r.targets, degree: r.degree, home: r.home, maxKm: r.maxKm, contracts: saved?.contracts, tracks: saved?.tracks, experiences: saved?.experiences }
     if (!base.tracks?.length) base.tracks = defaultTracks(r.targets, cvs, r.cv?.id)
     const links = { ...defaultLinks(pool, base.tracks), ...(base.experiences ?? {}) }
     return { ...base, experiences: links }
@@ -224,6 +224,18 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
               </Field>
               <Field label="Domicile (calcul des distances)">
                 <HomeInput value={draft.home} onChange={(home) => setDraft({ ...draft, home })} />
+              </Field>
+              <Field label="Types de contrat recherchés" hint="Une annonce qui ne propose aucun des types cochés passe dans « Hors critères ». Rien de coché : tous les contrats. Une offre « Junior / Stage / Alternance » compte aussi comme un CDI.">
+                <div className="exp-tracks">
+                  {CONTRACT_TYPES.map((c) => {
+                    const on = !!draft.contracts?.includes(c)
+                    return (
+                      <button key={c} type="button" className={`track-toggle${on ? ' on' : ''}`} onClick={() => setDraft({ ...draft, contracts: on ? draft.contracts!.filter((x) => x !== c) : [...(draft.contracts ?? []), c] })}>
+                        {on ? <Check size={12} /> : null} {c}
+                      </button>
+                    )
+                  })}
+                </div>
               </Field>
               <Field label="Périmètre de recherche" hint="Au-delà, une offre sans télétravail mentionné reçoit la note 0 et passe dans « Hors critères ».">
                 <Select value={draft.maxKm ?? 50} onChange={(maxKm) => setDraft({ ...draft, maxKm })} options={[20, 30, 40, 50, 75, 100, 150].map((d) => ({ value: d, label: `${d} km autour du domicile` }))} />

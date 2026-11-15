@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedItem } from '../types'
-import { levelScore, matchBest, matchItem, placeName } from '../lib/match'
+import { contractsOf, levelScore, matchBest, matchItem, pickCommune, placeName } from '../lib/match'
 import { trackYears } from '../lib/tracks'
 
 const p = { targets: ['Product Owner', 'Chef de projet digital', 'Business Analyst'], skills: ['Jira', 'Agile', 'Scrum', 'Recueil des besoins', 'Power BI'], degree: 2 }
@@ -181,5 +181,29 @@ describe('nature du poste', () => {
     const m = matchBest(item({ title: 'Product Manager' }), { ...p, tracks }, 'any', 'mg')
     expect(m.track?.id).toBe('mg')
     expect(m.track?.forced).toBe(true)
+  })
+})
+
+describe('type de contrat', () => {
+  it("lit les contrats proposés et écarte ceux qui ne sont pas recherchés", () => {
+    const ab = item({ title: 'Ingénieur(e) Sécurité & Infrastructure Poste Junior / Stage / Alternance' })
+    expect(contractsOf(ab)).toEqual(expect.arrayContaining(['Stage', 'Alternance', 'CDI']))
+    expect(matchItem(ab, { ...p, contracts: ['CDI', 'CDD'] }).out).toBeUndefined()
+    const alt = item({ title: 'Chef de projet digital en alternance' })
+    expect(matchItem(alt, { ...p, contracts: ['CDI'] }).out).toMatch(/Alternance/)
+    expect(matchItem(alt, p).out).toBeUndefined()
+    expect(contractsOf(item({ title: 'Product Owner', fullText: 'Type de contrat : CDD de 12 mois.' }))).toEqual(['CDD'])
+  })
+})
+
+describe('commune abrégée', () => {
+  it('« Castelnau » près de Montpellier désigne Castelnau-le-Lez', () => {
+    const list = [
+      { nom: 'Castelnaudary', population: 12151, centre: { coordinates: [1.9613, 43.3201] as [number, number] } },
+      { nom: "Castelnau-d'Aude", population: 497, centre: { coordinates: [2.6779, 43.2345] as [number, number] } },
+      { nom: 'Castelnau-le-Lez', population: 26058, centre: { coordinates: [3.9113, 43.6372] as [number, number] } },
+    ]
+    expect(pickCommune('Castelnau', list, { lat: 43.53, lon: 3.86 })?.nom).toBe('Castelnau-le-Lez')
+    expect(pickCommune('Castelnaudary', list)?.nom).toBe('Castelnaudary')
   })
 })

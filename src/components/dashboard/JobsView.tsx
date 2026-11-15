@@ -253,8 +253,50 @@ function PasteText({ item }: { item: FeedItem & { pasted?: boolean } }) {
   )
 }
 
-function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?: JobReview; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void }) {
+/** Critères de la note, visibles sans déplier l'annonce. */
+function MatchChips({ m }: { m: MatchResult }) {
   const pct = (v: number) => `${Math.round(v * 100)} %`
+  return (
+    <div className="match-chips compact">
+      {m.out && (
+        <span className="no" title={m.out}>
+          <AlertTriangle size={12} /> {/contrat/.test(m.out) ? `${m.out.split(' : ')[0]} non recherché` : 'Hors périmètre'}
+        </span>
+      )}
+      <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
+        <Target size={12} /> Intitulé {pct(m.title.v)}
+        {m.title.target && m.title.v > 0 ? ` (${m.title.target})` : ''}
+        {m.title.other ? `, autre métier : « ${m.title.other} »` : ''}
+      </span>
+      {m.skills ? (
+        <span className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}>
+          <Check size={12} /> {m.skills.matched.length} compétence{m.skills.matched.length > 1 ? 's' : ''} retrouvée{m.skills.matched.length > 1 ? 's' : ''}
+        </span>
+      ) : (
+        <span className="na" title="Le texte complet de l'annonce n'est pas disponible">Compétences : texte indisponible</span>
+      )}
+      <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte ou profil)`}>
+        {m.level.label}
+      </span>
+      <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'}>
+        <MapPin size={12} /> {m.place.label}
+      </span>
+      {!!m.learned && (
+        <span className={m.learned > 0 ? 'ok' : 'no'} title="Selon les annonces que vous avez mises en favori, en candidature ou masquées">
+          {m.learned > 0 ? '+' : ''}
+          {m.learned} selon vos choix
+        </span>
+      )}
+      {m.degree && (
+        <span className="no">
+          <AlertTriangle size={12} /> Bac+{m.degree.required} {m.degree.strict ? 'exigé' : 'demandé'}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?: JobReview; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void }) {
   return (
     <div className="match-details">
       {!!m.capped && (
@@ -286,35 +328,6 @@ function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?:
             ) : (
               m.track.name
             )}
-          </span>
-        )}
-        <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
-          <Target size={12} /> Intitulé {pct(m.title.v)}
-          {m.title.target && m.title.v > 0 ? ` (${m.title.target})` : ''}
-          {m.title.other ? `, autre métier : « ${m.title.other} »` : ''}
-        </span>
-        {m.skills ? (
-          <span className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}>
-            <Check size={12} /> Compétences {m.skills.matched.length}/{m.skills.total}
-          </span>
-        ) : (
-          <span className="na" title="Le texte complet de l'annonce n'est pas disponible">Compétences : texte indisponible</span>
-        )}
-        <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte ou profil)`}>
-          {m.level.label}
-        </span>
-        <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'}>
-          <MapPin size={12} /> {m.place.label}
-        </span>
-        {!!m.learned && (
-          <span className={m.learned > 0 ? 'ok' : 'no'} title="Selon les annonces que vous avez mises en favori, en candidature ou masquées">
-            {m.learned > 0 ? '+' : ''}
-            {m.learned} selon vos choix
-          </span>
-        )}
-        {m.degree && (
-          <span className="no">
-            <AlertTriangle size={12} /> Bac+{m.degree.required} {m.degree.strict ? 'exigé' : 'demandé'}
           </span>
         )}
       </div>
@@ -380,6 +393,8 @@ function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, sala
           <Star size={17} fill={mark === 'fav' ? 'currentColor' : 'none'} />
         </button>
       </div>
+      <div className="jc-body">
+        <div className="jc-left">
       <div className="jc-meta">
         {(() => {
           const w = locationOf(item)
@@ -435,6 +450,9 @@ function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, sala
             {n}
           </span>
         ))}
+      </div>
+        </div>
+        {match && <MatchChips m={match} />}
       </div>
       {degraded && <p className="jc-degraded">Le site {item.source.replace(' (alerte email)', '')} est en mode dégradé en ce moment : ses liens peuvent afficher « offre indisponible ». Réessayez plus tard ou utilisez « Retrouver ».</p>}
       {open && (
@@ -599,7 +617,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const nq = q.trim().toLowerCase()
   const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume'), [docsMap])
   const profile = useMemo(() => resolveProfile(watch.profile, cvs, watch.alerts), [watch.profile, cvs, watch.alerts, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => geocode([...items.map((i) => locationOf(i).loc), ...(feed?.salaryLog ?? []).map((e) => e.location), watch.alerts[0]?.commune], () => setGeoTick((t) => t + 1)), [items, watch.alerts, feed, geoTick])
+  useEffect(() => geocode([...items.map((i) => locationOf(i).loc), ...(feed?.salaryLog ?? []).map((e) => e.location), watch.alerts[0]?.commune], () => setGeoTick((t) => t + 1), profile.home), [items, watch.alerts, feed, geoTick, profile.home])
   const learned = useMemo(() => {
     const titles = new Map((feed?.items ?? []).map((i) => [i.id, i.title]))
     return learnFromMarks(Object.fromEntries(Object.entries(watch.marks).map(([id, m]) => [id, m.t ? m : { ...m, t: titles.get(id) }])))
@@ -747,7 +765,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
             { value: 'fav', label: `Favoris (${counts.fav})` },
             { value: 'applied', label: `Candidatures (${counts.applied})` },
             { value: 'hidden', label: `Masquées (${counts.hidden})` },
-            { value: 'out', label: `Hors critères (${counts.out})`, title: 'Offres en présentiel au-delà de votre périmètre de recherche (note 0)' },
+            { value: 'out', label: `Hors critères (${counts.out})`, title: "Offres en présentiel au-delà de votre périmètre, ou dont le type de contrat n'est pas recherché (note 0)" },
           ]}
         />
         <div className="row-gap">

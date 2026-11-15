@@ -12,7 +12,7 @@ const NEWSLETTER = [
 ]
 
 /** Change à chaque évolution de la lecture : les annonces des emails sont alors relues. */
-export const PARSER_VERSION = 7
+export const PARSER_VERSION = 8
 
 /** Expéditeurs d'alertes emploi. */
 export const SENDERS = [
@@ -259,9 +259,9 @@ export function parseAlertHtml(html, date) {
     )
       card = card.parentNode
     let L = lineList(card)
-    // France Travail : la carte commence au lien de l'offre (intitulé, puis entreprise et lieu) ;
+    // France Travail, Glassdoor : la carte commence au lien de l'offre (intitulé, puis entreprise et lieu) ;
     // un email à une seule offre contient avant lui l'en-tête « France travail » et la salutation
-    if (job.site === 'France Travail') {
+    if (job.site === 'France Travail' || job.site === 'Glassdoor') {
       const first = lineList(a)[0]
       const at = first ? L.indexOf(first) : -1
       if (at > 0) L = L.slice(at)

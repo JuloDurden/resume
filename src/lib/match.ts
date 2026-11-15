@@ -65,6 +65,8 @@ export interface ProfileData {
   maxKm?: number
   /** profils de recherche ; absent : un seul profil */
   tracks?: TrackData[]
+  /** types de contrat recherchés (vide : tous) */
+  contracts?: string[]
 }
 
 export interface TrackData {
@@ -101,9 +103,37 @@ export function defaultTargets(alerts: Alert[], doc?: ResumeDoc): string[] {
   return t.filter((x) => x.length > 2 && !/^junior$/i.test(x) && !seen.has(strip(x)) && seen.add(strip(x)))
 }
 
+/* ---------- type de contrat ---------- */
+
+export const CONTRACT_TYPES = ['CDI', 'CDD', 'Intérim', 'Alternance', 'Stage', 'Freelance'] as const
+const CONTRACT_RE: [string, RegExp][] = [
+  ['CDI', /\bcdi\b|contrat a duree indeterminee|permanent contract/],
+  ['CDD', /\bcdd\b|contrat a duree determinee/],
+  ['Intérim', /\binterim|travail temporaire|mission d.interim/],
+  ['Alternance', /alternan|apprenti|contrat de professionnalisation|contrat pro\b|work.?study/],
+  ['Stage', /\bstages?\b|stagiaire|internship|\bintern\b/],
+  ['Freelance', /freelance|free.lance|independant|portage salarial/],
+]
+const kinds = (s: string) => CONTRACT_RE.filter(([, re]) => re.test(s)).map(([k]) => k)
+
+/**
+ * Types de contrat proposés par l'annonce : celui du site et ceux de l'intitulé (« Poste Junior / Stage / Alternance »),
+ * sinon la mention « Type de contrat : ... » du texte. Un poste junior proposé avec un stage ou une alternance est aussi un emploi.
+ */
+export function contractsOf(i: FeedItem): string[] {
+  const title = strip(i.title)
+  const found = new Set([...kinds(strip(i.contract ?? '')), ...kinds(title)])
+  if (found.size && /\b(junior|poste|emploi|confirme|senior)\b/.test(title) && /\/|\bou\b/.test(title) && !found.has('CDD')) found.add('CDI')
+  if (!found.size) {
+    const m = /(?:type de contrat|nature du contrat|contrat propose|contrat)\s*:\s*([^\n.;]{0,60})/.exec(strip(i.fullText ?? ''))
+    if (m) for (const k of kinds(m[1])) found.add(k)
+  }
+  return [...found]
+}
+
 /* ---------- géolocalisation (geo.api.gouv.fr, mise en cache) ---------- */
 
-const GEO_KEY = 'resume-geo'
+const GEO_KEY = 'resume-geo-2'
 export type GeoPoint = { lat: number; lon: number; reg?: string }
 let geoCache: Record<string, GeoPoint | null> = {}
 try {
@@ -171,16 +201,36 @@ export function geoOf(loc?: string): GeoPoint | null | undefined {
   return k ? byName : null
 }
 
+type Commune = { nom?: string; centre?: { coordinates: [number, number] }; codeRegion?: string; population?: number; _score?: number }
+
+/**
+ * Commune désignée par un nom d'annonce : le nom exact d'abord ; sinon un nom abrégé (« Castelnau » pour Castelnau-le-Lez,
+ * « Saint-Jean » pour Saint-Jean-de-Védas) désigne en général la commune la plus proche de chez vous, les alertes étant locales.
+ */
+export function pickCommune(name: string, list: Commune[], near?: { lat: number; lon: number }): Commune | undefined {
+  const key = (s?: string) => strip(s ?? '').replace(/[^a-z0-9]+/g, ' ').trim()
+  const q = key(name)
+  const exact = list.filter((c) => key(c.nom) === q && c.centre)
+  if (exact.length) return exact.sort((a, b) => (b.population ?? 0) - (a.population ?? 0))[0]
+  const prefixed = list.filter((c) => key(c.nom).startsWith(`${q} `) && c.centre)
+  if (prefixed.length && near) {
+    const d = (c: Commune) => km(near, { lat: c.centre!.coordinates[1], lon: c.centre!.coordinates[0] })
+    const close = prefixed.filter((c) => d(c) <= 60).sort((a, b) => d(a) - d(b))[0]
+    if (close) return close
+  }
+  return prefixed.sort((a, b) => (b.population ?? 0) - (a.population ?? 0))[0] ?? list[0]
+}
+
 /** Géolocalise les lieux inconnus ; appelle onDone quand de nouvelles positions sont connues. */
-export function geocode(locs: (string | undefined)[], onDone: () => void) {
+export function geocode(locs: (string | undefined)[], onDone: () => void, near?: { lat: number; lon: number }) {
   const names = [...new Set(locs.map(placeName).filter((x): x is string => !!x))].filter((k) => !(strip(k) in geoCache) && !pending.has(strip(k)) && !failed.has(strip(k)))
   const depts = [...new Set(locs.map(deptOf).filter((x): x is string => !!x))].filter((d) => !(`dep:${d}` in geoCache) && !pending.has(`dep:${d}`) && !failed.has(`dep:${d}`))
   const todo: [string, () => Promise<void>][] = [
     ...names.slice(0, 40).map((name): [string, () => Promise<void>] => [
       strip(name),
       async () => {
-        const r = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(name)}&fields=centre,codeRegion&boost=population&limit=1`)
-        const c = ((await r.json()) as { centre?: { coordinates: [number, number] }; codeRegion?: string }[])[0]
+        const r = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(name)}&fields=centre,codeRegion,population&boost=population&limit=15`)
+        const c = pickCommune(name, (await r.json()) as Commune[], near)
         geoCache[strip(name)] = c?.centre ? { lon: c.centre.coordinates[0], lat: c.centre.coordinates[1], reg: c.codeRegion } : null
       },
     ]),
@@ -457,6 +507,11 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
   // niveau incompatible avec celui visé (5 ans demandés pour une recherche junior, poste junior pour une recherche
   // confirmée) : la note baisse nettement, comme pour un diplôme exigé trop élevé
   const levelFactor = level.v <= 0.15 ? 0.6 : level.v <= 0.35 ? 0.8 : 1
+  // type de contrat non recherché
+  if (p.contracts?.length) {
+    const c = contractsOf(i)
+    if (c.length && !c.some((k) => p.contracts!.includes(k))) out = `${c.join(' / ')} : type de contrat non recherché`
+  }
   let score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * levelFactor)
   // sans le texte complet, ni l'expérience ni le diplôme demandés ne sont connus : la note est plafonnée
   const CAP = 70
@@ -516,6 +571,7 @@ export function resolveProfile(saved: MatchProfile | undefined, docs: ResumeDoc[
     degree: saved?.degree ?? 2,
     home,
     maxKm: saved?.maxKm ?? 50,
+    contracts: saved?.contracts,
     tracks,
   }
 }

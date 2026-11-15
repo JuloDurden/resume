@@ -3954,3 +3954,34 @@ button.followup-badge {
   cursor: pointer;
   padding: 0;
 }
+/* critères de la note, sous la note, visibles sans déplier */
+.jc-body {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.jc-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.match-chips.compact {
+  flex: 0 1 46%;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.match-chips.compact > span {
+  padding: 2px 7px;
+  font-size: 11.5px;
+}
+@media (max-width: 720px) {
+  .jc-body {
+    flex-direction: column;
+  }
+  .match-chips.compact {
+    justify-content: flex-start;
+  }
+}

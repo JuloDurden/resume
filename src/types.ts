@@ -333,6 +333,8 @@ export interface MatchProfile {
   home?: { nom: string; lat: number; lon: number }
   /** périmètre de recherche en km : au-delà, une offre sans télétravail a la note 0 */
   maxKm?: number
+  /** types de contrat recherchés (vide : tous) ; une annonce qui ne propose aucun d'eux passe en « Hors critères » */
+  contracts?: string[]
   /** profils de recherche (IT junior, management confirmé...) : chaque annonce est notée face à chacun, la meilleure note l'emporte */
   tracks?: MatchTrack[]
   /** parcours : chaque expérience des CV (clé entreprise|année de début) rattachée à un métier ROME, ses compétences et ses profils */

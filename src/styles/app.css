@@ -3985,3 +3985,22 @@ button.followup-badge {
     justify-content: flex-start;
   }
 }
+.veille-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #eef0fb;
+  color: #3730a3;
+}
+.veille-status.ok {
+  background: #e7f6ec;
+  color: #166534;
+}
+.veille-status.error {
+  background: #fdecec;
+  color: #9b1c1c;
+}

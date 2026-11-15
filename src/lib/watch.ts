@@ -71,6 +71,7 @@ async function api<T>(c: SyncConfig, path: string, init: RequestInit = {}): Prom
   const r = await fetch(`https://api.github.com/repos/${c.owner}/${c.repo}${path}`, {
     ...init,
     headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${c.token}`, 'X-GitHub-Api-Version': '2022-11-28', ...init.headers },
+    cache: 'no-store',
   })
   if (!r.ok) {
     let msg = r.statusText
@@ -160,6 +161,49 @@ export async function watchInstalled(c: SyncConfig): Promise<boolean> {
 /** Lance la veille tout de suite (nécessite la permission « Actions : lecture et écriture » du token). */
 export async function runWatchNow(c: SyncConfig) {
   await api(c, '/actions/workflows/veille.yml/dispatches', { method: 'POST', body: JSON.stringify({ ref: c.branch }) })
+}
+
+export interface WatchRun {
+  id: number
+  status: 'queued' | 'in_progress' | 'completed' | string
+  conclusion?: string | null
+  created_at: string
+  html_url: string
+}
+
+/** Dernière exécution de la veille (programmée ou lancée à la main). */
+export async function lastWatchRun(c: SyncConfig): Promise<WatchRun | undefined> {
+  const r = await api<{ workflow_runs: WatchRun[] }>(c, '/actions/workflows/veille.yml/runs?per_page=1')
+  return r.workflow_runs[0]
+}
+
+/**
+ * Lance la veille (sauf si une exécution est déjà en cours) et attend sa fin.
+ * onStep reçoit l'avancement ; renvoie l'exécution terminée.
+ */
+export async function runWatchAndWait(c: SyncConfig, onStep: (s: { phase: 'start' | 'queued' | 'running'; since?: string }) => void, signal?: AbortSignal): Promise<WatchRun | undefined> {
+  const before = await lastWatchRun(c).catch(() => undefined)
+  let run = before && before.status !== 'completed' ? before : undefined
+  if (!run) {
+    onStep({ phase: 'start' })
+    await runWatchNow(c)
+    // la nouvelle exécution apparaît après quelques secondes
+    for (let k = 0; k < 15 && !run; k++) {
+      await new Promise((r) => setTimeout(r, 3000))
+      if (signal?.aborted) return undefined
+      const last = await lastWatchRun(c).catch(() => undefined)
+      if (last && last.id !== before?.id) run = last
+    }
+    if (!run) return undefined
+  }
+  for (let k = 0; k < 120; k++) {
+    if (signal?.aborted) return undefined
+    if (run.status === 'completed') return run
+    onStep({ phase: run.status === 'queued' ? 'queued' : 'running', since: run.created_at })
+    await new Promise((r) => setTimeout(r, 10000))
+    run = (await api<WatchRun>(c, `/actions/runs/${run.id}`).catch(() => run)) as WatchRun
+  }
+  return run
 }
 
 export const secretsUrl = (c: SyncConfig) => `https://github.com/${c.owner}/${c.repo}/settings/secrets/actions/new`

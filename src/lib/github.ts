@@ -57,8 +57,15 @@ export class GitHubError extends Error {
   }
 }
 
-async function gh<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`https://api.github.com${path}`, {
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Erreurs passagères de GitHub ou du réseau : on réessaie après une courte pause. */
+const transient = (status: number, msg: string) => status === 429 || status >= 500 || (status === 403 && /rate limit|abuse/i.test(msg))
+
+async function gh<T>(token: string, path: string, init: RequestInit = {}, tries = 3): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
       Accept: 'application/vnd.github+json',
@@ -67,13 +74,27 @@ async function gh<T>(token: string, path: string, init: RequestInit = {}): Promi
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...init.headers,
     },
+    cache: 'no-store',
   })
+  } catch (e) {
+    // réseau coupé ou instable
+    if (tries > 1) {
+      await wait(1500 * (4 - tries))
+      return gh<T>(token, path, init, tries - 1)
+    }
+    throw new GitHubError(0, `Connexion à GitHub impossible (${e instanceof Error ? e.message : 'réseau'}).`)
+  }
   if (!res.ok) {
     let msg = res.statusText
     try {
       msg = (await res.json()).message ?? msg
     } catch {
       /* corps vide */
+    }
+    if (tries > 1 && transient(res.status, msg)) {
+      const after = Number(res.headers.get('retry-after'))
+      await wait(after > 0 && after < 30 ? after * 1000 : 2000 * (4 - tries))
+      return gh<T>(token, path, init, tries - 1)
     }
     throw new GitHubError(res.status, msg)
   }
@@ -167,6 +188,21 @@ interface TreeEntry {
  * Synchronise dans les deux sens. Pour chaque document ou offre, la version la plus récente gagne ;
  * une suppression plus récente que la dernière modification l'emporte aussi.
  */
+/** Lance les requêtes par petits groupes (GitHub limite les rafales de requêtes simultanées). */
+async function pool<T>(tasks: (() => Promise<T>)[], size = 6): Promise<T[]> {
+  const out: T[] = new Array(tasks.length)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(size, tasks.length) }, async () => {
+      while (next < tasks.length) {
+        const k = next++
+        out[k] = await tasks[k]()
+      }
+    }),
+  )
+  return out
+}
+
 export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promise<SyncResult> {
   const base = `/repos/${c.owner}/${c.repo}`
 
@@ -185,8 +221,8 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
   let pulled = 0
   const localDocs = new Map(local.docs.map((d) => [d.id, d]))
   const localOffers = new Map(local.offers.map((o) => [o.id, o]))
-  await Promise.all(
-    [...remoteFiles].map(async ([path, sha]) => {
+  await pool(
+    [...remoteFiles].map(([path, sha]) => async () => {
       const id = path.replace(/^.*\//, '').replace(/\.json$/, '')
       const isDoc = path.startsWith(DOC_DIR)
       const isOffer = path.startsWith(OFFER_DIR)
@@ -246,8 +282,8 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
   // 5. un seul commit pour toutes les modifications
   if (changes.length) {
     const commit = await gh<{ tree: { sha: string } }>(c.token, `${base}/git/commits/${headSha}`)
-    const entries = await Promise.all(
-      changes.map(async (ch) => {
+    const entries = await pool(
+      changes.map((ch) => async () => {
         if (ch.content === undefined) return { path: ch.path, mode: '100644', type: 'blob', sha: null }
         const blob = await gh<{ sha: string }>(c.token, `${base}/git/blobs`, { method: 'POST', body: JSON.stringify({ content: utf8ToB64(ch.content), encoding: 'base64' }) })
         return { path: ch.path, mode: '100644', type: 'blob', sha: blob.sha }
@@ -262,7 +298,10 @@ export async function sync(c: SyncConfig, local: LocalData, attempt = 0): Promis
       await gh(c.token, `${base}/git/refs/heads/${c.branch}`, { method: 'PATCH', body: JSON.stringify({ sha: newCommit.sha }) })
     } catch (e) {
       // un autre appareil a écrit entre-temps : on recommence une fois avec l'état à jour
-      if (e instanceof GitHubError && (e.status === 422 || e.status === 409) && attempt < 2) return sync(c, local, attempt + 1)
+      if (e instanceof GitHubError && (e.status === 422 || e.status === 409) && attempt < 4) {
+        await wait(1000 + attempt * 1500)
+        return sync(c, local, attempt + 1)
+      }
       throw e
     }
   }

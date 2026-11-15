@@ -13,7 +13,8 @@ import { AddJobModal } from './AddJobModal'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { useSync } from '../../store/sync'
-import { ago, offerFromItem } from '../../lib/watch'
+import { ago, offerFromItem, runWatchAndWait } from '../../lib/watch'
+import { GitHubError, loadConfig } from '../../lib/github'
 import { useRomeDrawer } from '../RomeDrawer'
 import { AlertsModal } from './AlertsModal'
 import { Modal, Segmented, toast } from '../ui'
@@ -551,6 +552,38 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const syncStatus = useSync((s) => s.status)
   const runSync = useSync((s) => s.run)
+  const syncMessage = useSync((s) => s.message)
+  // lancement manuel de la veille : synchronise, lance la tâche GitHub, attend sa fin, puis récupère les annonces
+  const [veille, setVeille] = useState<{ text: string; tone?: 'error' | 'ok' } | null>(null)
+  const veilleBusy = !!veille && !veille.tone
+  const launchVeille = async () => {
+    const cfg = loadConfig()
+    if (!cfg) return
+    setVeille({ text: 'Synchronisation…' })
+    await runSync()
+    try {
+      const run = await runWatchAndWait(cfg, (st) =>
+        setVeille({ text: st.phase === 'start' ? 'Lancement de la veille…' : st.phase === 'queued' ? 'Veille en attente chez GitHub…' : `Veille en cours depuis ${Math.max(1, Math.round((Date.now() - new Date(st.since ?? Date.now()).getTime()) / 60000))} min (3 à 6 min en général)…` }),
+      )
+      if (!run) return setVeille({ text: "La veille n'a pas démarré : GitHub est peut-être encombré, réessayez dans quelques minutes.", tone: 'error' })
+      if (run.status !== 'completed') return setVeille({ text: 'La veille est toujours en cours : les annonces arriveront à la prochaine synchronisation.', tone: 'ok' })
+      if (run.conclusion !== 'success') return setVeille({ text: `La veille a échoué (${run.conclusion}). Détails dans l'onglet Actions du dépôt.`, tone: 'error' })
+      setVeille({ text: 'Récupération des annonces…' })
+      await runSync()
+      setVeille({ text: 'Veille terminée, annonces à jour.', tone: 'ok' })
+    } catch (e) {
+      const st = e instanceof GitHubError ? e.status : 0
+      setVeille({
+        text: st === 403 || st === 404 ? "Le token GitHub n'a pas la permission « Actions » (lecture et écriture) : la veille n'a pas pu être lancée, seules les données ont été synchronisées." : `Veille non lancée : ${e instanceof Error ? e.message : 'erreur inconnue'}`,
+        tone: 'error',
+      })
+    }
+  }
+  useEffect(() => {
+    if (veille?.tone !== 'ok') return
+    const t = setTimeout(() => setVeille(null), 8000)
+    return () => clearTimeout(t)
+  }, [veille])
   const [filter, setFilter] = useState<Filter>('new')
   const [alert, setAlert] = useState<string>('all')
   const [q, setQ] = useState('')
@@ -778,11 +811,21 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           <button className="btn" onClick={() => setSettings(true)}>
             <Settings2 size={16} /> Alertes et veille
           </button>
-          <button className="btn icon-only" onClick={() => runSync()} disabled={syncStatus === 'syncing' || syncStatus === 'off'} title="Récupérer la dernière veille">
-            <RefreshCw size={16} className={syncStatus === 'syncing' ? 'spin' : ''} />
+          <button className="btn" onClick={launchVeille} disabled={veilleBusy || syncStatus === 'off'} title="Lance la veille maintenant (emails d'alerte, pages carrières, offres publiques), attend sa fin puis récupère les nouvelles annonces">
+            <RefreshCw size={16} className={veilleBusy || syncStatus === 'syncing' ? 'spin' : ''} /> {veilleBusy ? 'Veille en cours' : 'Lancer la veille'}
           </button>
         </div>
       </div>
+      {(veille || (syncStatus === 'error' && syncMessage)) && (
+        <p className={`veille-status ${veille?.tone ?? (veille ? '' : 'error')}`}>
+          {veille ? veille.text : `Synchronisation impossible : ${syncMessage}`}
+          {veille?.tone === 'error' || (!veille && syncStatus === 'error') ? (
+            <button className="btn xs ghost" onClick={() => (veille ? setVeille(null) : runSync())}>
+              {veille ? 'Fermer' : 'Réessayer'}
+            </button>
+          ) : null}
+        </p>
+      )}
 
       {noAlerts ? (
         <div className="empty-state">

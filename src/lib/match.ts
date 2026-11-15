@@ -283,10 +283,10 @@ const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) =>
 export interface MatchResult {
   score: number
   title: { v: number; target?: string; other?: string }
-  skills: { v: number; matched: string[]; total: number } | null
+  skills: { v: number; matched: string[]; total: number; /** phrase de l'annonce où chaque savoir-faire ROME a été retrouvé */ quotes?: Record<string, string> } | null
   level: { v: number; label: string; kind: 'junior' | 'neutral' | 'mid' | 'senior'; quote?: string; pref: LevelPref }
   place: { v: number; label: string }
-  degree?: { required: number; strict: boolean; factor: number }
+  degree?: { required: number; strict: boolean; factor: number; quote?: string }
   /** hors critères (note 0) : raison */
   out?: string
   /** texte complet non lu : note plafonnée */
@@ -410,6 +410,7 @@ function degreeOf(text: string, mine: number): MatchResult['degree'] {
   const t = strip(text)
   let req = 0
   let strict = false
+  let quote = ''
   for (const m of t.matchAll(/bac\s*\+\s*(\d)(?:\s*(?:\/|a|ou|-)\s*\+?\s*(\d))?|\b(master|mba|ingenieur|grande ecole|doctorat|\bm2\b|niveau 7|rncp 7)\b/g)) {
     const n = m[1] ? Number(m[1]) : m[3] === 'doctorat' ? 8 : 5
     if (n > 8) continue
@@ -419,13 +420,14 @@ function degreeOf(text: string, mine: number): MatchResult['degree'] {
     if (!/exig|requis|obligatoire|minimum|imperati|indispensable|formation|diplom|titulaire|niveau|issu|cursus|vous avez|vous etes|profil|de type|souhait/.test(ctx)) continue
     if (n > req) {
       req = n
+      quote = m[0]
       strict = /exig|requis|obligatoire|imperati|indispensable|minimum/.test(ctx) && !/ou equivalent|ou experience|equivalence/.test(ctx)
     }
   }
   const ok = mine + 1
   if (!req || req <= ok) return undefined
   const gap = req - ok
-  return { required: req, strict, factor: strict ? (gap >= 2 ? 0.4 : 0.55) : gap >= 2 ? 0.6 : 0.75 }
+  return { required: req, strict, quote, factor: strict ? (gap >= 2 ? 0.4 : 0.55) : gap >= 2 ? 0.6 : 0.75 }
 }
 
 export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'): MatchResult {
@@ -465,18 +467,23 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
     // savoir-faire ROME (« Encadrer et coordonner une équipe ») : les deux tiers de ses mots principaux dans une même phrase
     const sentences = strip(text)
       .split(/[.!?;•\n]+|\s[-–]\s/)
-      .map((x) => new Set(romeWords(x).map(short)))
-      .filter((x) => x.size)
+      .map((x) => ({ raw: x.trim(), set: new Set(romeWords(x).map(short)) }))
+      .filter((x) => x.set.size)
+    const quotes: Record<string, string> = {}
     const mine = new Set(matched.map(strip))
     for (const r of rome) {
       if (mine.has(strip(r))) continue
       const k = [...new Set(romeWords(r).map(short))]
       if (k.length < 2) continue
       const need = Math.max(2, Math.ceil(k.length * 0.66))
-      if (sentences.some((set) => k.filter((x) => set.has(x)).length >= need)) matched.push(r)
+      const hit = sentences.find((x) => k.filter((w) => x.set.has(w)).length >= need)
+      if (hit) {
+        matched.push(r)
+        quotes[r] = hit.raw.slice(0, 200)
+      }
     }
     const total = p.skills.length + rome.length
-    skills = { v: Math.min(1, matched.length / Math.min(total, 8)), matched, total }
+    skills = { v: Math.min(1, matched.length / Math.min(total, 8)), matched, total, quotes }
   }
 
   const level = levelOf(i, text, pref, p.years)

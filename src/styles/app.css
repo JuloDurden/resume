@@ -4004,3 +4004,21 @@ button.followup-badge {
   background: #fdecec;
   color: #9b1c1c;
 }
+mark.jc-hl {
+  background: #fde68a;
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+  box-shadow: 0 0 0 1px #f6c84c;
+}
+.match-chips > span[role='button'] {
+  cursor: pointer;
+}
+.match-chips > span[role='button']:hover {
+  filter: brightness(0.96);
+  text-decoration: underline dotted;
+}
+.match-chips > span[data-active] {
+  outline: 2px solid #f6c84c;
+  outline-offset: 1px;
+}

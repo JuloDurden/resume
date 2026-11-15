@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { strip } from '../../lib/ats'
 import { Link2, Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, JobReview, MarkState, Offer, ResumeDoc } from '../../types'
 import { useNavigate } from 'react-router-dom'
@@ -254,9 +255,87 @@ function PasteText({ item }: { item: FeedItem & { pasted?: boolean } }) {
   )
 }
 
-/** Critères de la note, visibles sans déplier l'annonce. */
-function MatchChips({ m }: { m: MatchResult }) {
+/** Texte de l'annonce avec les passages surlignés (comparaison sans accents, sans casse, espaces regroupés). */
+function Highlighted({ text, terms }: { text: string; terms: string[] }) {
+  const parts = useMemo(() => {
+    if (!terms.length) return [{ t: text, hl: false }]
+    let norm = ''
+    const pos: number[] = []
+    let space = false
+    for (let k = 0; k < text.length; k++) {
+      const c = strip(text[k])
+      if (/\s/.test(c)) {
+        if (space) continue
+        space = true
+        norm += ' '
+        pos.push(k)
+        continue
+      }
+      space = false
+      for (const ch of c) {
+        norm += ch
+        pos.push(k)
+      }
+    }
+    const ranges: [number, number][] = []
+    for (const term of terms) {
+      const q = strip(term).replace(/\s+/g, ' ').trim()
+      if (q.length < 2) continue
+      for (let from = 0, at = norm.indexOf(q); at >= 0; from = at + q.length, at = norm.indexOf(q, from)) {
+        // terme court (« SQL », « PO ») : mot entier seulement
+        if (q.length <= 4 && (/[a-z0-9]/.test(norm[at - 1] ?? '') || /[a-z0-9]/.test(norm[at + q.length] ?? ''))) continue
+        ranges.push([pos[at], pos[at + q.length - 1] + 1])
+      }
+    }
+    ranges.sort((a, b) => a[0] - b[0])
+    const out: { t: string; hl: boolean }[] = []
+    let cur = 0
+    for (const [a, b] of ranges) {
+      if (b <= cur) continue
+      const start = Math.max(a, cur)
+      if (start > cur) out.push({ t: text.slice(cur, start), hl: false })
+      out.push({ t: text.slice(start, b), hl: true })
+      cur = b
+    }
+    out.push({ t: text.slice(cur), hl: false })
+    return out
+  }, [text, terms])
+  return (
+    <>
+      {parts.map((p, k) =>
+        p.hl ? (
+          <mark key={k} className="jc-hl">
+            {p.t}
+          </mark>
+        ) : (
+          p.t
+        ),
+      )}
+    </>
+  )
+}
+
+/** Critères de la note, visibles sans déplier l'annonce ; un clic surligne le passage de l'annonce qui le justifie. */
+function MatchChips({ m, active, onFocus, textLoc }: { m: MatchResult; active?: string; onFocus: (key: string, terms: string[]) => void; textLoc?: string }) {
   const pct = (v: number) => `${Math.round(v * 100)} %`
+  const skillTerms = m.skills?.matched.map((x) => m.skills?.quotes?.[x] ?? x) ?? []
+  const focus = (key: string, terms: (string | undefined)[]) => {
+    const t = terms.filter((x): x is string => !!x)
+    return t.length
+      ? {
+          role: 'button',
+          tabIndex: 0,
+          'data-active': active === key || undefined,
+          onClick: () => onFocus(key, t),
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onFocus(key, t)
+            }
+          },
+        }
+      : {}
+  }
   return (
     <div className="match-chips compact">
       {m.out && (
@@ -270,16 +349,16 @@ function MatchChips({ m }: { m: MatchResult }) {
         {m.title.other ? `, autre métier : « ${m.title.other} »` : ''}
       </span>
       {m.skills ? (
-        <span className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}>
+        <span className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={`${m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}${skillTerms.length ? '\nCliquez pour les surligner dans l\'annonce' : ''}`} {...focus('skills', skillTerms)}>
           <Check size={12} /> {m.skills.matched.length} compétence{m.skills.matched.length > 1 ? 's' : ''} retrouvée{m.skills.matched.length > 1 ? 's' : ''}
         </span>
       ) : (
         <span className="na" title="Le texte complet de l'annonce n'est pas disponible">Compétences : texte indisponible</span>
       )}
-      <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte ou profil)`}>
+      <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte ou profil)${m.level.quote ? "\nCliquez pour surligner le passage dans l'annonce" : ''}`} {...focus('level', [m.level.quote])}>
         {m.level.label}
       </span>
-      <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'}>
+      <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'} {...focus('place', [textLoc])}>
         <MapPin size={12} /> {m.place.label}
       </span>
       {!!m.learned && (
@@ -289,7 +368,7 @@ function MatchChips({ m }: { m: MatchResult }) {
         </span>
       )}
       {m.degree && (
-        <span className="no">
+        <span className="no" title={m.degree.quote ? "Cliquez pour surligner le passage dans l'annonce" : undefined} {...focus('degree', [m.degree.quote])}>
           <AlertTriangle size={12} /> Bac+{m.degree.required} {m.degree.strict ? 'exigé' : 'demandé'}
         </span>
       )}
@@ -365,8 +444,29 @@ function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?:
 function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
   const [open, setOpen] = useState(false)
+  // passage surligné dans le texte de l'annonce (clic sur un critère)
+  const [hl, setHl] = useState<{ key: string; terms: string[]; n: number } | null>(null)
+  const cardRef = useRef<HTMLElement>(null)
+  const onFocus = (key: string, terms: string[]) => {
+    if (hl?.key === key) return setHl(null)
+    setOpen(true)
+    setHl({ key, terms, n: Date.now() })
+  }
+  useEffect(() => {
+    if (!hl) return
+    const t = setTimeout(() => {
+      const mark = cardRef.current?.querySelector('mark.jc-hl')
+      if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      else toast.info("Passage introuvable dans le texte affiché de l'annonce")
+    }, 60)
+    return () => clearTimeout(t)
+  }, [hl])
+  const textLoc = (() => {
+    const w = locationOf(item)
+    return w.fromText ? w.loc : undefined
+  })()
   return (
-    <article className={`job-card${mark === 'hidden' ? ' hidden' : ''}${selected ? ' selected' : ''}`}>
+    <article ref={cardRef} className={`job-card${mark === 'hidden' ? ' hidden' : ''}${selected ? ' selected' : ''}`}>
       <div className="jc-head">
         <input type="checkbox" className="jc-check" checked={selected} onChange={(e) => onSelect(e.target.checked)} title="Sélectionner" />
         {item.logo ? <img className="offer-logo" src={item.logo} alt="" width={36} height={36} /> : <span className="offer-logo fallback" style={{ width: 36, height: 36, fontSize: 16 }}>{(item.company ?? item.title).charAt(0).toUpperCase()}</span>}
@@ -453,7 +553,7 @@ function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, sala
         ))}
       </div>
         </div>
-        {match && <MatchChips m={match} />}
+        {match && <MatchChips m={match} active={hl?.key} onFocus={onFocus} textLoc={textLoc} />}
       </div>
       {degraded && <p className="jc-degraded">Le site {item.source.replace(' (alerte email)', '')} est en mode dégradé en ce moment : ses liens peuvent afficher « offre indisponible ». Réessayez plus tard ou utilisez « Retrouver ».</p>}
       {open && (
@@ -463,10 +563,16 @@ function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, sala
           {item.fullText ? (
             <details className="jc-full" open>
               <summary>Texte complet de l'annonce</summary>
-              <div className="jc-desc">{item.fullText}</div>
+              <div className="jc-desc">
+                <Highlighted text={item.fullText} terms={hl?.terms ?? []} />
+              </div>
             </details>
           ) : (
-            item.description && <p className="jc-desc">{item.description}</p>
+            item.description && (
+              <p className="jc-desc">
+                <Highlighted text={item.description} terms={hl?.terms ?? []} />
+              </p>
+            )
           )}
           <PasteText item={item} />
         </div>

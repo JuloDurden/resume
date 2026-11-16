@@ -207,3 +207,16 @@ describe('commune abrégée', () => {
     expect(pickCommune('Castelnaudary', list)?.nom).toBe('Castelnaudary')
   })
 })
+
+describe('expérience et domaine', () => {
+  it("une première expérience « atout » n'est pas une exigence", () => {
+    const m = matchItem(item({ title: 'Business Analyst', fullText: 'Une première expérience en environnement Agile (Jira) et des connaissances sur le KYC sont de vrais atouts. '.repeat(5) }), p)
+    expect(m.level.label).toBe('Première expérience appréciée, pas exigée')
+    const e = matchItem(item({ title: 'Business Analyst', fullText: 'Une première expérience réussie en tant que BA est exigée. '.repeat(5) }), p)
+    expect(e.level.label).toBe('Première expérience demandée')
+  })
+  it("reconnaît un domaine d'expertise du profil dans l'intitulé (F&L)", () => {
+    const m = matchItem(item({ title: 'Formateur / Formatrice Expert(e) Rayon F&L H/F' }), { ...p, targets: ["Responsable d'exploitation"], expertise: ['fruits et légumes'] })
+    expect(m.title.v).toBe(0.5)
+  })
+})

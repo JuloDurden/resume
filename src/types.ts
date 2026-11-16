@@ -188,6 +188,10 @@ export interface Offer extends JobTarget {
   followUps?: number[]
   /** relances désactivées pour cette offre */
   noFollowUp?: boolean
+  /** délai avant relance choisi pour cette offre, en jours (sinon le délai par défaut) */
+  followUpDays?: number
+  /** date précise de la prochaine relance (fin de la période de recrutement annoncée par l'employeur) */
+  followUpDate?: number
   /** annonces de la veille rattachées à cette candidature */
   jobIds?: string[]
   /** préparation d'entretien rédigée par Claude */
@@ -333,6 +337,8 @@ export interface MatchProfile {
   home?: { nom: string; lat: number; lon: number }
   /** périmètre de recherche en km : au-delà, une offre sans télétravail a la note 0 */
   maxKm?: number
+  /** délai par défaut avant de relancer une candidature, en jours */
+  followUpDays?: number
   /** types de contrat recherchés (vide : tous) ; une annonce qui ne propose aucun d'eux passe en « Hors critères » */
   contracts?: string[]
   /** profils de recherche (IT junior, management confirmé...) : chaque annonce est notée face à chacun, la meilleure note l'emporte */

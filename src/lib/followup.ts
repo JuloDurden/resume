@@ -1,19 +1,42 @@
 // Relances des candidatures envoyées.
 import type { Offer, ResumeDoc } from '../types'
 
-const DAY = 86400000
-/** Délai avant chaque relance (après l'envoi, puis après la relance précédente). */
-export const FOLLOW_UP_DAYS = [7, 10]
+/** Délais proposés avant une relance, en jours. */
+export const FOLLOW_UP_CHOICES = [7, 10, 15, 21]
+/** Nombre de relances proposées (une relance, puis une seconde). */
+const MAX_FOLLOW_UPS = 2
+let defaultDays = 15
+/** Délai par défaut (réglage du profil), 15 jours sinon. */
+export const setDefaultFollowUpDays = (n?: number) => {
+  defaultDays = n && n > 0 ? n : 15
+}
+export const followUpDays = (o: Offer) => o.followUpDays ?? defaultDays
 
 export const appliedAt = (o: Offer) => o.statusAt?.applied ?? (o.status === 'applied' ? o.updatedAt : undefined)
 
-/** Date de la prochaine relance, ou undefined si aucune n'est prévue. */
+/** Début du jour (minuit, heure locale) : une relance est due le jour prévu, quelle que soit l'heure de la candidature. */
+export const startOfDay = (t: number) => {
+  const d = new Date(t)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+const addDays = (t: number, n: number) => {
+  const d = new Date(startOfDay(t))
+  d.setDate(d.getDate() + n)
+  return d.getTime()
+}
+
+/**
+ * Jour de la prochaine relance, ou undefined si aucune n'est prévue : délai compté en jours à partir du jour de la candidature
+ * (ou de la relance précédente), ou date précise choisie pour la première relance.
+ */
 export function nextFollowUp(o: Offer): number | undefined {
   if (o.status !== 'applied' || o.noFollowUp) return undefined
   const sent = o.followUps ?? []
-  if (sent.length >= FOLLOW_UP_DAYS.length) return undefined
+  if (sent.length >= MAX_FOLLOW_UPS) return undefined
+  if (!sent.length && o.followUpDate) return startOfDay(o.followUpDate)
   const from = sent.length ? Math.max(...sent) : appliedAt(o)
-  return from ? from + FOLLOW_UP_DAYS[sent.length] * DAY : undefined
+  return from ? addDays(from, followUpDays(o)) : undefined
 }
 
 export const isDue = (o: Offer, now = Date.now()) => {

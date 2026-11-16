@@ -1,21 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedItem, Offer } from '../types'
-import { followUpEmail, isDue, nextFollowUp } from '../lib/followup'
+import { followUpEmail, isDue, nextFollowUp, startOfDay } from '../lib/followup'
 import { groupJobs } from '../lib/dedupe'
 
 const DAY = 86400000
 const offer = (o: Partial<Offer>): Offer => ({ id: 'o', createdAt: 0, updatedAt: 0, status: 'applied', title: 'Product Owner', company: 'ACME', ...o })
 
 describe('relances', () => {
-  it('propose une relance 7 jours après l\'envoi, puis 10 jours après', () => {
-    const sent = Date.now() - 8 * DAY
-    expect(isDue(offer({ statusAt: { applied: sent } }))).toBe(true)
-    expect(isDue(offer({ statusAt: { applied: Date.now() - 2 * DAY } }))).toBe(false)
-    const once = offer({ statusAt: { applied: sent }, followUps: [Date.now() - DAY] })
+  it('propose une relance 15 jours après le jour de la candidature, puis une seconde', () => {
+    const today = startOfDay(Date.now())
+    expect(isDue(offer({ statusAt: { applied: today - 15 * DAY + 3600000 } }))).toBe(true)
+    expect(isDue(offer({ statusAt: { applied: today - 14 * DAY } }))).toBe(false)
+    expect(isDue(offer({ statusAt: { applied: today - 8 * DAY }, followUpDays: 7 }))).toBe(true)
+    const once = offer({ statusAt: { applied: today - 20 * DAY }, followUps: [Date.now() - DAY] })
     expect(isDue(once)).toBe(false)
-    expect(nextFollowUp(once)).toBeGreaterThan(Date.now() + 8 * DAY)
-    expect(nextFollowUp(offer({ statusAt: { applied: sent }, followUps: [1, 2] }))).toBeUndefined()
-    expect(nextFollowUp(offer({ status: 'interview', statusAt: { applied: sent } }))).toBeUndefined()
+    expect(nextFollowUp(once)).toBeGreaterThan(Date.now() + 12 * DAY)
+    expect(nextFollowUp(offer({ statusAt: { applied: today }, followUps: [1, 2] }))).toBeUndefined()
+    expect(nextFollowUp(offer({ status: 'interview', statusAt: { applied: today } }))).toBeUndefined()
+  })
+  it('respecte une date précise pour la première relance', () => {
+    const d = Date.now() + 30 * DAY
+    expect(nextFollowUp(offer({ statusAt: { applied: Date.now() }, followUpDate: d }))).toBe(startOfDay(d))
   })
   it('rédige le message sans tiret long', () => {
     const m = followUpEmail(offer({ statusAt: { applied: Date.now() - 8 * DAY }, contacts: [{ name: 'Mme Durand', email: 'rh@acme.fr' }] }))

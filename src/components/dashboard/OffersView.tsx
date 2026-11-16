@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BellRing, BookOpen, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, LayoutGrid, Link2, MapPin, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
-import { FollowUpModal, InterviewModal, followUpLabel } from './OfferTools'
-import { isDue } from '../../lib/followup'
+import { BarChart3, BellRing, BookOpen, CalendarClock, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, LayoutGrid, Link2, MapPin, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FollowUpModal, FollowUpPlanner, InterviewModal, followUpLabel } from './OfferTools'
+import { isDue, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
@@ -69,6 +69,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
   const add = useDocs((s) => s.add)
   const [cvModal, setCvModal] = useState(false)
   const [followUp, setFollowUp] = useState(false)
+  const [planner, setPlanner] = useState(false)
   const [prep, setPrep] = useState(false)
   const fu = followUpLabel(offer)
   const openRome = useRomeDrawer((s) => s.open)
@@ -131,6 +132,17 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
               </MenuItem>
               {offer.status === 'applied' && (
                 <MenuItem
+                  icon={<CalendarClock size={14} />}
+                  onClick={() => {
+                    close()
+                    setPlanner(true)
+                  }}
+                >
+                  Jour de candidature et relance
+                </MenuItem>
+              )}
+              {offer.status === 'applied' && (
+                <MenuItem
                   icon={<BellRing size={14} />}
                   onClick={() => {
                     close()
@@ -174,13 +186,13 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
         {best !== undefined && <span className={`offer-score ${best >= 75 ? 'good' : best >= 55 ? 'mid' : 'low'}`} title="Meilleur score ATS des CV rattachés">ATS {best}</span>}
         {fu &&
           (fu.due ? (
-            <button className="followup-badge due" onClick={() => setFollowUp(true)} title="Préparer l'email de relance">
+            <button className="followup-badge due" onClick={() => setFollowUp(true)} title={fu.title}>
               <BellRing size={12} /> {fu.label}
             </button>
           ) : (
-            <span className="followup-badge" title="Relance proposée automatiquement 7 jours après l'envoi">
-              {fu.label}
-            </span>
+            <button className="followup-badge" onClick={() => setPlanner(true)} title={fu.title}>
+              <CalendarClock size={12} /> {fu.label}
+            </button>
           ))}
         {(offer.status === 'interview' || offer.interview) && (
           <button className={`followup-badge prep${offer.interview ? ' ready' : ''}`} onClick={() => setPrep(true)}>
@@ -212,6 +224,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
       </div>
       {cvModal && <NewCvForOffer offer={offer} resumes={resumes} onClose={() => setCvModal(false)} />}
       {followUp && <FollowUpModal offer={offer} onClose={() => setFollowUp(false)} />}
+      {planner && <FollowUpPlanner offer={offer} onClose={() => setPlanner(false)} />}
       {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
     </div>
   )
@@ -219,6 +232,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
 
 export function OffersView() {
   const offersMap = useDocs((s) => s.offers)
+  setDefaultFollowUpDays(useDocs((s) => s.watch.profile?.followUpDays))
   const docsMap = useDocs((s) => s.docs)
   const saveOffer = useDocs((s) => s.saveOffer)
   const [filter, setFilter] = useState<Filter>('all')

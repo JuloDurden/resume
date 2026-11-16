@@ -29,6 +29,8 @@ const IGNORE = /^(h|f|x|nb|ng|hf|fh|cdi|cdd|de|la|le|les|des|du|en|et|a|au|aux|u
 
 const words = (s: string) =>
   strip(s ?? '')
+    // sigles de rayon : « F&L » (fruits et légumes), « BOF » (beurre, œufs, fromages)
+    .replace(/\bf\s*&\s*l\b/g, ' fruits legumes ')
     .replace(/['’]/g, ' ')
     .split(/[^a-z0-9+#]+/)
     .filter((w) => w && !IGNORE.test(w) && !STOPWORDS.has(w))
@@ -60,6 +62,8 @@ export interface ProfileData {
   romeSkills?: string[]
   /** années d'expérience dans ce domaine */
   years?: number
+  /** compétences et domaines ajoutés à la main au profil (« fruits et légumes ») : comptent aussi dans l'intitulé */
+  expertise?: string[]
   degree: number
   home?: { lat: number; lon: number; nom: string }
   maxKm?: number
@@ -75,6 +79,7 @@ export interface TrackData {
   targets: string[]
   skills: string[]
   romeSkills: string[]
+  expertise: string[]
   level?: LevelPref
   years: number
   cv?: ResumeDoc
@@ -354,8 +359,15 @@ export function experienceOf(title: string, text: string, level?: string): Exper
           continue
         }
       }
-      if (/premiere experience|1ere experience|debutant|sans experience|aucune experience|jeune diplome|experience (n.est pas|non) (exigee|requise|obligatoire)|une experience (en|dans|sur|de) [^.]{0,40}(serait|est) un (plus|atout)/.test(s)) {
-        keep({ min: 0, max: 2, kind: 'junior', label: 'Première expérience ou débutant accepté', quote: q })
+      if (/debutant|sans experience|aucune experience|jeune diplome|experience (n.est pas|non) (exigee|requise|obligatoire)/.test(s)) {
+        keep({ min: 0, max: 2, kind: 'junior', label: 'Débutant accepté', quote: q })
+        continue
+      }
+      if (/premiere experience|1ere experience|une experience (en|dans|sur|de) [^.]{0,60}(serait|est|sont|seraient) (un|de vrais|des) (plus|atouts?)/.test(s)) {
+        // « une première expérience en environnement Agile est un atout » : appréciée, pas exigée
+        if (/atouts?|un plus|apprecie|souhaite|bienvenue?|appreciable|valorise/.test(s) && !/exige|requis|indispensable|obligatoire|imperati/.test(s))
+          keep({ min: 0, max: 2, kind: 'junior', label: 'Première expérience appréciée, pas exigée', quote: q })
+        else keep({ min: 1, max: 3, kind: 'junior', label: 'Première expérience demandée', quote: q })
         continue
       }
       if (/(deuxieme|seconde|2e|2eme) experience/.test(s)) {
@@ -449,6 +461,15 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
     if (hit.length && hit.every((x) => x === 'chef')) v = Math.min(v, 0.4)
     if (otherDomain) v *= 0.5
     if (v > title.v) title = { v, target: t, other: otherDomain }
+  }
+  // domaine d'expertise du profil dans l'intitulé (« Formateur Rayon F&L » pour 18 ans de fruits et légumes) : correspondance partielle
+  if (title.v < 0.5 && p.expertise?.length) {
+    const tseq = ` ${words(i.title).flatMap(canon).join(' ')} `
+    const e = p.expertise.find((x) => {
+      const w = words(x).flatMap(canon)
+      return w.length > 0 && w.join(' ').length > 3 && tseq.includes(` ${w.join(' ')} `)
+    })
+    if (e) title = { v: 0.5, target: `domaine : ${e}`, other: otherDomain }
   }
 
   // compétences : seulement si l'annonce a un vrai texte
@@ -565,6 +586,7 @@ export function resolveProfile(saved: MatchProfile | undefined, docs: ResumeDoc[
           targets: t.targets,
           skills: [...new Set([...cvSkills(tcv), ...(t.skills ?? [])])],
           romeSkills: trackRomeSkills(t.id, saved.experiences),
+          expertise: t.skills ?? [],
           level: t.level,
           years: trackYears(t.id, pool, saved.experiences),
           cv: tcv,
@@ -624,7 +646,7 @@ export function matchBest(i: FeedItem, p: ProfileData, alertPref: LevelPref = 'a
   if (!p.tracks?.length) return matchItem(i, p, alertPref)
   const nat = natureOf(i)
   const results = p.tracks.map((t) => {
-    const r = matchItem(i, { ...p, targets: t.targets, skills: t.skills, romeSkills: t.romeSkills, years: t.years }, t.level ?? alertPref)
+    const r = matchItem(i, { ...p, targets: t.targets, skills: t.skills, romeSkills: t.romeSkills, years: t.years, expertise: t.expertise }, t.level ?? alertPref)
     const kinds = trackNatures(t)
     const mine = nat.filter((n) => kinds.includes(n.id)).reduce((a, n) => a + n.hits, 0)
     return { t, r, kinds, mine }

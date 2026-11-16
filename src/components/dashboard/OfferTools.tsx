@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import { BellOff, Check, ClipboardCopy, ExternalLink, Mail, MessagesSquare, RotateCcw } from 'lucide-react'
 import type { InterviewPrep, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
-import { appliedAt, followUpEmail, nextFollowUp } from '../../lib/followup'
+import { FOLLOW_UP_CHOICES, appliedAt, followUpDays, followUpEmail, nextFollowUp, startOfDay } from '../../lib/followup'
 import { resumeToText } from '../../lib/export'
 import { CLAUDE_URL, copyText, extractJson, interviewPrepPrompt } from '../../lib/prompts'
-import { Field, Modal, TextArea, TextInput, toast } from '../ui'
+import { Field, Modal, Segmented, TextArea, TextInput, toast } from '../ui'
 
 const frDate = (t?: number) => (t ? new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '')
 
@@ -37,7 +37,7 @@ export function FollowUpModal({ offer, onClose }: { offer: Offer; onClose: () =>
     // adresse saisie à la main : enregistrée comme contact de l'offre
     if (to && !contacts.some((c) => c.email === to)) contacts = [...contacts, { email: to, role: 'Recrutement' }]
     saveOffer({ ...offer, contacts, followUps: [...(offer.followUps ?? []), Date.now()] })
-    toast.ok(n === 1 ? 'Relance enregistrée : seconde relance proposée dans 10 jours' : 'Seconde relance enregistrée')
+    toast.ok(n === 1 ? `Relance enregistrée : seconde relance proposée dans ${followUpDays(offer)} jours` : 'Seconde relance enregistrée')
     onClose()
   }
 
@@ -112,12 +112,88 @@ export function FollowUpModal({ offer, onClose }: { offer: Offer; onClose: () =>
   )
 }
 
-export function followUpLabel(o: Offer): { due: boolean; label: string } | undefined {
+export function followUpLabel(o: Offer): { due: boolean; label: string; title: string } | undefined {
   const n = nextFollowUp(o)
   if (!n) return undefined
-  const days = Math.ceil((n - Date.now()) / 86400000)
-  if (days <= 0) return { due: true, label: (o.followUps?.length ?? 0) ? 'Seconde relance' : 'À relancer' }
-  return { due: false, label: `Relance dans ${days} j` }
+  const days = Math.round((n - startOfDay(Date.now())) / 86400000)
+  const when = `Relance prévue le ${new Date(n).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`
+  if (days <= 0) return { due: true, label: (o.followUps?.length ?? 0) ? 'Seconde relance' : 'À relancer', title: `${when}. Cliquez pour préparer l'email.` }
+  return { due: false, label: days === 1 ? 'Relance demain' : days <= 21 ? `Relance dans ${days} j` : `Relance le ${new Date(n).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`, title: `${when}. Cliquez pour changer le délai ou la date.` }
+}
+
+const toInput = (t?: number) => {
+  if (!t) return ''
+  const d = new Date(t)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const fromInput = (v: string) => {
+  const [y, m, d] = v.split('-').map(Number)
+  return y ? new Date(y, m - 1, d, 12).getTime() : undefined
+}
+
+/** Jour de la candidature et délai de relance (7, 10, 15, 21 jours ou date précise). */
+export function FollowUpPlanner({ offer, onClose }: { offer: Offer; onClose: () => void }) {
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const profile = useDocs((s) => s.watch.profile)
+  const setProfile = useDocs((s) => s.setProfile)
+  const [applied, setApplied] = useState(toInput(appliedAt(offer) ?? Date.now()))
+  const [mode, setMode] = useState<number | 'date'>(offer.followUpDate && !offer.followUps?.length ? 'date' : followUpDays(offer))
+  const [date, setDate] = useState(toInput(offer.followUpDate))
+  const [asDefault, setAsDefault] = useState(false)
+  const draft: Offer = { ...offer, statusAt: { ...offer.statusAt, applied: fromInput(applied) }, followUpDays: mode === 'date' ? offer.followUpDays : mode, followUpDate: mode === 'date' ? fromInput(date) : undefined }
+  const next = nextFollowUp(draft)
+  const save = () => {
+    saveOffer({ ...draft, noFollowUp: false })
+    if (asDefault && mode !== 'date' && profile) setProfile({ ...profile, followUpDays: mode })
+    toast.ok(next ? `Relance prévue le ${new Date(next).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}` : 'Relance enregistrée')
+    onClose()
+  }
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Relance : ${offer.title ?? 'candidature'}`}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Annuler
+          </button>
+          <button className="btn primary" onClick={save} disabled={mode === 'date' && !date}>
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      <div className="form-stack">
+        <Field label="Jour de la candidature" hint="Le délai se compte en jours à partir de ce jour, quelle que soit l'heure d'envoi.">
+          <input className="input" type="date" value={applied} max={toInput(Date.now())} onChange={(e) => setApplied(e.target.value)} />
+        </Field>
+        <Field label={offer.followUps?.length ? 'Délai avant la seconde relance' : 'Relancer'}>
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            options={[...FOLLOW_UP_CHOICES.map((d) => ({ value: d as number | 'date', label: `${d} jours` })), ...(offer.followUps?.length ? [] : [{ value: 'date' as const, label: 'Date précise', title: "Quand l'employeur indique la fin de sa période de recrutement" }])]}
+          />
+        </Field>
+        {mode === 'date' ? (
+          <Field label="Date de la relance" hint="Par exemple le lendemain de la fin de la période de recrutement annoncée.">
+            <input className="input" type="date" value={date} min={applied} onChange={(e) => setDate(e.target.value)} />
+          </Field>
+        ) : (
+          <label className="check-line small">
+            <input type="checkbox" checked={asDefault} onChange={(e) => setAsDefault(e.target.checked)} /> Utiliser {mode} jours par défaut pour mes prochaines candidatures
+            {profile?.followUpDays ? '' : ' (15 jours actuellement)'}
+          </label>
+        )}
+        {next && (
+          <p className="muted small">
+            Relance prévue le <strong>{new Date(next).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>
+            {(offer.followUps?.length ?? 0) === 0 ? `, puis une seconde relance ${mode === 'date' ? followUpDays(offer) : mode} jours plus tard si besoin.` : '.'}
+          </p>
+        )}
+      </div>
+    </Modal>
+  )
 }
 
 /* ---------- Préparation d'entretien ---------- */

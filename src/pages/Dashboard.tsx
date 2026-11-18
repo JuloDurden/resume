@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Globe, BellRing, Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
 import type { ResumeDoc } from '../types'
 import { uid } from '../lib/ids'
@@ -15,7 +15,7 @@ import { JobsView } from '../components/dashboard/JobsView'
 import { useFeed } from '../store/feed'
 import { PdfImportModal } from '../components/PdfImportModal'
 import { SyncButton, SyncModal } from '../components/SyncModal'
-import { ShowcaseGrid, ShowcaseIntro, useShowcase } from './Showcase'
+import { SharedIntro, ShowcaseGrid, ShowcaseIntro, useSharedShowcase, useShowcase } from './Showcase'
 import { useSync } from '../store/sync'
 import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput, toast } from '../components/ui'
 
@@ -175,17 +175,19 @@ export default function Dashboard() {
   const offersCount = useDocs((s) => Object.keys(s.offers).length)
   useEffect(() => localStorage.setItem('resume-dash-view', view), [view])
   const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | 'sync' | null>(null)
-  const showcase = useShowcase()
+  // lien donné à un recruteur (/c/<identifiant>) : la vitrine montre le CV et la lettre de cette candidature
+  const { slug } = useParams()
+  const vitrine = useShowcase()
+  const shared = useSharedShowcase(slug)
+  const showcase = slug ? shared ?? undefined : vitrine
   const syncOn = useSync((s) => s.status !== 'off')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const docs = useMemo(() => Object.values(docsMap).sort((a, b) => b.updatedAt - a.updatedAt), [docsMap])
   const resumes = useMemo(() => docs.filter((d): d is ResumeDoc => d.kind === 'resume'), [docs])
   const refs = useMemo(() => resumes.filter((d) => d.reference), [resumes])
-  // CV de référence en tête de liste
-  const shown = docs
-    .filter((d) => filter === 'all' || (filter === 'reference' ? d.kind === 'resume' && d.reference : d.kind === filter))
-    .sort((a, b) => Number(b.kind === 'resume' && !!b.reference) - Number(a.kind === 'resume' && !!a.reference))
+  // du plus récent au plus ancien (date de modification affichée sur les cartes), CV de référence compris
+  const shown = docs.filter((d) => filter === 'all' || (filter === 'reference' ? d.kind === 'resume' && d.reference : d.kind === filter))
   const needBackup = !syncOn && docs.length > 0 && (!lastBackup || Date.now() - lastBackup > 14 * 86400000)
 
   const backup = () => {
@@ -306,14 +308,21 @@ export default function Dashboard() {
         />
       </div>
 
+      {slug && shared && hydrated && docs.length > 0 && (
+        <>
+          <SharedIntro sc={shared} />
+          <ShowcaseGrid sc={shared} base={`/c/${slug}`} />
+        </>
+      )}
+      {slug && shared === null && <p className="notice warn">Ce dossier de candidature n'existe pas ou n'est plus en ligne.</p>}
       {!hydrated ? (
         <div className="loading">Chargement...</div>
       ) : !docs.length ? (
         <>
         {showcase && (
           <>
-            <ShowcaseIntro sc={showcase} />
-            <ShowcaseGrid sc={showcase} />
+            {slug && shared ? <SharedIntro sc={shared} /> : <ShowcaseIntro sc={showcase} />}
+            <ShowcaseGrid sc={showcase} base={slug ? `/c/${slug}` : '/vitrine'} />
           </>
         )}
         <div className="empty-state">

@@ -1,4 +1,3 @@
-import { SharedApplicationPage } from './pages/SharedApplication'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter, Route, Routes } from 'react-router-dom'
@@ -23,7 +22,8 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/lettre/:id" element={<LetterEditor />} />
         <Route path="/vitrine" element={<ShowcasePage />} />
         <Route path="/vitrine/:id" element={<ShowcaseDoc />} />
-        <Route path="/c/:slug" element={<SharedApplicationPage />} />
+        <Route path="/c/:slug" element={<Dashboard />} />
+        <Route path="/c/:slug/:id" element={<ShowcaseDoc />} />
         <Route path="*" element={<Dashboard />} />
       </Routes>
     </HashRouter>

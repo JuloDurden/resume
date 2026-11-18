@@ -4,6 +4,7 @@ import { ChevronLeft, Copy, Download } from 'lucide-react'
 import { GithubIcon } from '../lib/icons'
 import type { AnyDoc } from '../types'
 import { loadShowcase, type Showcase } from '../lib/showcase'
+import { loadShared, type SharedApplication } from '../lib/share'
 import { docTitle } from '../lib/offers'
 import { uid } from '../lib/ids'
 import { useDocs } from '../store/documents'
@@ -21,14 +22,28 @@ function useShowcase() {
   return sc
 }
 
+/** Dossier d'une candidature (lien /c/<identifiant> donné au recruteur), présenté comme la vitrine. */
+export function useSharedShowcase(slug?: string) {
+  const [sc, setSc] = useState<(Showcase & { offer: SharedApplication['offer'] }) | null | undefined>(undefined)
+  useEffect(() => {
+    if (!slug) return setSc(null)
+    loadShared(slug).then((d) =>
+      setSc(d ? { publishedAt: d.publishedAt, author: d.author, offer: d.offer, documents: [d.resume, d.letter].filter((x): x is AnyDoc => !!x) } : null),
+    )
+  }, [slug])
+  return sc
+}
+
+const niceName = (raw?: string) => (raw && raw === raw.toUpperCase() ? raw.toLowerCase().replace(/(^|[\s-])\p{L}/gu, (m) => m.toUpperCase()) : raw)
+
 /** Grille de la vitrine, réutilisée sur l'accueil d'un visiteur. */
-export function ShowcaseGrid({ sc }: { sc: Showcase }) {
+export function ShowcaseGrid({ sc, base = '/vitrine' }: { sc: Showcase; base?: string }) {
   return (
     <div className="doc-grid">
       {sc.documents.map((d) => {
         const { title, company } = docTitle(d)
         return (
-          <Link key={d.id} to={`/vitrine/${d.id}`} className="doc-card showcase-card">
+          <Link key={d.id} to={`${base}/${d.id}`} className="doc-card showcase-card">
             <span className="doc-thumb">
               <DocThumb doc={d} width={210} />
             </span>
@@ -48,6 +63,22 @@ export function ShowcaseGrid({ sc }: { sc: Showcase }) {
   )
 }
 
+/** En-tête du dossier d'une candidature : à qui il s'adresse, et ce qu'est Resume. */
+export function SharedIntro({ sc }: { sc: Showcase & { offer: SharedApplication['offer'] } }) {
+  const poste = [sc.offer.title, sc.offer.company].filter(Boolean).join(' chez ')
+  return (
+    <div className="showcase-intro">
+      <h2>Candidature de {niceName(sc.author) ?? 'Julien Clavel'}{poste ? ` : ${poste}` : ''}</h2>
+      <p>
+        Voici le CV et la lettre de motivation de cette candidature, réalisés avec <strong>Resume</strong>, l'application que j'ai conçue et développée : modèles personnalisables, aperçu paginé, export PDF lisible par les ATS, analyse des mots-clés d'une offre, veille des annonces et suivi des candidatures. Ouvrez un document pour le voir en détail ou le télécharger en PDF ; vous pouvez aussi essayer l'application : tout reste dans votre navigateur.
+      </p>
+      <a className="btn sm" href={REPO_URL} target="_blank" rel="noreferrer">
+        <GithubIcon size={14} /> Code source
+      </a>
+    </div>
+  )
+}
+
 export function ShowcaseIntro({ sc }: { sc: Showcase }) {
   return (
     <div className="showcase-intro">
@@ -63,8 +94,10 @@ export function ShowcaseIntro({ sc }: { sc: Showcase }) {
 }
 
 export function ShowcaseDoc() {
-  const { id } = useParams()
-  const sc = useShowcase()
+  const { id, slug } = useParams()
+  const vitrine = useShowcase()
+  const shared = useSharedShowcase(slug)
+  const sc = slug ? shared : vitrine
   const doc = sc?.documents.find((d) => d.id === id)
   const { print, portal } = usePrint(doc)
   const add = useDocs((s) => s.add)
@@ -80,10 +113,10 @@ export function ShowcaseDoc() {
   return (
     <div className="editor">
       <header className="topbar">
-        <Link to="/" className="icon-btn" title="Accueil">
+        <Link to={slug ? `/c/${slug}` : '/'} className="icon-btn" title="Retour">
           <ChevronLeft size={18} />
         </Link>
-        <span className="kind-badge">Vitrine</span>
+        <span className="kind-badge">{slug ? 'Candidature' : 'Vitrine'}</span>
         <strong className="doc-name static">{docTitle(doc).title}</strong>
         <div className="topbar-spacer" />
         <button className="btn" onClick={copy}>

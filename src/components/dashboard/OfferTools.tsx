@@ -407,7 +407,7 @@ export function ShareModal({ offer, onClose }: { offer: Offer; onClose: () => vo
       const content = buildShared(offer, r, letters.find((d) => d.id === letterId), hide)
       await publishPublicFile(cfg.token, target, shareFile(slug), JSON.stringify(content), 'Dossier de candidature partagé')
       saveOffer({ ...offer, share: { slug, publishedAt: Date.now(), resumeId: r?.id, letterId: letterId || undefined } })
-      toast.ok('Dossier publié : la page sera en ligne dans une à deux minutes')
+      toast.ok('Dossier publié : le lien fonctionnera dans une à deux minutes')
     } catch (e) {
       toast.error(e instanceof Error ? `Publication impossible : ${e.message}` : 'Publication impossible')
     } finally {
@@ -416,7 +416,7 @@ export function ShareModal({ offer, onClose }: { offer: Offer; onClose: () => vo
   }
   const unpublish = async () => {
     if (!cfg || !target || !offer.share) return
-    if (!window.confirm('Retirer la page ? Le lien affichera « dossier introuvable ».')) return
+    if (!window.confirm('Retirer le dossier ? Le lien ouvrira Resume sans ces documents.')) return
     setBusy(true)
     try {
       await deletePublicFile(cfg.token, target, shareFile(offer.share.slug), 'Dossier de candidature retiré')
@@ -441,21 +441,21 @@ export function ShareModal({ offer, onClose }: { offer: Offer; onClose: () => vo
         <>
           {offer.share && (
             <button className="btn ghost danger" onClick={unpublish} disabled={busy}>
-              Retirer la page
+              Retirer le dossier
             </button>
           )}
           <button className="btn" onClick={onClose}>
             Fermer
           </button>
           <button className="btn primary" onClick={publish} disabled={busy || (!resumeId && !letterId) || !cfg}>
-            <Globe size={15} /> {busy ? 'Publication...' : offer.share ? 'Mettre à jour la page' : 'Publier la page'}
+            <Globe size={15} /> {busy ? 'Publication...' : offer.share ? 'Mettre à jour le dossier' : 'Publier le dossier'}
           </button>
         </>
       }
     >
       <div className="form-stack">
         <p className="muted small">
-          Une page en lecture seule présente au recruteur le CV et la lettre de cette candidature, réalisés avec Resume, avec un mot sur l'application et le téléchargement en PDF. Le lien vers Resume dans votre CV pointe alors vers cette page.
+          Le lien ouvre Resume comme d'habitude, mais la vitrine n'y montre que le CV et la lettre de cette candidature (lecture seule, téléchargement en PDF). Le lien vers Resume dans votre CV devient ce lien.
         </p>
         {!cfg && <p className="notice warn">Activez la sauvegarde GitHub (bouton en haut de l'accueil) : la page est publiée avec l'application.</p>}
         {!docs.length && <p className="notice warn">Aucun CV ni lettre n'est rattaché à cette offre : créez-les depuis la carte de l'offre.</p>}
@@ -474,7 +474,7 @@ export function ShareModal({ offer, onClose }: { offer: Offer; onClose: () => vo
           resume && <p className="muted small">Votre CV ne contient pas de lien vers Resume : ajoutez-le dans le projet « Resume » ou donnez le lien de la page dans votre lettre ou votre e-mail.</p>
         )}
         <p className="muted small">
-          ⚠ La page n'est trouvée que par qui a le lien, mais son fichier est stocké dans le dépôt public de l'application sur GitHub. La signature manuscrite n'est jamais publiée. Pensez à réexporter le PDF du CV après publication pour qu'il contienne le nouveau lien.
+          ⚠ Le dossier n'est trouvé que par qui a le lien, mais son fichier est stocké dans le dépôt public de l'application sur GitHub. La signature manuscrite n'est jamais publiée. Pensez à réexporter le PDF du CV après publication pour qu'il contienne le nouveau lien.
         </p>
         {url && (
           <Field label="Lien à donner au recruteur" hint={`Publié le ${new Date(offer.share!.publishedAt).toLocaleDateString('fr-FR')}.`}>

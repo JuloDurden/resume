@@ -27,7 +27,8 @@ export const ACTIONS: ActionDef[] = [
 const RULES = `Règles impératives :
 - N'invente aucune expérience, compétence, certification, date ni chiffre. Si un résultat chiffré serait utile mais absent, écris [X] pour que je le complète.
 - Écris en français (sauf demande contraire), sans tiret cadratin ni tiret demi-cadratin.
-- Style sobre et factuel, sans superlatifs creux.`
+- Style sobre et factuel, sans superlatifs creux.
+- Écris comme une personne écrit son CV : des phrases courtes et naturelles, jamais une juxtaposition de mots-clés.`
 
 const jobBlock = (job?: JobTarget) =>
   job?.description?.trim()
@@ -44,13 +45,13 @@ export function buildPrompt(action: ClaudeAction, doc: ResumeDoc, opts: { itemId
   const job = doc.job
   switch (action) {
     case 'summary':
-      return `Tu es un expert du recrutement en France. Rédige le résumé de profil (3 à 4 lignes, 350 à 550 caractères) placé en haut de mon CV.${job?.description ? ' Il doit répondre aux attentes de l\'offre ci-dessous.' : ''}
+      return `Tu es un expert du recrutement en France. Rédige le résumé de profil (3 phrases complètes, 350 à 500 caractères) placé en haut de mon CV : qui je suis, ce que j'apporte de précis, ce que je cherche, sans énumération d'outils.${job?.description ? ' Il doit répondre aux attentes de l\'offre ci-dessous.' : ''}
 ${RULES}
 ${cvBlock(doc)}${jobBlock(job)}
 Réponds uniquement avec le texte du résumé, sans titre ni commentaire. Propose ensuite, après une ligne "---", deux variantes plus courtes.`
     case 'bullets': {
       const item = doc.sections.flatMap((s) => s.items).find((i) => i.id === opts.itemId)
-      return `Tu es un expert du recrutement en France. Réécris les puces de ce poste pour qu'elles soient orientées résultats : une action, un périmètre, un résultat mesurable. Commence chaque puce par un verbe ou un nom d'action. 3 à 6 puces, une ligne et demie maximum chacune.${job?.description ? ' Mets en avant ce qui répond à l\'offre ci-dessous et reprends ses mots-clés quand c\'est exact.' : ''}
+      return `Tu es un expert du recrutement en France. Réécris les puces de ce poste pour qu'elles soient orientées résultats : une action, un périmètre, un résultat mesurable. Chaque puce est une vraie phrase qui commence par un verbe d'action (pas de format « Thème : nom, nom, nom »). 3 à 6 puces, une ligne et demie maximum chacune.${job?.description ? ' Mets en avant ce qui répond à l\'offre ci-dessous et reprends ses mots-clés quand c\'est exact.' : ''}
 ${RULES}
 
 <poste>
@@ -60,10 +61,16 @@ ${jobBlock(job)}
 Réponds uniquement avec les puces, une par ligne, chacune commençant par "- ".`
     }
     case 'tailor':
-      return `Tu es un expert du recrutement et des ATS en France. Adapte mon CV à l'offre ci-dessous pour maximiser mes chances, sans rien inventer :
-- Ajuste le titre et le résumé à l'intitulé de l'offre.
-- Reformule et réordonne les puces pour faire ressortir ce qui correspond à l'offre, en reprenant ses mots-clés lorsque c'est exact.
-- Réordonne les compétences pour placer en tête celles demandées.${opts.keywords?.length ? `\n- Mots-clés absents de mon CV d'après l'analyse : ${opts.keywords.join(', ')}. Intègre-les uniquement s'ils correspondent à une compétence réelle déjà visible dans le CV.` : ''}
+      return `Tu es un recruteur expérimenté en France qui connaît aussi le fonctionnement des ATS. Adapte mon CV à l'offre ci-dessous, sans rien inventer.
+Le CV sera filtré par un logiciel, mais c'est un recruteur humain qui décidera, en le parcourant en moins d'une minute : il doit se lire comme un CV écrit par une personne, pas comme une liste de mots-clés. Cherche le juste milieu : les bons mots, dans de vraies phrases.
+- Titre : l'intitulé de l'offre s'il correspond honnêtement à mon parcours, sinon l'intitulé le plus proche.
+- Résumé : 3 phrases complètes, 450 caractères au plus. Qui je suis, ce que j'apporte de précis pour ce poste, ce que je cherche. Pas d'énumération d'outils ni de certifications (elles figurent plus bas).
+- Puces d'expérience : 3 à 5 par poste, la plus utile pour l'offre en premier. Chaque puce est une phrase d'une à deux lignes qui commence par un verbe d'action (« Recueilli et formalisé les besoins de… », « Formé 15 utilisateurs à… ») et dit ce que j'ai fait, dans quel contexte, et le résultat ou l'objectif. Pas de format « Thème : nom, nom, nom ».
+- Mots-clés de l'offre : reprends ceux qui décrivent exactement ce que j'ai fait, glissés dans les phrases. Chacun une ou deux fois dans tout le CV, pas répété dans le résumé, les puces, les réalisations et les compétences à la fois.
+- Compétences : 8 à 12, courtes (2 à 4 mots), celles demandées par l'offre en tête, sans reprendre mot pour mot les réalisations.
+- Réalisations : 3 à 5 faits concrets et vérifiables, avec un chiffre quand il existe dans le CV.
+- Formations, projets, langues et centres d'intérêt : garde le contenu, adapte seulement l'ordre si utile.
+- Vise une page : en cas de doute, raccourcis plutôt que d'ajouter.${opts.keywords?.length ? `\n- Mots-clés absents de mon CV d'après l'analyse : ${opts.keywords.join(', ')}. Intègre-les uniquement s'ils correspondent à une compétence réelle déjà visible dans le CV.` : ''}
 ${RULES}
 ${cvBlock(doc)}${jobBlock(job)}
 ${JSON_SCHEMA}

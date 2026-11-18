@@ -4385,12 +4385,7 @@ button.followup-badge {
   color: #991b1b;
   background: #fee2e2;
 }
-.pay.low {
-  color: #92400e;
-  background: #fef3c7;
-}
-.pay.ok,
-.pay.good {
+.pay.ok {
   color: #166534;
   background: #dcfce7;
 }

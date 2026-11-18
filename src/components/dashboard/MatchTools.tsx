@@ -225,19 +225,11 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
               <Field label="Domicile (calcul des distances)">
                 <HomeInput value={draft.home} onChange={(home) => setDraft({ ...draft, home })} />
               </Field>
-              <Field label="Prétentions salariales (brut annuel)" hint="Sous votre minimum, la note baisse et le salaire s'affiche en rouge ; entre minimum et souhait, en orange ; au niveau souhaité, en vert. Laissez vide pour ne pas en tenir compte.">
-                <div className="row-gap">
-                  <label className="salary-in">
-                    <span className="small muted">Minimum</span>
-                    <input className="input" type="number" min={0} step={1} inputMode="numeric" placeholder="ex. 35" value={draft.salary?.min ? Math.round(draft.salary.min / 1000) : ''} onChange={(e) => setDraft({ ...draft, salary: { ...draft.salary, min: e.target.value ? Number(e.target.value) * 1000 : undefined } })} />
-                    <span className="small muted">k€</span>
-                  </label>
-                  <label className="salary-in">
-                    <span className="small muted">Souhaité</span>
-                    <input className="input" type="number" min={0} step={1} inputMode="numeric" placeholder="ex. 42" value={draft.salary?.target ? Math.round(draft.salary.target / 1000) : ''} onChange={(e) => setDraft({ ...draft, salary: { ...draft.salary, target: e.target.value ? Number(e.target.value) * 1000 : undefined } })} />
-                    <span className="small muted">k€</span>
-                  </label>
-                </div>
+              <Field label="Prétentions salariales : minimum acceptable" hint="Brut annuel. Une annonce qui paie moins voit sa note baisser et son salaire s'affiche en rouge ; au-dessus, en vert. Laissez vide pour ne pas en tenir compte.">
+                <label className="salary-in">
+                  <input className="input" type="number" min={0} step={1} inputMode="numeric" placeholder="ex. 35" value={draft.salary?.min ? Math.round(draft.salary.min / 1000) : ''} onChange={(e) => setDraft({ ...draft, salary: e.target.value ? { min: Number(e.target.value) * 1000 } : undefined })} aria-label="Salaire minimum en milliers d'euros" />
+                  <span className="small muted">k€ brut par an</span>
+                </label>
               </Field>
               <Field label="Types de contrat recherchés" hint="Une annonce qui ne propose aucun des types cochés passe dans « Hors critères ». Rien de coché : tous les contrats. Une offre « Junior / Stage / Alternance » compte aussi comme un CDI.">
                 <div className="exp-tracks">

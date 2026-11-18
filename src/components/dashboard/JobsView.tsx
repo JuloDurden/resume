@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { strip } from '../../lib/ats'
 import { loadRomeIndex } from '../../lib/rome'
 import { buildRomeNear, type RomeNear } from '../../lib/romeNear'
-import { Link2, Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, MoreVertical, RefreshCw, Search, Settings2, Star } from 'lucide-react'
-import type { FeedItem, JobReview, MarkState, Offer, ResumeDoc } from '../../types'
+import { Link2, Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, MoreVertical, Send, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import type { FeedItem, JobReview, JobStatus, MarkState, Offer, ResumeDoc } from '../../types'
 import { useNavigate } from 'react-router-dom'
 import { uid } from '../../lib/ids'
 import { companyKey, groupJobs, titleKey } from '../../lib/dedupe'
@@ -176,6 +176,61 @@ function Insights({ salary, flags }: { salary?: SalaryInfo; flags: RedFlag[] }) 
         </div>
       )}
     </div>
+  )
+}
+
+/** Candidature envoyée sans Resume (site de l'employeur, autre outil) : date d'envoi et où elle en est. */
+function ExternalApplyModal({ item, onClose, onSave }: { item: FeedItem; onClose: () => void; onSave: (at: number, status: JobStatus) => void }) {
+  const today = new Date()
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const [date, setDate] = useState(iso(today))
+  const [status, setStatus] = useState<JobStatus>('applied')
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Déjà postulé : ${item.title}`}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Annuler
+          </button>
+          <button
+            className="btn primary"
+            disabled={!date}
+            onClick={() => {
+              const [y, m, d] = date.split('-').map(Number)
+              onSave(new Date(y, m - 1, d, 12).getTime(), status)
+              onClose()
+            }}
+          >
+            Enregistrer la candidature
+          </button>
+        </>
+      }
+    >
+      <div className="form-stack">
+        <p className="muted small">La candidature est ajoutée à l'onglet Offres avec l'annonce{item.company ? ` de ${item.company}` : ''}, et l'annonce passe dans « Candidatures ».</p>
+        <label className="field">
+          <span className="field-label">Date de candidature</span>
+          <input className="input" type="date" value={date} max={iso(today)} onChange={(e) => setDate(e.target.value)} />
+        </label>
+        <div className="field">
+          <span className="field-label">Où en est-elle ?</span>
+          <Segmented
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: 'applied' as JobStatus, label: 'Envoyée, sans réponse' },
+              { value: 'interview' as JobStatus, label: 'Entretien' },
+              { value: 'rejected' as JobStatus, label: 'Refusée' },
+              { value: 'offer' as JobStatus, label: 'Proposition' },
+            ]}
+          />
+        </div>
+        {status === 'rejected' && <p className="muted small">Aucune relance ne sera proposée ; le refus compte dans vos statistiques de candidatures.</p>}
+      </div>
+    </Modal>
   )
 }
 
@@ -563,7 +618,7 @@ function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?:
   )
 }
 
-function JobCard({ item, compact, open, onOpen, flash, tracks, onTrack, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; compact: boolean; open: boolean; onOpen: (v: boolean) => void; flash?: { from: number; to: number }; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
+function JobCard({ item, compact, open, onOpen, flash, onExternal, tracks, onTrack, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; compact: boolean; open: boolean; onOpen: (v: boolean) => void; flash?: { from: number; to: number }; onExternal: () => void; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
   const setOpen = (v: boolean | ((o: boolean) => boolean)) => onOpen(typeof v === 'function' ? v(open) : v)
   // passage surligné dans le texte de l'annonce (clic sur un critère)
@@ -719,7 +774,18 @@ function JobCard({ item, compact, open, onOpen, flash, tracks, onTrack, linked, 
                         setOpen(true)
                       }}
                     >
-                      Déjà postulé…
+                      Rattacher à une candidature…
+                    </MenuItem>
+                  )}
+                  {!linked?.sure && mark !== 'applied' && (
+                    <MenuItem
+                      icon={<Send size={14} />}
+                      onClick={() => {
+                        close()
+                        onExternal()
+                      }}
+                    >
+                      Déjà postulé ailleurs…
                     </MenuItem>
                   )}
                   <MenuItem
@@ -787,6 +853,11 @@ function JobCard({ item, compact, open, onOpen, flash, tracks, onTrack, linked, 
             <div className="jc-open-bar">
               {sources}
               {!linked?.sure && mark !== 'applied' && offers.length > 0 && <LinkPicker offers={offers} item={item} onPick={onLink} />}
+              {!linked?.sure && mark !== 'applied' && (
+                <button className="btn sm ghost" onClick={onExternal} title="Vous avez postulé sans passer par Resume : enregistrer la candidature et son statut">
+                  <Send size={13} /> Postulé ailleurs
+                </button>
+              )}
               {linked && !linked.sure && (
                 <span className="link-suggest">
                   Déjà une candidature « {linked.offer.title} » ?{' '}
@@ -907,6 +978,11 @@ function JobCard({ item, compact, open, onOpen, flash, tracks, onTrack, linked, 
           </button>
         )}
         {!linked?.sure && mark !== 'applied' && offers.length > 0 && <LinkPicker offers={offers} item={item} onPick={onLink} />}
+        {!linked?.sure && mark !== 'applied' && (
+          <button className="btn sm ghost" onClick={onExternal} title="Vous avez postulé sans passer par Resume (site de l'employeur, autre outil) : enregistrer la candidature et son statut">
+            <Send size={13} /> Postulé ailleurs
+          </button>
+        )}
         <button className="btn sm claude" onClick={onTailor} title="Crée la candidature et une copie de votre CV de référence, puis ouvre l'adaptation avec Claude">
           <Wand2 size={13} /> CV adapté
         </button>
@@ -1020,6 +1096,8 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   // carte ouverte (une seule à la fois) : les autres s'atténuent
   const [openId, setOpenId] = useState<string | null>(null)
   const [lowOpen, setLowOpen] = useState(false)
+  // candidature envoyée hors de Resume : enregistrée avec sa date et son statut
+  const [extFor, setExtFor] = useState<FeedItem | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
   const [claudeOpen, setClaudeOpen] = useState(false)
   const [geoTick, setGeoTick] = useState(0)
@@ -1259,6 +1337,15 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     markGroup([i.id], 'applied')
     toast.ok(`Annonce rattachée à votre candidature « ${o.title ?? o.company ?? ''} »`)
   }
+  const applyElsewhere = (i: FeedItem, at: number, status: JobStatus) => {
+    const ids = expand([i.id])
+    const existing = Object.values(useDocs.getState().offers).find((o) => (o.sourceId && ids.includes(o.sourceId)) || o.jobIds?.some((x) => ids.includes(x)))
+    const base = existing ?? offerFromItem(i)
+    const now = Date.now()
+    saveOffer({ ...base, jobIds: [...new Set([...(base.jobIds ?? []), ...ids])], status, statusAt: { ...base.statusAt, applied: at, ...(status !== 'applied' ? { [status]: now } : {}) }, ...(status === 'rejected' ? { noFollowUp: true } : {}) })
+    markGroup([i.id], 'applied')
+    toast.ok(`Candidature enregistrée (${JOB_STATUS[status].toLowerCase()}) : elle apparaît dans l'onglet Offres`)
+  }
   const apply = (i: FeedItem) => {
     offerFor(i)
     toast.ok('Candidature créée : rattachez-y un CV et une lettre depuis l\'onglet Offres')
@@ -1490,7 +1577,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
                       </button>
                     ) : (
                       items.map((i) => (
-                        <JobCard key={i.id} item={i} compact={density === 'compact'} open={openId === i.id} onOpen={(v) => setOpenId(v ? i.id : null)} flash={flash?.id === i.id ? flash : undefined} tracks={profile.tracks} onTrack={(t) => setTrackFor(expand([i.id]), t)} linked={linkedOffer[i.id]} offers={offersList} onLink={(o) => linkTo(i, o)} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                        <JobCard key={i.id} item={i} onExternal={() => setExtFor(i)} compact={density === 'compact'} open={openId === i.id} onOpen={(v) => setOpenId(v ? i.id : null)} flash={flash?.id === i.id ? flash : undefined} tracks={profile.tracks} onTrack={(t) => setTrackFor(expand([i.id]), t)} linked={linkedOffer[i.id]} offers={offersList} onLink={(o) => linkTo(i, o)} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
                       ))
                     )}
                   </section>
@@ -1506,6 +1593,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
         </>
       )}
       <AlertsModal open={settings} onClose={() => setSettings(false)} />
+      {extFor && <ExternalApplyModal item={extFor} onClose={() => setExtFor(null)} onSave={(at, st) => applyElsewhere(extFor, at, st)} />}
       <AddJobModal
         open={addOpen}
         onClose={() => setAddOpen(false)}

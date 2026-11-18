@@ -77,8 +77,8 @@ export interface ProfileData {
   romeClose?: Map<string, string>
   /** types de contrat recherchés (vide : tous) */
   contracts?: string[]
-  /** prétentions salariales (brut annuel, euros) */
-  salary?: { min?: number; target?: number }
+  /** prétentions salariales : minimum acceptable (brut annuel, euros) */
+  salary?: { min?: number }
 }
 
 export interface TrackData {
@@ -120,20 +120,17 @@ export function defaultTargets(alerts: Alert[], doc?: ResumeDoc): string[] {
 
 const k = (n: number) => `${Math.round(n / 1000)} k€`
 /**
- * Salaire annoncé comparé à vos prétentions (brut annuel). Sous votre minimum, la note baisse (nettement à plus de 15 % sous) ;
- * entre votre minimum et votre souhait, rien ne change ; au-dessus, l'annonce est signalée en vert. Salaire non indiqué : rien.
+ * Salaire annoncé comparé à votre minimum (brut annuel) : en dessous, la note baisse (nettement à plus de 15 % sous) ;
+ * au-dessus, rien ne change. Salaire non indiqué : rien.
  */
-export function payOf(i: FeedItem, want?: { min?: number; target?: number }): MatchResult['pay'] {
-  const min = want?.min ?? (want?.target ? want.target * 0.85 : undefined)
+export function payOf(i: FeedItem, want?: { min?: number }): MatchResult['pay'] {
+  const min = want?.min
   if (!min) return undefined
   const s = salaryOf(i)
   if (!s) return undefined
-  const top = s.max
-  if (top < min * 0.85) return { tone: 'below', factor: 0.6, label: `Salaire bien sous votre minimum (${k(min)})` }
-  if (top < min) return { tone: 'below', factor: 0.8, label: `Salaire sous votre minimum (${k(min)})` }
-  if (want?.target && s.min >= want.target) return { tone: 'good', factor: 1, label: `Salaire au niveau souhaité (${k(want.target)}) ou au-dessus` }
-  if (want?.target && top < want.target) return { tone: 'low', factor: 1, label: `Salaire entre votre minimum (${k(min)}) et votre souhait (${k(want.target)})` }
-  return { tone: 'ok', factor: 1, label: `Salaire dans vos prétentions` }
+  if (s.max < min * 0.85) return { tone: 'below', factor: 0.6, label: `Salaire bien sous votre minimum (${k(min)})` }
+  if (s.max < min) return { tone: 'below', factor: 0.8, label: `Salaire sous votre minimum (${k(min)})` }
+  return { tone: 'ok', factor: 1, label: `Salaire au niveau de votre minimum (${k(min)}) ou au-dessus` }
 }
 
 /* ---------- type de contrat ---------- */
@@ -327,7 +324,7 @@ export interface MatchResult {
   /** ajustement selon vos choix passés */
   learned?: number
   /** salaire de l'annonce comparé à vos prétentions */
-  pay?: { tone: 'below' | 'low' | 'ok' | 'good'; label: string; factor: number }
+  pay?: { tone: 'below' | 'ok'; label: string; factor: number }
   /** métier ROME probable de l'annonce et sa proximité avec vos profils */
   rome?: { code: string; label: string; near?: string; far?: boolean }
   /** profil de recherche retenu (nature du poste, ou choix manuel) */

@@ -265,13 +265,13 @@ describe('compétence « formation »', () => {
 })
 
 describe('prétentions salariales', () => {
-  it('baisse la note sous le minimum et signale le niveau', () => {
-    const want = { min: 35000, target: 42000 }
+  it('baisse la note sous le minimum, rien au-dessus', () => {
+    const want = { min: 35000 }
     const low = item({ title: 'Customer Success Manager', salary: '24 k€' })
     expect(payOf(low, want)?.tone).toBe('below')
     expect(payOf(low, want)?.factor).toBe(0.6)
-    expect(payOf(item({ title: 'x', salary: '36 k€ - 40 k€' }), want)?.tone).toBe('low')
-    expect(payOf(item({ title: 'x', salary: '45 k€' }), want)?.tone).toBe('good')
+    expect(payOf(item({ title: 'x', salary: '32 k€ - 34 k€' }), want)?.factor).toBe(0.8)
+    expect(payOf(item({ title: 'x', salary: '34 k€ - 40 k€' }), want)?.tone).toBe('ok')
     expect(payOf(item({ title: 'x' }), want)).toBeUndefined()
     expect(matchItem(low, { ...p, salary: want }).score).toBeLessThan(matchItem(low, p).score)
   })

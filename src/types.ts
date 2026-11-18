@@ -188,6 +188,8 @@ export interface Offer extends JobTarget {
   followUps?: number[]
   /** relances désactivées pour cette offre */
   noFollowUp?: boolean
+  /** dossier de candidature publié pour le recruteur (offre, CV et lettre en lecture seule) */
+  share?: { slug: string; publishedAt: number; resumeId?: string; letterId?: string }
   /** délai avant relance choisi pour cette offre, en jours (sinon le délai par défaut) */
   followUpDays?: number
   /** date précise de la prochaine relance (fin de la période de recrutement annoncée par l'employeur) */

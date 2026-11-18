@@ -115,7 +115,16 @@ export function ClaudePanel({ doc, update, request, onGoAts }: Props) {
         }
         case 'resume-json': {
           const data = extractJson(answer)
-          const name = action === 'translate' ? `${doc.name} (EN)` : `${doc.name} ${doc.job?.company ? `- ${doc.job.company}` : '(adapté)'}`
+          // CV déjà rattaché à cette candidature (pas un CV de référence) : l'adaptation le remplace (annulable),
+          // au lieu de créer un CV de plus à chaque nouvelle génération
+          if (action === 'tailor' && doc.offerId && !doc.reference) {
+            const next = resumeFromClaude(doc, data as never, doc.name)
+            update((d) => ({ ...next, id: d.id, name: d.name, offerId: d.offerId, createdAt: d.createdAt, reference: undefined }))
+            toast.ok('CV adapté mis à jour (annulable avec Ctrl+Z)')
+            break
+          }
+          const company = doc.job?.company
+          const name = action === 'translate' ? `${doc.name} (EN)` : company && doc.name.includes(company) ? `${doc.name} (adapté)` : `${doc.name} ${company ? `- ${company}` : '(adapté)'}`
           const created = resumeFromClaude(doc, data as never, name)
           if (action === 'translate') {
             created.style = { ...created.style, currentLabel: 'Present', dateFormat: created.style.dateFormat === 'MMMM YYYY' || created.style.dateFormat === 'MMM YYYY' ? 'MM/YYYY' : created.style.dateFormat }
@@ -127,6 +136,22 @@ export function ClaudePanel({ doc, update, request, onGoAts }: Props) {
         }
         case 'letter-json': {
           const data = extractJson<Partial<LetterDoc> & { recipient?: LetterDoc['recipient'] }>(answer)
+          // une lettre existe déjà pour cette candidature : la remplacer plutôt que d'en créer une de plus
+          const existing = doc.offerId ? Object.values(useDocs.getState().docs).filter((d): d is LetterDoc => d.kind === 'letter' && d.offerId === doc.offerId).sort((a, b) => b.updatedAt - a.updatedAt)[0] : undefined
+          if (existing && window.confirm(`Une lettre existe déjà pour cette candidature (« ${existing.name} »). La remplacer par la nouvelle ?\n\nAnnuler : créer une lettre de plus.`)) {
+            useDocs.getState().update<LetterDoc>(existing.id, (l) => ({
+              ...l,
+              subject: data.subject ?? l.subject,
+              salutation: data.salutation ?? l.salutation,
+              body: data.body ?? l.body,
+              closing: data.closing ?? l.closing,
+              recipient: data.recipient ? { ...l.recipient, ...Object.fromEntries(Object.entries(data.recipient).filter(([, v]) => v)) } : l.recipient,
+              updatedAt: Date.now(),
+            }))
+            toast.ok('Lettre de motivation mise à jour (annulable avec Ctrl+Z dans la lettre)')
+            navigate(`/lettre/${existing.id}`)
+            break
+          }
           const letter = newLetter(doc.templateId, false, doc, doc.job ? [doc.job.title, doc.job.company].filter(Boolean).join(' - ') || doc.name : doc.name)
           Object.assign(letter, {
             subject: data.subject ?? letter.subject,
@@ -196,7 +221,7 @@ export function ClaudePanel({ doc, update, request, onGoAts }: Props) {
                 <strong>Collez la réponse de Claude</strong>
                 <TextArea value={answer} onChange={setAnswer} minRows={6} placeholder="Collez ici la réponse complète..." />
                 <button className="btn primary sm self-start" disabled={!answer.trim()} onClick={apply}>
-                  <Sparkles size={14} /> {def.result === 'resume-json' ? 'Créer le CV' : def.result === 'letter-json' ? 'Créer la lettre' : 'Appliquer'}
+                  <Sparkles size={14} /> {def.result === 'resume-json' ? (action === 'tailor' && doc.offerId && !doc.reference ? 'Mettre à jour ce CV' : 'Créer le CV') : def.result === 'letter-json' ? 'Créer la lettre' : 'Appliquer'}
                 </button>
               </div>
             </div>

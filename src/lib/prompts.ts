@@ -15,7 +15,7 @@ export interface ActionDef {
 }
 
 export const ACTIONS: ActionDef[] = [
-  { id: 'tailor', label: 'Adapter le CV à l\'offre', description: 'Claude réécrit le CV pour l\'offre et vous collez le résultat : une copie adaptée est créée.', needsJob: true, result: 'resume-json' },
+  { id: 'tailor', label: 'Adapter le CV à l\'offre', description: 'Claude réécrit le CV pour l\'offre et vous collez le résultat : le CV de la candidature est mis à jour (une copie est créée depuis un CV de référence).', needsJob: true, result: 'resume-json' },
   { id: 'letter', label: 'Rédiger la lettre de motivation', description: 'Lettre personnalisée à partir du CV et de l\'offre, créée comme nouveau document.', needsJob: true, result: 'letter-json' },
   { id: 'summary', label: 'Améliorer le résumé', description: 'Un résumé percutant de 3 à 4 lignes.', result: 'text' },
   { id: 'bullets', label: 'Réécrire les puces d\'un poste', description: 'Puces orientées résultats, avec verbes d\'action.', result: 'bullets' },

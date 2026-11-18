@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BellRing, BookOpen, CalendarClock, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, LayoutGrid, Link2, MapPin, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
-import { FollowUpModal, FollowUpPlanner, InterviewModal, followUpLabel } from './OfferTools'
+import { BarChart3, BellRing, BookOpen, CalendarClock, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, LayoutGrid, Link2, MapPin, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FollowUpModal, FollowUpPlanner, InterviewModal, ShareModal, followUpLabel } from './OfferTools'
 import { isDue, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
@@ -70,6 +70,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
   const [cvModal, setCvModal] = useState(false)
   const [followUp, setFollowUp] = useState(false)
   const [planner, setPlanner] = useState(false)
+  const [share, setShare] = useState(false)
   const [prep, setPrep] = useState(false)
   const fu = followUpLabel(offer)
   const openRome = useRomeDrawer((s) => s.open)
@@ -120,6 +121,15 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
                 }}
               >
                 Modifier l'offre
+              </MenuItem>
+              <MenuItem
+                icon={<Globe size={14} />}
+                onClick={() => {
+                  close()
+                  setShare(true)
+                }}
+              >
+                {offer.share ? 'Dossier pour le recruteur (en ligne)' : 'Dossier pour le recruteur…'}
               </MenuItem>
               <MenuItem
                 icon={<MessagesSquare size={14} />}
@@ -199,6 +209,11 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
             <MessagesSquare size={12} /> {offer.interview ? 'Préparation prête' : "Préparer l'entretien"}
           </button>
         )}
+        {offer.share && (
+          <button className="followup-badge prep ready" onClick={() => setShare(true)} title="Le recruteur peut voir le CV et la lettre sur une page dédiée">
+            <Globe size={12} /> Dossier en ligne
+          </button>
+        )}
         <span className="muted small">Ajoutée le {new Date(offer.createdAt).toLocaleDateString('fr-FR')}</span>
         {offer.url && (
           <a className="btn ghost sm" href={/^https?:/i.test(offer.url) ? offer.url : `https://${offer.url}`} target="_blank" rel="noreferrer">
@@ -225,6 +240,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
       {cvModal && <NewCvForOffer offer={offer} resumes={resumes} onClose={() => setCvModal(false)} />}
       {followUp && <FollowUpModal offer={offer} onClose={() => setFollowUp(false)} />}
       {planner && <FollowUpPlanner offer={offer} onClose={() => setPlanner(false)} />}
+      {share && <ShareModal offer={offer} onClose={() => setShare(false)} />}
       {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
     </div>
   )

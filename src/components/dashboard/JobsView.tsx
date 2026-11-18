@@ -1358,6 +1358,13 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     const cv = (track?.cv?.reference ? track.cv : undefined) ?? bestReference(i.title, cvs.filter((d) => d.reference)) ?? track?.cv ?? profile.cv
     if (!cv) return toast.error('Aucun CV : créez-en un ou choisissez un CV de référence dans « Profil »')
     const o = offerFor(i)
+    // un CV existe déjà pour cette candidature : on le rouvre plutôt que d'en créer un autre
+    const mine = Object.values(useDocs.getState().docs).filter((d): d is ResumeDoc => d.kind === 'resume' && d.offerId === o.id && !d.reference).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    if (mine) {
+      navigate(`/cv/${mine.id}?claude=tailor`)
+      toast.ok(`CV « ${mine.name} » rouvert : l'adaptation le mettra à jour`)
+      return
+    }
     const now = Date.now()
     const title = i.title.replace(/\s*[(-]?\s*\b[hfHF]\s*\/\s*[hfHF](\s*\/\s*\w+)?\s*\)?/g, '').replace(/\s*\((cdi|cdd)\)\s*$/i, '').trim()
     const copy: ResumeDoc = { ...structuredClone(cv), reference: undefined, id: uid(), name: [title, o.company].filter(Boolean).join(' - '), offerId: o.id, createdAt: now, updatedAt: now, header: { ...cv.header, title } }

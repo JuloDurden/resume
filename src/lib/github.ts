@@ -333,15 +333,27 @@ export function appRepoFromLocation(): ShowcaseTarget | null {
 }
 
 export async function publishShowcase(token: string, t: ShowcaseTarget, content: string) {
-  const path = `/repos/${t.owner}/${t.repo}/contents/public/showcase.json`
-  let sha: string | undefined
+  await publishPublicFile(token, t, 'showcase.json', content, 'Mise à jour de la vitrine')
+}
+
+const fileSha = async (token: string, path: string, branch: string) => {
   try {
-    sha = (await gh<{ sha: string }>(token, `${path}?ref=${t.branch}`)).sha
+    return (await gh<{ sha: string }>(token, `${path}?ref=${branch}`)).sha
   } catch (e) {
-    if (!(e instanceof GitHubError && e.status === 404)) throw e
+    if (e instanceof GitHubError && e.status === 404) return undefined
+    throw e
   }
-  await gh(token, path, {
-    method: 'PUT',
-    body: JSON.stringify({ message: 'Mise à jour de la vitrine', content: utf8ToB64(content), branch: t.branch, sha }),
-  })
+}
+
+/** Écrit un fichier public de l'application (dossier public/, servi par GitHub Pages après le déploiement). */
+export async function publishPublicFile(token: string, t: ShowcaseTarget, file: string, content: string, message: string) {
+  const path = `/repos/${t.owner}/${t.repo}/contents/public/${file}`
+  const sha = await fileSha(token, path, t.branch)
+  await gh(token, path, { method: 'PUT', body: JSON.stringify({ message, content: utf8ToB64(content), branch: t.branch, sha }) })
+}
+
+export async function deletePublicFile(token: string, t: ShowcaseTarget, file: string, message: string) {
+  const path = `/repos/${t.owner}/${t.repo}/contents/public/${file}`
+  const sha = await fileSha(token, path, t.branch)
+  if (sha) await gh(token, path, { method: 'DELETE', body: JSON.stringify({ message, sha, branch: t.branch }) })
 }

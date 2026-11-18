@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { BellOff, Check, ClipboardCopy, ExternalLink, Mail, MessagesSquare, RotateCcw } from 'lucide-react'
+import { BellOff, Check, ClipboardCopy, ExternalLink, Globe, Mail, MessagesSquare, RotateCcw } from 'lucide-react'
 import type { InterviewPrep, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
 import { FOLLOW_UP_CHOICES, appliedAt, followUpDays, followUpEmail, nextFollowUp, startOfDay } from '../../lib/followup'
 import { resumeToText } from '../../lib/export'
 import { CLAUDE_URL, copyText, extractJson, interviewPrepPrompt } from '../../lib/prompts'
-import { Field, Modal, Segmented, TextArea, TextInput, toast } from '../ui'
+import { Field, Modal, Segmented, Select, TextArea, TextInput, Toggle, toast } from '../ui'
+import { appRepoFromLocation, deletePublicFile, loadConfig, publishPublicFile } from '../../lib/github'
+import { buildShared, newSlug, shareFile, shareUrl, withShareLink } from '../../lib/share'
 
 const frDate = (t?: number) => (t ? new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '')
 
@@ -363,6 +365,131 @@ export function InterviewModal({ offer, onClose }: { offer: Offer; onClose: () =
           </div>
         </div>
       )}
+    </Modal>
+  )
+}
+
+/* ---------- Dossier de candidature partagé ---------- */
+
+/** Publie pour le recruteur une page avec l'offre, le CV et la lettre (lecture seule, PDF), et met le lien dans le CV. */
+export function ShareModal({ offer, onClose }: { offer: Offer; onClose: () => void }) {
+  const docsMap = useDocs((s) => s.docs)
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const update = useDocs((s) => s.update)
+  const docs = useMemo(() => Object.values(docsMap).filter((d) => d.offerId === offer.id).sort((a, b) => b.updatedAt - a.updatedAt), [docsMap, offer.id])
+  const resumes = docs.filter((d) => d.kind === 'resume')
+  const letters = docs.filter((d) => d.kind === 'letter')
+  const [resumeId, setResumeId] = useState(offer.share?.resumeId ?? resumes[0]?.id ?? '')
+  const [letterId, setLetterId] = useState(offer.share?.letterId ?? letters[0]?.id ?? '')
+  const [hide, setHide] = useState(true)
+  const [relink, setRelink] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const cfg = loadConfig()
+  const target = appRepoFromLocation() ?? (cfg ? { owner: cfg.owner, repo: 'resume', branch: 'main' } : null)
+  const url = offer.share ? shareUrl(offer.share.slug, target) : undefined
+  const resume = resumes.find((d) => d.id === resumeId)
+  const hasAppLink = !!resume && withShareLink(resume, 'https://x.invalid/') !== resume
+
+  const publish = async () => {
+    if (!cfg || !target) return toast.error('Activez la sauvegarde GitHub pour publier')
+    setBusy(true)
+    try {
+      const slug = offer.share?.slug ?? newSlug()
+      const link = shareUrl(slug, target)
+      let r = resume
+      if (r && relink) {
+        const next = withShareLink(r, link)
+        if (next !== r) {
+          update(r.id, () => next)
+          r = next
+        }
+      }
+      const content = buildShared(offer, r, letters.find((d) => d.id === letterId), hide)
+      await publishPublicFile(cfg.token, target, shareFile(slug), JSON.stringify(content), 'Dossier de candidature partagé')
+      saveOffer({ ...offer, share: { slug, publishedAt: Date.now(), resumeId: r?.id, letterId: letterId || undefined } })
+      toast.ok('Dossier publié : la page sera en ligne dans une à deux minutes')
+    } catch (e) {
+      toast.error(e instanceof Error ? `Publication impossible : ${e.message}` : 'Publication impossible')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const unpublish = async () => {
+    if (!cfg || !target || !offer.share) return
+    if (!window.confirm('Retirer la page ? Le lien affichera « dossier introuvable ».')) return
+    setBusy(true)
+    try {
+      await deletePublicFile(cfg.token, target, shareFile(offer.share.slug), 'Dossier de candidature retiré')
+      const { share: _, ...rest } = offer
+      void _
+      saveOffer(rest)
+      toast.ok('Page retirée')
+    } catch (e) {
+      toast.error(e instanceof Error ? `Retrait impossible : ${e.message}` : 'Retrait impossible')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const opt = (d: { id: string; name: string; updatedAt: number }) => ({ value: d.id, label: `${d.name} (modifié le ${new Date(d.updatedAt).toLocaleDateString('fr-FR')})` })
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Dossier pour le recruteur : ${offer.title ?? 'candidature'}`}
+      footer={
+        <>
+          {offer.share && (
+            <button className="btn ghost danger" onClick={unpublish} disabled={busy}>
+              Retirer la page
+            </button>
+          )}
+          <button className="btn" onClick={onClose}>
+            Fermer
+          </button>
+          <button className="btn primary" onClick={publish} disabled={busy || (!resumeId && !letterId) || !cfg}>
+            <Globe size={15} /> {busy ? 'Publication...' : offer.share ? 'Mettre à jour la page' : 'Publier la page'}
+          </button>
+        </>
+      }
+    >
+      <div className="form-stack">
+        <p className="muted small">
+          Une page en lecture seule présente au recruteur le CV et la lettre de cette candidature, réalisés avec Resume, avec un mot sur l'application et le téléchargement en PDF. Le lien vers Resume dans votre CV pointe alors vers cette page.
+        </p>
+        {!cfg && <p className="notice warn">Activez la sauvegarde GitHub (bouton en haut de l'accueil) : la page est publiée avec l'application.</p>}
+        {!docs.length && <p className="notice warn">Aucun CV ni lettre n'est rattaché à cette offre : créez-les depuis la carte de l'offre.</p>}
+        {resumes.length > 0 && (
+          <Field label="CV">
+            <Select value={resumeId} onChange={setResumeId} options={resumes.map(opt)} />
+          </Field>
+        )}
+        <Field label="Lettre de motivation">
+          <Select value={letterId} onChange={setLetterId} options={[{ value: '', label: 'Aucune' }, ...letters.map(opt)]} />
+        </Field>
+        <Toggle label="Masquer téléphone et e-mail (le recruteur les a déjà)" checked={hide} onChange={setHide} />
+        {hasAppLink ? (
+          <Toggle label="Remplacer, dans le CV, le lien vers Resume par celui de cette page" checked={relink} onChange={setRelink} />
+        ) : (
+          resume && <p className="muted small">Votre CV ne contient pas de lien vers Resume : ajoutez-le dans le projet « Resume » ou donnez le lien de la page dans votre lettre ou votre e-mail.</p>
+        )}
+        <p className="muted small">
+          ⚠ La page n'est trouvée que par qui a le lien, mais son fichier est stocké dans le dépôt public de l'application sur GitHub. La signature manuscrite n'est jamais publiée. Pensez à réexporter le PDF du CV après publication pour qu'il contienne le nouveau lien.
+        </p>
+        {url && (
+          <Field label="Lien à donner au recruteur" hint={`Publié le ${new Date(offer.share!.publishedAt).toLocaleDateString('fr-FR')}.`}>
+            <div className="row-gap">
+              <TextInput value={url} onChange={() => undefined} />
+              <button className="btn sm" onClick={async () => toast[(await copyText(url)) ? 'ok' : 'error']('Lien copié')}>
+                <ClipboardCopy size={14} /> Copier
+              </button>
+              <a className="btn sm ghost" href={url} target="_blank" rel="noreferrer">
+                <ExternalLink size={14} /> Ouvrir
+              </a>
+            </div>
+          </Field>
+        )}
+      </div>
     </Modal>
   )
 }

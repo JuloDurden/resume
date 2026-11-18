@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedItem } from '../types'
-import { contractsOf, levelScore, matchBest, matchItem, pickCommune, placeName } from '../lib/match'
+import { contractsOf, levelScore, matchBest, matchItem, payOf, pickCommune, placeName } from '../lib/match'
 import { trackYears } from '../lib/tracks'
 import type { RomeIndex } from '../lib/rome'
 import type { RomeNear } from '../lib/romeNear'
@@ -261,5 +261,18 @@ describe('compétence « formation »', () => {
     expect(a.skills?.matched).toEqual(['Jira'])
     const b = matchItem(item({ title: 'Chef de projet', fullText: 'Vous animez des formations pour les utilisateurs avec Jira. '.repeat(6) }), p2)
     expect(b.skills?.matched).toContain('formation')
+  })
+})
+
+describe('prétentions salariales', () => {
+  it('baisse la note sous le minimum et signale le niveau', () => {
+    const want = { min: 35000, target: 42000 }
+    const low = item({ title: 'Customer Success Manager', salary: '24 k€' })
+    expect(payOf(low, want)?.tone).toBe('below')
+    expect(payOf(low, want)?.factor).toBe(0.6)
+    expect(payOf(item({ title: 'x', salary: '36 k€ - 40 k€' }), want)?.tone).toBe('low')
+    expect(payOf(item({ title: 'x', salary: '45 k€' }), want)?.tone).toBe('good')
+    expect(payOf(item({ title: 'x' }), want)).toBeUndefined()
+    expect(matchItem(low, { ...p, salary: want }).score).toBeLessThan(matchItem(low, p).score)
   })
 })

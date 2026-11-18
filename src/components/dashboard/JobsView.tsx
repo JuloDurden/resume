@@ -422,6 +422,16 @@ function MatchChips({ m, active, onFocus, textLoc, limit }: { m: MatchResult; ac
         </span>
       ),
     })
+  if (m.pay?.tone === 'below')
+    chips.push({
+      key: 'pay',
+      prio: 1,
+      el: (
+        <span key="pay" className="no" title={m.pay.label}>
+          <Euro size={12} /> {compact ? 'Sous vos prétentions' : m.pay.label}
+        </span>
+      ),
+    })
   if (m.learned)
     chips.push({
       key: 'learned',
@@ -622,7 +632,7 @@ function JobCard({ item, compact, open, onOpen, flash, tracks, onTrack, linked, 
     if (item.contract) meta.push(<span key="ct">{CONTRACT_LABEL[item.contract] ?? item.contract}</span>)
     if (salary?.s || item.salary)
       meta.push(
-        <span key="sal" className={salary?.cmp ? `sal-cmp ${salary.cmp.tone}` : undefined} title={salary?.cmp?.label ?? (salary?.bench ? benchLabel(salary.bench) : undefined)}>
+        <span key="sal" className={match?.pay ? `pay ${match.pay.tone}` : salary?.cmp ? `sal-cmp ${salary.cmp.tone}` : undefined} title={[match?.pay?.label, salary?.cmp?.label ?? (salary?.bench ? benchLabel(salary.bench) : undefined)].filter(Boolean).join('\n')}>
           {salary?.s ? fmtSalary(salary.s) : item.salary}
           {salary?.cmp?.tone === 'low' ? ' ↓' : salary?.cmp?.tone === 'high' ? ' ↑' : ''}
         </span>,
@@ -845,7 +855,7 @@ function JobCard({ item, compact, open, onOpen, flash, tracks, onTrack, linked, 
           </span>
         )}
         {salary?.s || item.salary ? (
-          <span className={salary?.cmp ? `sal-cmp ${salary.cmp.tone}` : undefined} title={salary?.cmp?.label}>
+          <span className={match?.pay ? `pay ${match.pay.tone}` : salary?.cmp ? `sal-cmp ${salary.cmp.tone}` : undefined} title={[match?.pay?.label, salary?.cmp?.label].filter(Boolean).join('\n')}>
             <Euro size={12} /> {salary?.s ? fmtSalary(salary.s) : item.salary}
             {salary?.cmp?.tone === 'low' ? ' ↓' : salary?.cmp?.tone === 'high' ? ' ↑' : ''}
             {salary?.bench && <span className="muted"> · médiane {fmtK(salary.bench.median)}</span>}

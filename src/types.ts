@@ -337,6 +337,8 @@ export interface MatchProfile {
   home?: { nom: string; lat: number; lon: number }
   /** périmètre de recherche en km : au-delà, une offre sans télétravail a la note 0 */
   maxKm?: number
+  /** prétentions salariales, brut annuel en euros : minimum acceptable et salaire souhaité */
+  salary?: { min?: number; target?: number }
   /** délai par défaut avant de relancer une candidature, en jours */
   followUpDays?: number
   /** types de contrat recherchés (vide : tous) ; une annonce qui ne propose aucun d'eux passe en « Hors critères » */

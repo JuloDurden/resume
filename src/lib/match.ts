@@ -4,6 +4,7 @@ import type { Alert, FeedItem, MatchProfile, ResumeDoc } from '../types'
 import { experiencePool, trackRomeSkills, trackYears } from './tracks'
 import { romeGuess, type RomeNear } from './romeNear'
 import { stem, strip } from './ats'
+import { salaryOf } from './salary'
 import { STOPWORDS } from './stopwords'
 
 /** Mots équivalents ramenés à une même forme (français / anglais, synonymes de fonction). */
@@ -76,6 +77,8 @@ export interface ProfileData {
   romeClose?: Map<string, string>
   /** types de contrat recherchés (vide : tous) */
   contracts?: string[]
+  /** prétentions salariales (brut annuel, euros) */
+  salary?: { min?: number; target?: number }
 }
 
 export interface TrackData {
@@ -111,6 +114,26 @@ export function defaultTargets(alerts: Alert[], doc?: ResumeDoc): string[] {
   if (doc?.header.title) t.push(...doc.header.title.split(/[|•·]/).map((x) => x.trim()))
   const seen = new Set<string>()
   return t.filter((x) => x.length > 2 && !/^junior$/i.test(x) && !seen.has(strip(x)) && seen.add(strip(x)))
+}
+
+/* ---------- salaire ---------- */
+
+const k = (n: number) => `${Math.round(n / 1000)} k€`
+/**
+ * Salaire annoncé comparé à vos prétentions (brut annuel). Sous votre minimum, la note baisse (nettement à plus de 15 % sous) ;
+ * entre votre minimum et votre souhait, rien ne change ; au-dessus, l'annonce est signalée en vert. Salaire non indiqué : rien.
+ */
+export function payOf(i: FeedItem, want?: { min?: number; target?: number }): MatchResult['pay'] {
+  const min = want?.min ?? (want?.target ? want.target * 0.85 : undefined)
+  if (!min) return undefined
+  const s = salaryOf(i)
+  if (!s) return undefined
+  const top = s.max
+  if (top < min * 0.85) return { tone: 'below', factor: 0.6, label: `Salaire bien sous votre minimum (${k(min)})` }
+  if (top < min) return { tone: 'below', factor: 0.8, label: `Salaire sous votre minimum (${k(min)})` }
+  if (want?.target && s.min >= want.target) return { tone: 'good', factor: 1, label: `Salaire au niveau souhaité (${k(want.target)}) ou au-dessus` }
+  if (want?.target && top < want.target) return { tone: 'low', factor: 1, label: `Salaire entre votre minimum (${k(min)}) et votre souhait (${k(want.target)})` }
+  return { tone: 'ok', factor: 1, label: `Salaire dans vos prétentions` }
 }
 
 /* ---------- type de contrat ---------- */
@@ -303,6 +326,8 @@ export interface MatchResult {
   capped?: number
   /** ajustement selon vos choix passés */
   learned?: number
+  /** salaire de l'annonce comparé à vos prétentions */
+  pay?: { tone: 'below' | 'low' | 'ok' | 'good'; label: string; factor: number }
   /** métier ROME probable de l'annonce et sa proximité avec vos profils */
   rome?: { code: string; label: string; near?: string; far?: boolean }
   /** profil de recherche retenu (nature du poste, ou choix manuel) */
@@ -564,7 +589,8 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
     const c = contractsOf(i)
     if (c.length && !c.some((k) => p.contracts!.includes(k))) out = `${c.join(' / ')} : type de contrat non recherché`
   }
-  let score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * levelFactor)
+  const pay = payOf(i, p.salary)
+  let score = out ? 0 : Math.round(100 * base * (degree?.factor ?? 1) * levelFactor * (pay?.factor ?? 1))
   // sans le texte complet, ni l'expérience ni le diplôme demandés ne sont connus : la note est plafonnée
   const CAP = 70
   const hasText = (i.fullText?.length ?? 0) > 600 && !i.facts?.summaryOnly
@@ -573,7 +599,7 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
     score = CAP
     capped = CAP
   }
-  return { score, title, skills, level, place, degree, out, capped, rome: romeRes }
+  return { score, title, skills, level, place, degree, out, capped, rome: romeRes, pay }
 }
 
 const NO_REMOTE = /(pas de|sans|aucun)\s+t[ée]l[ée]travail|t[ée]l[ée]travail\s*:\s*(non|aucun|0|pas)|100\s*%\s*(sur site|pr[ée]sentiel)|full on.?site/i
@@ -625,6 +651,7 @@ export function resolveProfile(saved: MatchProfile | undefined, docs: ResumeDoc[
     home,
     maxKm: saved?.maxKm ?? 50,
     contracts: saved?.contracts,
+    salary: saved?.salary,
     tracks,
   }
 }

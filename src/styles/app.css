@@ -4375,3 +4375,30 @@ button.followup-badge {
     opacity: 1;
   }
 }
+/* salaire comparé aux prétentions */
+.pay {
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.pay.below {
+  color: #991b1b;
+  background: #fee2e2;
+}
+.pay.low {
+  color: #92400e;
+  background: #fef3c7;
+}
+.pay.ok,
+.pay.good {
+  color: #166534;
+  background: #dcfce7;
+}
+.salary-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.salary-in .input {
+  width: 80px;
+}

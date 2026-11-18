@@ -4397,3 +4397,32 @@ button.followup-badge {
 .salary-in .input {
   width: 80px;
 }
+.collapse-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.collapse-head h3 {
+  margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.collapse-sum {
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.collapsed-text {
+  align-self: flex-start;
+}

@@ -152,7 +152,7 @@ export function AtsPanel({ doc, pages, onLink, onDeep, onImportLink }: Props) {
     <div className="panel-content">
       <OffersList doc={doc} onLink={onLink} onImportLink={onImportLink} />
       {offer ? (
-        <OfferFields offer={offer} onChange={(o) => saveOffer(o)} />
+        <OfferFields key={offer.id} offer={offer} onChange={(o) => saveOffer(o)} />
       ) : (
         <section className="style-group">
           <p className="muted small">Rattachez ce CV à une offre (ou créez-en une) pour mesurer la correspondance des mots-clés. Les contrôles de lisibilité ci-dessous restent valables sans offre.</p>

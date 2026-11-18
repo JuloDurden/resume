@@ -51,7 +51,7 @@ ${cvBlock(doc)}${jobBlock(job)}
 Réponds uniquement avec le texte du résumé, sans titre ni commentaire. Propose ensuite, après une ligne "---", deux variantes plus courtes.`
     case 'bullets': {
       const item = doc.sections.flatMap((s) => s.items).find((i) => i.id === opts.itemId)
-      return `Tu es un expert du recrutement en France. Réécris les puces de ce poste pour qu'elles soient orientées résultats : une action, un périmètre, un résultat mesurable. Chaque puce est une vraie phrase qui commence par un verbe d'action (pas de format « Thème : nom, nom, nom »). 3 à 6 puces, une ligne et demie maximum chacune.${job?.description ? ' Mets en avant ce qui répond à l\'offre ci-dessous et reprends ses mots-clés quand c\'est exact.' : ''}
+      return `Tu es un expert du recrutement en France. Réécris les puces de ce poste pour qu'elles soient orientées résultats : une action, un périmètre, un résultat mesurable. Chaque puce est une vraie phrase qui commence par un nom d'action (« Administration de… », « Recueil et formalisation de… », « Pilotage de… »), pas une liste au format « Thème : nom, nom, nom ». 3 à 6 puces, une ligne et demie maximum chacune.${job?.description ? ' Mets en avant ce qui répond à l\'offre ci-dessous et reprends ses mots-clés quand c\'est exact.' : ''}
 ${RULES}
 
 <poste>
@@ -65,7 +65,7 @@ Réponds uniquement avec les puces, une par ligne, chacune commençant par "- ".
 Le CV sera filtré par un logiciel, mais c'est un recruteur humain qui décidera, en le parcourant en moins d'une minute : il doit se lire comme un CV écrit par une personne, pas comme une liste de mots-clés. Cherche le juste milieu : les bons mots, dans de vraies phrases.
 - Titre : l'intitulé de l'offre s'il correspond honnêtement à mon parcours, sinon l'intitulé le plus proche.
 - Résumé : 3 phrases complètes, 450 caractères au plus. Qui je suis, ce que j'apporte de précis pour ce poste, ce que je cherche. Pas d'énumération d'outils ni de certifications (elles figurent plus bas).
-- Puces d'expérience : 3 à 5 par poste, la plus utile pour l'offre en premier. Chaque puce est une phrase d'une à deux lignes qui commence par un verbe d'action (« Recueilli et formalisé les besoins de… », « Formé 15 utilisateurs à… ») et dit ce que j'ai fait, dans quel contexte, et le résultat ou l'objectif. Pas de format « Thème : nom, nom, nom ».
+- Puces d'expérience : 3 à 5 par poste, la plus utile pour l'offre en premier. Chaque puce est une phrase d'une à deux lignes qui commence par un nom d'action (« Administration de Microsoft 365 et du site WordPress… », « Recueil et formalisation des besoins de 5 équipes métier… », « Formation des utilisateurs à… ») et dit ce que j'ai fait, dans quel contexte, et le résultat ou l'objectif. Un verbe est possible quand la phrase le demande, mais garde la même forme dans tout le CV. Pas de format « Thème : nom, nom, nom ».
 - Mots-clés de l'offre : reprends ceux qui décrivent exactement ce que j'ai fait, glissés dans les phrases. Chacun une ou deux fois dans tout le CV, pas répété dans le résumé, les puces, les réalisations et les compétences à la fois.
 - Compétences : 8 à 12, courtes (2 à 4 mots), celles demandées par l'offre en tête, sans reprendre mot pour mot les réalisations.
 - Réalisations : 3 à 5 faits concrets et vérifiables, avec un chiffre quand il existe dans le CV.

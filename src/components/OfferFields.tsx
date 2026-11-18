@@ -1,4 +1,5 @@
-import { BookOpen, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { BookOpen, ChevronDown, ChevronRight, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
 import { useRomeDrawer } from './RomeDrawer'
 import type { JobStatus, Offer, OfferContact } from '../types'
 import { JOB_STATUS, linkedinSearch } from '../lib/offers'
@@ -25,9 +26,21 @@ export function OfferFields({ offer, onChange, compact }: { offer: Offer; onChan
   const openRome = useRomeDrawer((s) => s.open)
   const contacts = offer.contacts ?? []
   const setContact = (i: number, p: Partial<OfferContact>) => set({ contacts: contacts.map((c, j) => (j === i ? { ...c, ...p } : c)) })
+  const filled = !!offer.description?.trim()
+  // une fois l'offre renseignée, ses champs et surtout son texte se replient pour laisser la place au score
+  const [open, setOpen] = useState(!filled)
+  const [showText, setShowText] = useState(!filled)
+  const summary = [offer.title, offer.company, offer.location].filter(Boolean).join(' · ')
   return (
     <section className={compact ? 'form-stack' : 'style-group'}>
-      {!compact && <h3>Offre analysée</h3>}
+      {!compact && (
+        <button className="collapse-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          <h3>Offre analysée</h3>
+          {!open && summary && <span className="muted small collapse-sum">{summary}</span>}
+        </button>
+      )}
+      {(compact || open) && (
       <div className="form-stack">
         <div className="grid-2">
           <Field label="Intitulé du poste">
@@ -58,9 +71,23 @@ export function OfferFields({ offer, onChange, compact }: { offer: Offer; onChan
         <Field label="Site de l'entreprise" hint="Sert à afficher le logo de l'entreprise.">
           <LinkInput value={offer.website} onChange={(v) => set({ website: v })} placeholder="entreprise.fr" />
         </Field>
-        <Field label="Texte de l'annonce" hint={offer.snapshotAt ? `Instantané du ${new Date(offer.snapshotAt).toLocaleDateString('fr-FR')}. Copiez-collez l'annonce complète si besoin.` : "Copiez-collez l'annonce complète : missions, profil, compétences."}>
-          <TextArea value={offer.description} minRows={compact ? 5 : 6} onChange={(v) => set({ description: v })} placeholder="Collez ici le texte de l'offre..." />
-        </Field>
+        {showText ? (
+          <Field label="Texte de l'annonce" hint={offer.snapshotAt ? `Instantané du ${new Date(offer.snapshotAt).toLocaleDateString('fr-FR')}. Copiez-collez l'annonce complète si besoin.` : "Copiez-collez l'annonce complète : missions, profil, compétences."}>
+            <TextArea value={offer.description} minRows={compact ? 5 : 6} onChange={(v) => set({ description: v })} placeholder="Collez ici le texte de l'offre..." />
+            {filled && (
+              <button className="btn xs ghost" onClick={() => setShowText(false)}>
+                <ChevronDown size={13} /> Replier le texte
+              </button>
+            )}
+          </Field>
+        ) : (
+          <div className="field">
+            <span className="field-label">Texte de l'annonce</span>
+            <button className="btn sm ghost collapsed-text" onClick={() => setShowText(true)}>
+              <ChevronRight size={14} /> Afficher le texte ({(offer.description ?? '').trim().length.toLocaleString('fr-FR')} caractères)
+            </button>
+          </div>
+        )}
 
         <div className="field">
           <span className="field-label">Contacts</span>
@@ -105,6 +132,7 @@ export function OfferFields({ offer, onChange, compact }: { offer: Offer; onChan
           <TextArea value={offer.notes} minRows={2} onChange={(v) => set({ notes: v })} placeholder="Date d'envoi, relance, échanges..." />
         </Field>
       </div>
+      )}
     </section>
   )
 }

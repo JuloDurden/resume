@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { strip } from '../../lib/ats'
+import { loadRomeIndex } from '../../lib/rome'
+import { buildRomeNear, type RomeNear } from '../../lib/romeNear'
 import { Link2, Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, JobReview, MarkState, Offer, ResumeDoc } from '../../types'
 import { useNavigate } from 'react-router-dom'
@@ -340,7 +342,7 @@ function MatchChips({ m, active, onFocus, textLoc }: { m: MatchResult; active?: 
     <div className="match-chips compact">
       {m.out && (
         <span className="no" title={m.out}>
-          <AlertTriangle size={12} /> {/contrat/.test(m.out) ? `${m.out.split(' : ')[0]} non recherché` : 'Hors périmètre'}
+          <AlertTriangle size={12} /> {/contrat/.test(m.out) ? `${m.out.split(' : ')[0]} non recherché` : /métier éloigné/.test(m.out) ? 'Métier éloigné' : 'Hors périmètre'}
         </span>
       )}
       <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
@@ -411,6 +413,11 @@ function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?:
           </span>
         )}
       </div>
+      {m.rome && (
+        <p className="small muted">
+          Métier ROME probable : {m.rome.label} ({m.rome.code}){m.rome.near ? `, ${m.rome.near}` : m.rome.far ? ', sans rapport avec vos profils' : ''}
+        </p>
+      )}
       {m.skills && m.skills.matched.length > 0 && <p className="small muted">Compétences retrouvées : {m.skills.matched.join(', ')}</p>}
       {review && (
         <div className="review-box">
@@ -755,7 +762,19 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const markOf = groupMark
   const nq = q.trim().toLowerCase()
   const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume'), [docsMap])
-  const profile = useMemo(() => resolveProfile(watch.profile, cvs, watch.alerts), [watch.profile, cvs, watch.alerts, geoTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  // métiers proches selon le ROME (index chargé à la demande)
+  const [romeNear, setRomeNear] = useState<RomeNear>()
+  useEffect(() => {
+    let live = true
+    loadRomeIndex()
+      .then((ix) => buildRomeNear(ix, watch.profile))
+      .then((r) => live && setRomeNear(r))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [watch.profile])
+  const profile = useMemo(() => ({ ...resolveProfile(watch.profile, cvs, watch.alerts), rome: romeNear }), [watch.profile, cvs, watch.alerts, geoTick, romeNear]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => geocode([...items.map((i) => locationOf(i).loc), ...(feed?.salaryLog ?? []).map((e) => e.location), watch.alerts[0]?.commune], () => setGeoTick((t) => t + 1), profile.home), [items, watch.alerts, feed, geoTick, profile.home])
   const learned = useMemo(() => {
     const titles = new Map((feed?.items ?? []).map((i) => [i.id, i.title]))
@@ -904,7 +923,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
             { value: 'fav', label: `Favoris (${counts.fav})` },
             { value: 'applied', label: `Candidatures (${counts.applied})` },
             { value: 'hidden', label: `Masquées (${counts.hidden})` },
-            { value: 'out', label: `Hors critères (${counts.out})`, title: "Offres en présentiel au-delà de votre périmètre, ou dont le type de contrat n'est pas recherché (note 0)" },
+            { value: 'out', label: `Hors critères (${counts.out})`, title: "Offres en présentiel au-delà de votre périmètre, dont le type de contrat n'est pas recherché, ou dont le métier est sans rapport avec vos profils (note 0)" },
           ]}
         />
         <div className="row-gap">

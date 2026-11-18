@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { FeedItem } from '../types'
 import { contractsOf, levelScore, matchBest, matchItem, pickCommune, placeName } from '../lib/match'
 import { trackYears } from '../lib/tracks'
+import type { RomeIndex } from '../lib/rome'
+import type { RomeNear } from '../lib/romeNear'
 
 const p = { targets: ['Product Owner', 'Chef de projet digital', 'Business Analyst'], skills: ['Jira', 'Agile', 'Scrum', 'Recueil des besoins', 'Power BI'], degree: 2 }
 const item = (o: Partial<FeedItem>): FeedItem => ({ id: 'x', alerts: [], title: '', url: '', source: '', ...o })
@@ -218,5 +220,27 @@ describe('expérience et domaine', () => {
   it("reconnaît un domaine d'expertise du profil dans l'intitulé (F&L)", () => {
     const m = matchItem(item({ title: 'Formateur / Formatrice Expert(e) Rayon F&L H/F' }), { ...p, targets: ["Responsable d'exploitation"], expertise: ['fruits et légumes'] })
     expect(m.title.v).toBe(0.5)
+  })
+})
+
+describe('métiers proches (ROME)', () => {
+  const ix = {
+    version: 't',
+    metiers: { J1101: 'Médecin du travail et de prévention', M1806: 'Consultant fonctionnel SI', K2111: 'Formateur / Formatrice' },
+    appellations: [
+      ['Médecin du travail', 'J1101'],
+      ['Business analyst', 'M1806'],
+      ['Formateur / Formatrice', 'K2111'],
+    ],
+  } as unknown as RomeIndex
+  const tracks = [{ id: 'it', name: 'IT', targets: ['Product Owner'], skills: [], romeSkills: [], expertise: [], level: 'junior' as const, years: 1 }]
+  const rome: RomeNear = { ix, tracks: { it: new Map([['M1806', 'métier visé « Business Analyst »'], ['K2111', 'métier proche']]) }, groups: new Set(['M18']) }
+  it('écarte un métier sans rapport et rapproche un métier proche', () => {
+    const far = matchBest(item({ title: 'Medecin du travail H/F' }), { ...p, tracks, rome })
+    expect(far.score).toBe(0)
+    expect(far.out).toMatch(/métier éloigné/)
+    const near = matchBest(item({ title: 'Formateur / Formatrice H/F' }), { ...p, tracks, rome })
+    expect(near.out).toBeUndefined()
+    expect(near.title.v).toBe(0.6)
   })
 })

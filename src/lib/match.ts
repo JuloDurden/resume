@@ -2,6 +2,7 @@
 // Calcul local, sans service externe : intitulé, compétences, niveau du poste, distance, diplôme demandé.
 import type { Alert, FeedItem, MatchProfile, ResumeDoc } from '../types'
 import { experiencePool, trackRomeSkills, trackYears } from './tracks'
+import { romeGuess, type RomeNear } from './romeNear'
 import { stem, strip } from './ats'
 import { STOPWORDS } from './stopwords'
 
@@ -69,6 +70,10 @@ export interface ProfileData {
   maxKm?: number
   /** profils de recherche ; absent : un seul profil */
   tracks?: TrackData[]
+  /** métiers proches selon le ROME (chargé à part) */
+  rome?: RomeNear
+  /** codes ROME proches du profil en cours de notation */
+  romeClose?: Map<string, string>
   /** types de contrat recherchés (vide : tous) */
   contracts?: string[]
 }
@@ -298,6 +303,8 @@ export interface MatchResult {
   capped?: number
   /** ajustement selon vos choix passés */
   learned?: number
+  /** métier ROME probable de l'annonce et sa proximité avec vos profils */
+  rome?: { code: string; label: string; near?: string; far?: boolean }
   /** profil de recherche retenu (nature du poste, ou choix manuel) */
   track?: { id: string; name: string; forced?: boolean; nature?: Nature[] }
 }
@@ -471,6 +478,20 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
     })
     if (e) title = { v: 0.5, target: `domaine : ${e}`, other: otherDomain }
   }
+  // métier ROME de l'annonce : proche d'un métier visé ou exercé (mobilités du ROME), ou sans rapport avec vos profils
+  let romeRes: MatchResult['rome']
+  if (p.rome) {
+    const guess = romeGuess(p.rome.ix, i.title)
+    const close = guess.map((g) => ({ g, why: p.romeClose?.get(g.code) })).find((x) => x.why)
+    if (close) {
+      romeRes = { code: close.g.code, label: close.g.label, near: close.why }
+      if (title.v < 0.6 && !otherDomain) title = { v: 0.6, target: `ROME : ${close.g.label}` }
+    } else if (guess.length) {
+      // écarté seulement si l'intitulé désigne sans ambiguïté un métier d'un autre domaine et que rien d'autre ne rapproche l'annonce
+      const far = guess[0].sure && guess.every((g) => !p.rome!.groups.has(g.code.slice(0, 3))) && title.v < 0.3
+      romeRes = { code: guess[0].code, label: guess[0].label, far }
+    }
+  }
 
   // compétences : seulement si l'annonce a un vrai texte
   let skills: MatchResult['skills'] = null
@@ -549,7 +570,7 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
     score = CAP
     capped = CAP
   }
-  return { score, title, skills, level, place, degree, out, capped }
+  return { score, title, skills, level, place, degree, out, capped, rome: romeRes }
 }
 
 const NO_REMOTE = /(pas de|sans|aucun)\s+t[ée]l[ée]travail|t[ée]l[ée]travail\s*:\s*(non|aucun|0|pas)|100\s*%\s*(sur site|pr[ée]sentiel)|full on.?site/i
@@ -646,7 +667,7 @@ export function matchBest(i: FeedItem, p: ProfileData, alertPref: LevelPref = 'a
   if (!p.tracks?.length) return matchItem(i, p, alertPref)
   const nat = natureOf(i)
   const results = p.tracks.map((t) => {
-    const r = matchItem(i, { ...p, targets: t.targets, skills: t.skills, romeSkills: t.romeSkills, years: t.years, expertise: t.expertise }, t.level ?? alertPref)
+    const r = matchItem(i, { ...p, targets: t.targets, skills: t.skills, romeSkills: t.romeSkills, years: t.years, expertise: t.expertise, romeClose: p.rome?.tracks[t.id] }, t.level ?? alertPref)
     const kinds = trackNatures(t)
     const mine = nat.filter((n) => kinds.includes(n.id)).reduce((a, n) => a + n.hits, 0)
     return { t, r, kinds, mine }
@@ -654,7 +675,14 @@ export function matchBest(i: FeedItem, p: ProfileData, alertPref: LevelPref = 'a
   const total = nat.filter((n) => results.some((x) => x.kinds.includes(n.id))).reduce((a, n) => a + n.hits, 0)
   const affinity = (x: (typeof results)[number]) => 0.45 * x.r.title.v + 0.35 * (total ? x.mine / total : 0.5) + 0.2 * (x.r.skills?.v ?? 0)
   const chosen = results.find((x) => x.t.id === forced) ?? results.reduce((a, b) => (affinity(b) > affinity(a) ? b : a))
-  return { ...chosen.r, track: { id: chosen.t.id, name: chosen.t.name, forced: chosen.t.id === forced, nature: nat.filter((n) => n.hits > 0) } }
+  const track = { id: chosen.t.id, name: chosen.t.name, forced: chosen.t.id === forced, nature: nat.filter((n) => n.hits > 0) }
+  // métier sans rapport (« Médecin du travail ») : aucun profil ne s'en rapproche, ni par l'intitulé, ni par le ROME,
+  // ni par les missions (une ou deux mentions au plus), ni par les compétences
+  if (!forced && !chosen.r.out && total <= 2 && results.every((x) => x.r.rome?.far && (x.r.skills?.matched.length ?? 0) <= 1)) {
+    const r = chosen.r.rome!
+    return { ...chosen.r, score: 0, out: `métier éloigné de vos profils (ROME ${r.code} : ${r.label})`, track }
+  }
+  return { ...chosen.r, track }
 }
 
 /* ---------- apprentissage à partir de vos choix ---------- */

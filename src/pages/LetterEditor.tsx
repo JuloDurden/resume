@@ -8,7 +8,7 @@ import { OfferImportModal } from '../components/OfferImportModal'
 import { newOffer } from '../lib/offers'
 import { applyLetterTemplate } from '../data/letterTemplates'
 import { todayFr } from '../lib/dates'
-import { CLAUDE_URL, buildPrompt, copyText, extractJson } from '../lib/prompts'
+import { CLAUDE_URL, buildPrompt, copyText, extractJson, letterStyleExample } from '../lib/prompts'
 import { EditorShell, type Tab } from '../components/editor/EditorShell'
 import { HeaderForm } from '../components/editor/HeaderForm'
 import { SignatureInput } from '../components/editor/fields'
@@ -183,7 +183,7 @@ function LetterClaude({ doc, update, goJob }: { doc: LetterDoc; update: (fn: (d:
   const prompt =
     mode === 'letter'
       ? canWrite
-        ? buildPrompt('letter', { ...resume!, job: offer })
+        ? buildPrompt('letter', { ...resume!, job: offer }, { styleExample: letterStyleExample(Object.values(useDocs.getState().docs).filter((d): d is LetterDoc => d.kind === 'letter' && d.id !== doc.id)) })
         : ''
       : buildPrompt('improve-letter', resume ?? ({ sections: [], header: doc.header, layout: { main: [], side: [] } } as unknown as ResumeDoc), { letter: { ...doc, job: offer } })
   const copy = async (open: boolean) => {

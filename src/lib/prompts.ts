@@ -16,7 +16,7 @@ export interface ActionDef {
 
 export const ACTIONS: ActionDef[] = [
   { id: 'tailor', label: 'Adapter le CV à l\'offre', description: 'Claude réécrit le CV pour l\'offre et vous collez le résultat : le CV de la candidature est mis à jour (une copie est créée depuis un CV de référence).', needsJob: true, result: 'resume-json' },
-  { id: 'letter', label: 'Rédiger la lettre de motivation', description: 'Lettre personnalisée à partir du CV et de l\'offre, créée comme nouveau document.', needsJob: true, result: 'letter-json' },
+  { id: 'letter', label: 'Rédiger la lettre de motivation', description: 'Lettre personnelle et naturelle à partir du CV et de l\'offre, sur le ton de vos lettres réécrites.', needsJob: true, result: 'letter-json' },
   { id: 'summary', label: 'Améliorer le résumé', description: 'Un résumé percutant de 3 à 4 lignes.', result: 'text' },
   { id: 'bullets', label: 'Réécrire les puces d\'un poste', description: 'Puces orientées résultats, avec verbes d\'action.', result: 'bullets' },
   { id: 'ats', label: 'Analyse ATS approfondie', description: 'Diagnostic détaillé du CV face à l\'offre, à lire dans Claude.', needsJob: true, result: 'none' },
@@ -41,7 +41,7 @@ const JSON_SCHEMA = `Réponds uniquement avec un bloc \`\`\`json contenant un ob
 {"header": {"name", "title", "contacts": [{"kind", "value"}]}, "sections": [{"type", "title", "items": [...]}]}
 Conserve les types de section et les champs (title, subtitle, location, start, end, current, description, bullets, tags, level, icon, link). Les puces acceptent **gras** et *italique*.`
 
-export function buildPrompt(action: ClaudeAction, doc: ResumeDoc, opts: { itemId?: string; letter?: LetterDoc; keywords?: string[] } = {}): string {
+export function buildPrompt(action: ClaudeAction, doc: ResumeDoc, opts: { itemId?: string; letter?: LetterDoc; keywords?: string[]; styleExample?: string } = {}): string {
   const job = doc.job
   switch (action) {
     case 'summary':
@@ -81,16 +81,20 @@ Ne rajoute aucune information.
 ${cvBlock(doc)}
 ${JSON_SCHEMA}`
     case 'letter':
-      return `Tu es un expert du recrutement en France. Rédige ma lettre de motivation pour l'offre ci-dessous, à partir de mon CV.
-- 3 à 4 paragraphes, 250 à 350 mots au total, ton professionnel et direct.
-- Premier paragraphe : pourquoi ce poste et cette entreprise. Deuxième : deux ou trois réalisations concrètes du CV qui répondent aux besoins de l'offre. Troisième : ce que j'apporte et la demande d'entretien.
-- Évite les formules toutes faites ("je me permets de", "dynamique et motivé").
+      return `Aide-moi à écrire ma lettre de motivation pour l'offre ci-dessous, à partir de mon CV. Elle doit sonner comme si je l'avais écrite moi-même : simple, directe, humaine, à la première personne. Un recruteur doit y entendre quelqu'un, pas lire un résumé de CV.
+- 220 à 320 mots, 4 ou 5 paragraphes courts, phrases courtes, langage courant.
+- Ouverture : pas de formule convenue (« Je me permets… », « Votre offre a retenu toute mon attention », « Fort de… »). Pars d'une chose vécue dans mon parcours qui fait écho au poste, en une ou deux phrases concrètes, puis relie-la à l'offre.
+- Raconte plutôt qu'énumérer : une ou deux situations réelles tirées du CV, avec un détail concret (l'outil, le contexte, ce que j'ai fait, ce que ça a changé pour les équipes). Ne recopie pas le CV et n'aligne pas ses chiffres, ses outils et ses compétences.
+- Honnêteté : si un écart existe entre mon parcours et l'offre (secteur, diplôme, poste jamais occupé), dis-le simplement et dis ce que j'ai fait pour le combler.
+- Une phrase qui dit ce que je sais faire, avec des mots simples, en lien avec les missions de l'offre.
+- Fin courte : la demande d'entretien en une phrase, sans surenchère.
+- Pas de jargon RH, pas de mots-clés en série, pas de superlatifs. Dans la lettre, pas de [X] : si un chiffre manque, formule sans chiffre.${opts.styleExample ? `\n- Voici une lettre que j'ai réécrite moi-même : reprends son ton, sa façon de raconter et sa longueur, pas son contenu.\n<exemple_de_ma_lettre>\n${opts.styleExample}\n</exemple_de_ma_lettre>` : ''}
 ${RULES}
 ${cvBlock(doc)}${jobBlock(job)}
 Réponds uniquement avec un bloc \`\`\`json de la forme :
 {"subject": "Candidature au poste de ...", "salutation": "Madame, Monsieur,", "body": "paragraphe 1\\n\\nparagraphe 2\\n\\nparagraphe 3", "closing": "formule de politesse", "recipient": {"name": "", "title": "", "company": "", "address": ""}}`
     case 'improve-letter':
-      return `Relis et améliore ma lettre de motivation : clarté, concision, impact, orthographe. Garde ma voix et mes faits.
+      return `Relis et améliore ma lettre de motivation : clarté, concision, orthographe. Garde ma voix, mes faits et ma façon de raconter ; ne la rends pas plus formelle, ne remplace pas les situations concrètes par des listes de compétences.
 ${RULES}
 
 <lettre>
@@ -189,6 +193,17 @@ export function cleanItem(raw: Partial<SectionItem> | undefined): SectionItem {
     icon: typeof it.icon === 'string' && it.icon in ICONS ? it.icon : undefined,
     titleVariants: strList(it.titleVariants),
   }
+}
+
+/**
+ * Lettre écrite ou retouchée à la main qui sert d'exemple de ton pour Claude : la plus récemment modifiée,
+ * modifiée nettement après sa création (au moins 10 minutes), et assez longue pour être une vraie lettre.
+ */
+export function letterStyleExample(letters: LetterDoc[]): string | undefined {
+  const l = letters
+    .filter((x) => (x.body ?? '').trim().length > 600 && x.updatedAt - x.createdAt > 10 * 60000)
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  return l?.body.trim()
 }
 
 /** Construit un nouveau CV à partir de la réponse JSON de Claude, en gardant le style et la disposition du CV source. */

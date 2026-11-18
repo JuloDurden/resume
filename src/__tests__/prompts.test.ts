@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractJson, parseBullets, resumeFromClaude, buildPrompt } from '../lib/prompts'
+import { extractJson, parseBullets, resumeFromClaude, buildPrompt, letterStyleExample } from '../lib/prompts'
 import { newResume } from '../data/factory'
 import { resumeToText, parseJson, toJson } from '../lib/export'
 import { frenchSpaces } from '../lib/inline'
@@ -108,5 +108,14 @@ describe('lignes de coordonnées', () => {
   it('réordonne les lignes', () => {
     const cs = moveRow([c('a', 0), c('b', 1), c('l', 2)], 2, -1)
     expect(ids(cs)).toEqual(['a', 'l', 'b'])
+  })
+})
+
+describe('lettre : exemple de ton', () => {
+  it('reprend la dernière lettre réécrite à la main, assez longue', () => {
+    const body = 'Pendant vingt ans, j’ai été celui qu’on appelait quand ça ne marchait pas. '.repeat(10)
+    const l = (id: string, b: string, created: number, updated: number) => ({ id, kind: 'letter', body: b, createdAt: created, updatedAt: updated }) as never
+    expect(letterStyleExample([l('a', body, 0, 3600000), l('b', 'court', 0, 7200000), l('c', body + ' neuf', 1000, 2000)])).toBe(body.trim())
+    expect(letterStyleExample([l('c', body, 1000, 2000)])).toBeUndefined()
   })
 })

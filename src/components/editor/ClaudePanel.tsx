@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ClipboardCopy, ExternalLink, Sparkles, Wand2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { LetterDoc, ResumeDoc } from '../../types'
-import { ACTIONS, CLAUDE_URL, buildPrompt, copyText, extractJson, parseBullets, parseSummary, resumeFromClaude, type ClaudeAction } from '../../lib/prompts'
+import { ACTIONS, CLAUDE_URL, buildPrompt, letterStyleExample, copyText, extractJson, parseBullets, parseSummary, resumeFromClaude, type ClaudeAction } from '../../lib/prompts'
 import { makeSection, newLetter } from '../../data/factory'
 import { useDocs } from '../../store/documents'
 import { Field, Select, TextArea, toast } from '../ui'
@@ -80,7 +80,9 @@ export function ClaudePanel({ doc, update, request, onGoAts }: Props) {
   }
 
   const missingJob = def.needsJob && !doc.job?.description?.trim()
-  const prompt = missingJob ? '' : buildPrompt(action, doc, { itemId, keywords })
+  // ton des lettres : la dernière lettre réécrite à la main sert d'exemple
+  const styleExample = action === 'letter' ? letterStyleExample(Object.values(useDocs.getState().docs).filter((d): d is LetterDoc => d.kind === 'letter')) : undefined
+  const prompt = missingJob ? '' : buildPrompt(action, doc, { itemId, keywords, styleExample })
 
   const copy = async (open: boolean) => {
     const ok = await copyText(prompt)

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BellRing, BookOpen, CalendarClock, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, LayoutGrid, Link2, MapPin, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BarChart3, BellRing, BookOpen, CalendarClock, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FollowUpModal, FollowUpPlanner, InterviewModal, ShareModal, followUpLabel } from './OfferTools'
-import { isDue, setDefaultFollowUpDays } from '../../lib/followup'
+import { nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
@@ -17,7 +17,7 @@ import { useRomeDrawer } from '../RomeDrawer'
 import { Menu, MenuItem, Modal, Segmented, Select, confirmAction, toast } from '../ui'
 import { openPath } from './DocCard'
 
-type Filter = 'all' | 'active' | 'followup' | 'interview' | 'closed'
+type Filter = 'all' | Stage
 type View = 'cards' | 'columns' | 'stats'
 
 const docName = (o: Offer) => [o.title || 'Poste', o.company].filter(Boolean).join(' - ')
@@ -62,7 +62,33 @@ function NewCvForOffer({ offer, resumes, onClose }: { offer: Offer; resumes: Res
   )
 }
 
-function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDoc[]; resumes: ResumeDoc[]; onEdit: () => void }) {
+const DAY = 86400000
+const since = (t?: number) => {
+  if (!t) return ''
+  const d = Math.floor((Date.now() - t) / DAY)
+  return d <= 0 ? "aujourd'hui" : d === 1 ? 'hier' : `il y a ${d} j`
+}
+const frDay = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+const href = (u: string) => (/^https?:/i.test(u) ? u : `https://${u}`)
+
+type Stage = 'now' | 'interview' | 'wait' | 'done'
+type Next = { text: string; tone: 'hot' | 'ok' | 'muted' | ''; stage: Stage; act?: 'followup' | 'planner' | 'prep' | 'cv' | 'open' }
+
+/** Prochaine étape d'une candidature, et le groupe où elle se range (à faire, entretien, en attente, terminée). */
+function nextStep(o: Offer, docs: AnyDoc[]): Next {
+  const st = o.status ?? 'todo'
+  if (st === 'rejected') return { text: `Refusée${o.statusAt?.rejected ? ` le ${frDay(o.statusAt.rejected)}` : ''}`, tone: 'muted', stage: 'done' }
+  if (st === 'offer') return { text: 'Proposition reçue : à étudier', tone: 'ok', stage: 'now', act: 'open' }
+  if (st === 'interview') return o.interview ? { text: 'Entretien : préparation prête', tone: 'ok', stage: 'interview', act: 'prep' } : { text: "Entretien : à préparer", tone: 'hot', stage: 'now', act: 'prep' }
+  if (st === 'todo') return docs.some((d) => d.kind === 'resume') ? { text: 'À envoyer', tone: 'hot', stage: 'now', act: 'open' } : { text: 'Préparer le CV', tone: 'hot', stage: 'now', act: 'cv' }
+  const fu = followUpLabel(o)
+  if (fu?.due) return { text: fu.label === 'Seconde relance' ? 'Seconde relance à faire' : "Relancer aujourd'hui", tone: 'hot', stage: 'now', act: 'followup' }
+  const n = nextFollowUp(o)
+  if (n) return { text: `${o.followUps?.length ? 'Seconde relance' : 'Relance'} le ${frDay(n)}`, tone: '', stage: 'wait', act: 'planner' }
+  return { text: o.noFollowUp ? 'Sans relance' : 'En attente', tone: 'muted', stage: 'wait', act: 'planner' }
+}
+
+function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offer: Offer; docs: AnyDoc[]; resumes: ResumeDoc[]; onEdit: () => void; open: boolean; onOpen: (v: boolean) => void; narrow?: boolean }) {
   const navigate = useNavigate()
   const saveOffer = useDocs((s) => s.saveOffer)
   const removeOffer = useDocs((s) => s.removeOffer)
@@ -72,11 +98,14 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
   const [planner, setPlanner] = useState(false)
   const [share, setShare] = useState(false)
   const [prep, setPrep] = useState(false)
-  const fu = followUpLabel(offer)
   const openRome = useRomeDrawer((s) => s.open)
   const linkedCv = docs.find((d): d is ResumeDoc => d.kind === 'resume')
   const scores = Object.entries(offer.scores ?? {}).filter(([id]) => docs.some((d) => d.id === id))
   const best = scores.length ? Math.max(...scores.map(([, v]) => v)) : undefined
+  const next = nextStep(offer, docs)
+  const sent = offer.statusAt?.applied
+  const status = offer.status ?? 'todo'
+  const sortedDocs = [...docs].sort((a, b) => Number(b.kind === 'resume') - Number(a.kind === 'resume') || b.updatedAt - a.updatedAt)
 
   const createLetter = () => {
     const l: LetterDoc = newLetter(linkedCv?.templateId ?? 'epure', !linkedCv, linkedCv, docName(offer))
@@ -86,27 +115,68 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
     add(l)
     navigate(`/lettre/${l.id}`)
   }
+  const act = () => {
+    if (next.act === 'followup') setFollowUp(true)
+    else if (next.act === 'planner') setPlanner(true)
+    else if (next.act === 'prep') setPrep(true)
+    else if (next.act === 'cv') setCvModal(true)
+    else onOpen(true)
+  }
+  const fu = followUpLabel(offer)
 
   return (
-    <div className="offer-card">
-      <div className="oc-head">
-        <OfferLogo offer={offer} size={40} />
-        <div className="oc-title">
+    <article
+      className={`offer-row${open ? ' open' : ''}${narrow ? ' narrow' : ''}${next.stage === 'now' ? ' hot' : ''}${status === 'rejected' ? ' done' : ''}`}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, .or-open, .menu-wrap')) return
+        onOpen(!open)
+      }}
+    >
+      <div className="or-line">
+        <OfferLogo offer={offer} size={34} />
+        <div className="or-main">
           <strong title={offer.title}>{offer.title || 'Offre sans titre'}</strong>
           <span>
             {offer.company || 'Entreprise ?'}
-            {offer.location && (
-              <>
-                {' · '}
-                <MapPin size={11} /> {offer.location}
-              </>
-            )}
+            {status === 'todo' ? ` · ajoutée ${since(offer.createdAt)}` : sent ? ` · envoyée ${since(sent)}` : ''}
           </span>
         </div>
+        {!narrow && (
+          <span className="or-status">
+            <select className={`status-select st-${status}`} value={status} onChange={(e) => saveOffer({ ...offer, status: e.target.value as JobStatus })} aria-label="Statut de la candidature">
+              {(Object.keys(JOB_STATUS) as JobStatus[]).map((k) => (
+                <option key={k} value={k}>
+                  {JOB_STATUS[k]}
+                </option>
+              ))}
+            </select>
+          </span>
+        )}
+        <button className={`or-next ${next.tone}`} onClick={act} title={next.act === 'planner' && fu ? fu.title : undefined}>
+          {next.tone === 'hot' ? <BellRing size={13} /> : next.act === 'prep' ? <MessagesSquare size={13} /> : next.act === 'planner' ? <CalendarClock size={13} /> : null} {next.text}
+        </button>
+        <span className="or-docs">
+          {sortedDocs.slice(0, 3).map((d) => (
+            <button key={d.id} className={`or-doc ${d.kind}`} onClick={() => navigate(openPath(d))} title={d.name}>
+              {d.kind === 'resume' ? 'CV' : 'Lettre'}
+            </button>
+          ))}
+          {sortedDocs.length > 3 && <span className="muted small">+{sortedDocs.length - 3}</span>}
+          {offer.share && (
+            <button className="or-web" onClick={() => setShare(true)} title="Dossier en ligne pour le recruteur" aria-label="Dossier en ligne pour le recruteur">
+              <Globe size={14} />
+            </button>
+          )}
+        </span>
+        {!narrow && (
+          <span className={`or-ats ${best === undefined ? '' : best >= 75 ? 'good' : best >= 55 ? 'mid' : 'low'}`} title={best === undefined ? undefined : 'Meilleur score ATS des CV rattachés'}>
+            {best ?? ''}
+          </span>
+        )}
         <Menu
           align="right"
           trigger={(t) => (
-            <button className="icon-btn" onClick={t} title="Actions">
+            <button className="icon-btn" onClick={t} title="Actions" aria-label="Actions">
               <MoreVertical size={16} />
             </button>
           )}
@@ -122,6 +192,17 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
               >
                 Modifier l'offre
               </MenuItem>
+              {offer.url && (
+                <MenuItem
+                  icon={<ExternalLink size={14} />}
+                  onClick={() => {
+                    close()
+                    window.open(href(offer.url!), '_blank', 'noopener')
+                  }}
+                >
+                  Voir l'annonce
+                </MenuItem>
+              )}
               <MenuItem
                 icon={<Globe size={14} />}
                 onClick={() => {
@@ -140,7 +221,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
               >
                 {offer.interview ? "Préparation d'entretien" : "Préparer l'entretien"}
               </MenuItem>
-              {offer.status === 'applied' && (
+              {status === 'applied' && (
                 <MenuItem
                   icon={<CalendarClock size={14} />}
                   onClick={() => {
@@ -151,7 +232,7 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
                   Jour de candidature et relance
                 </MenuItem>
               )}
-              {offer.status === 'applied' && (
+              {status === 'applied' && (
                 <MenuItem
                   icon={<BellRing size={14} />}
                   onClick={() => {
@@ -185,64 +266,89 @@ function OfferCard({ offer, docs, resumes, onEdit }: { offer: Offer; docs: AnyDo
           )}
         </Menu>
       </div>
-      <div className="oc-status">
-        <select className={`status-select st-${offer.status ?? 'todo'}`} value={offer.status ?? 'todo'} onChange={(e) => saveOffer({ ...offer, status: e.target.value as JobStatus })}>
-          {(Object.keys(JOB_STATUS) as JobStatus[]).map((k) => (
-            <option key={k} value={k}>
-              {JOB_STATUS[k]}
-            </option>
-          ))}
-        </select>
-        {best !== undefined && <span className={`offer-score ${best >= 75 ? 'good' : best >= 55 ? 'mid' : 'low'}`} title="Meilleur score ATS des CV rattachés">ATS {best}</span>}
-        {fu &&
-          (fu.due ? (
-            <button className="followup-badge due" onClick={() => setFollowUp(true)} title={fu.title}>
-              <BellRing size={12} /> {fu.label}
-            </button>
-          ) : (
-            <button className="followup-badge" onClick={() => setPlanner(true)} title={fu.title}>
-              <CalendarClock size={12} /> {fu.label}
-            </button>
-          ))}
-        {(offer.status === 'interview' || offer.interview) && (
-          <button className={`followup-badge prep${offer.interview ? ' ready' : ''}`} onClick={() => setPrep(true)}>
-            <MessagesSquare size={12} /> {offer.interview ? 'Préparation prête' : "Préparer l'entretien"}
-          </button>
-        )}
-        {offer.share && (
-          <button className="followup-badge prep ready" onClick={() => setShare(true)} title="Le recruteur peut voir le CV et la lettre sur une page dédiée">
-            <Globe size={12} /> Dossier en ligne
-          </button>
-        )}
-        <span className="muted small">Ajoutée le {new Date(offer.createdAt).toLocaleDateString('fr-FR')}</span>
-        {offer.url && (
-          <a className="btn ghost sm" href={/^https?:/i.test(offer.url) ? offer.url : `https://${offer.url}`} target="_blank" rel="noreferrer">
-            <ExternalLink size={13} /> Annonce
-          </a>
-        )}
-      </div>
-      <div className="oc-docs">
-        {docs.map((d) => (
-          <button key={d.id} className="oc-doc" onClick={() => navigate(openPath(d))} title={d.name}>
-            <DocThumb doc={d} width={86} />
-            <span className={`kind-badge ${d.kind}`}>{d.kind === 'resume' ? 'CV' : 'Lettre'}</span>
-          </button>
-        ))}
-        <div className="oc-add">
-          <button className="btn sm" onClick={() => setCvModal(true)} disabled={!resumes.length}>
-            <FilePlus2 size={14} /> CV
-          </button>
-          <button className="btn sm" onClick={createLetter}>
-            <FileSignature size={14} /> Lettre
-          </button>
+
+      {open && (
+        <div className="or-open">
+          <section>
+            <h4>Documents</h4>
+            <div className="oc-docs">
+              {sortedDocs.map((d) => (
+                <button key={d.id} className="oc-doc" onClick={() => navigate(openPath(d))} title={d.name}>
+                  <DocThumb doc={d} width={86} />
+                  <span className={`kind-badge ${d.kind}`}>{d.kind === 'resume' ? 'CV' : 'Lettre'}</span>
+                </button>
+              ))}
+            </div>
+            <div className="row-gap">
+              <button className="btn sm" onClick={() => setCvModal(true)} disabled={!resumes.length}>
+                <FilePlus2 size={14} /> CV
+              </button>
+              <button className="btn sm" onClick={createLetter}>
+                <FileSignature size={14} /> Lettre
+              </button>
+            </div>
+          </section>
+          <section>
+            <h4>Suivi</h4>
+            <p>
+              {[offer.location, offer.contract].filter(Boolean).join(' · ') || 'Lieu non précisé'}
+            </p>
+            <p>
+              Ajoutée le {new Date(offer.createdAt).toLocaleDateString('fr-FR')}
+              {sent ? `, envoyée le ${new Date(sent).toLocaleDateString('fr-FR')}` : ''}
+              {offer.followUps?.length ? `, relancée le ${offer.followUps.map((t) => new Date(t).toLocaleDateString('fr-FR')).join(' et le ')}` : ''}
+            </p>
+            {status === 'applied' && (
+              <p>
+                {fu ? fu.title.split('.')[0] : 'Pas de relance prévue'}{' '}
+                <button className="link" onClick={() => setPlanner(true)}>
+                  changer
+                </button>
+              </p>
+            )}
+            {offer.share && (
+              <p className="ok-text">
+                Dossier en ligne pour le recruteur{' '}
+                <button className="link" onClick={() => setShare(true)}>
+                  lien et réglages
+                </button>
+              </p>
+            )}
+            {!!offer.contacts?.length && <p>Contact : {offer.contacts.map((c) => [c.name, c.role, c.email].filter(Boolean).join(', ')).join(' ; ')}</p>}
+            {offer.notes && <p className="muted">{offer.notes}</p>}
+          </section>
+          <section>
+            <h4>Actions</h4>
+            <div className="row-gap wrap">
+              {offer.url && (
+                <a className="btn sm" href={href(offer.url)} target="_blank" rel="noreferrer">
+                  <ExternalLink size={13} /> Voir l'annonce
+                </a>
+              )}
+              <button className="btn sm" onClick={() => setPrep(true)}>
+                <MessagesSquare size={13} /> {offer.interview ? 'Préparation' : "Préparer l'entretien"}
+              </button>
+              {status === 'applied' && (
+                <button className="btn sm" onClick={() => setFollowUp(true)}>
+                  <BellRing size={13} /> Relancer
+                </button>
+              )}
+              <button className="btn sm" onClick={() => setShare(true)}>
+                <Globe size={13} /> Dossier recruteur
+              </button>
+              <button className="btn sm ghost" onClick={onEdit}>
+                <Pencil size={13} /> Modifier l'offre
+              </button>
+            </div>
+          </section>
         </div>
-      </div>
+      )}
       {cvModal && <NewCvForOffer offer={offer} resumes={resumes} onClose={() => setCvModal(false)} />}
       {followUp && <FollowUpModal offer={offer} onClose={() => setFollowUp(false)} />}
       {planner && <FollowUpPlanner offer={offer} onClose={() => setPlanner(false)} />}
       {share && <ShareModal offer={offer} onClose={() => setShare(false)} />}
       {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
-    </div>
+    </article>
   )
 }
 
@@ -261,35 +367,49 @@ export function OffersView() {
   })
   const [editing, setEditing] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
-  const offers = useMemo(() => Object.values(offersMap).sort((a, b) => b.createdAt - a.createdAt), [offersMap])
+  const [q, setQ] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [doneOpen, setDoneOpen] = useState(false)
+  // les plus récentes d'abord (date d'envoi, sinon de création)
+  const offers = useMemo(() => Object.values(offersMap).sort((a, b) => (b.statusAt?.applied ?? b.createdAt) - (a.statusAt?.applied ?? a.createdAt)), [offersMap])
   const docs = useMemo(() => Object.values(docsMap), [docsMap])
   const resumes = useMemo(() => docs.filter((d): d is ResumeDoc => d.kind === 'resume').sort((a, b) => b.updatedAt - a.updatedAt), [docs])
-  const match = (o: Offer) => {
-    const s = o.status ?? 'todo'
-    if (filter === 'active') return s === 'todo' || s === 'applied'
-    if (filter === 'followup') return isDue(o)
-    if (filter === 'interview') return s === 'interview' || s === 'offer'
-    if (filter === 'closed') return s === 'rejected'
-    return true
-  }
-  const shown = offers.filter(match)
+  const docsOf = (o: Offer) => docs.filter((d) => d.offerId === o.id)
+  const stageOf = (o: Offer) => nextStep(o, docsOf(o)).stage
+  const nq = q.trim().toLowerCase()
+  const searched = offers.filter((o) => !nq || `${o.title ?? ''} ${o.company ?? ''} ${o.location ?? ''}`.toLowerCase().includes(nq))
+  const shown = searched.filter((o) => filter === 'all' || stageOf(o) === filter)
+  const count = (st: Stage) => offers.filter((o) => stageOf(o) === st).length
   const editingOffer = editing ? offersMap[editing] : undefined
+  const row = (o: Offer, narrow?: boolean) => (
+    <OfferRow key={o.id} offer={o} docs={docsOf(o)} resumes={resumes} onEdit={() => setEditing(o.id)} open={openId === o.id} onOpen={(v) => setOpenId(v ? o.id : null)} narrow={narrow} />
+  )
+  const STAGES: { id: Stage; title: string; sub: string }[] = [
+    { id: 'now', title: 'À faire maintenant', sub: 'relances dues, entretiens à préparer, candidatures à envoyer' },
+    { id: 'wait', title: 'En attente de réponse', sub: 'la relance est proposée à la date prévue' },
+    { id: 'interview', title: 'Entretiens', sub: 'préparation prête' },
+    { id: 'done', title: 'Refusées', sub: 'repliées' },
+  ]
 
   return (
     <>
       <div className="dash-filter">
-        <Segmented
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: `Toutes (${offers.length})` },
-            { value: 'active', label: 'En cours' },
-            { value: 'followup', label: `À relancer (${offers.filter((o) => isDue(o)).length})` },
-            { value: 'interview', label: 'Entretiens' },
-            { value: 'closed', label: 'Refusées' },
-          ]}
-        />
+        <div className="offer-counters" role="tablist" aria-label="Filtrer les candidatures">
+          {([
+            { id: 'all', n: offers.length, label: 'candidatures' },
+            { id: 'now', n: count('now'), label: 'à faire maintenant' },
+            { id: 'wait', n: count('wait'), label: 'en attente de réponse' },
+            { id: 'interview', n: count('interview'), label: 'entretiens' },
+            { id: 'done', n: count('done'), label: 'refusées' },
+          ] as { id: Filter; n: number; label: string }[]).map((k) => (
+            <button key={k.id} role="tab" aria-selected={filter === k.id} className={`oc-counter c-${k.id}${filter === k.id ? ' on' : ''}`} onClick={() => setFilter(k.id)}>
+              <strong>{k.n}</strong>
+              <span>{k.label}</span>
+            </button>
+          ))}
+        </div>
         <div className="row-gap">
+          <input className="input offer-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (poste, entreprise)" aria-label="Rechercher une candidature" />
           <Segmented
             value={view}
             onChange={(v) => {
@@ -301,7 +421,7 @@ export function OffersView() {
               }
             }}
             options={[
-              { value: 'cards', label: <LayoutGrid size={15} />, title: 'Cartes' },
+              { value: 'cards', label: <List size={15} />, title: 'Liste par étapes' },
               { value: 'columns', label: <Columns3 size={15} />, title: 'Colonnes par statut' },
               { value: 'stats', label: <BarChart3 size={15} />, title: 'Statistiques de recherche' },
             ]}
@@ -341,18 +461,42 @@ export function OffersView() {
                 <h3>
                   {JOB_STATUS[st]} <span>{col.length}</span>
                 </h3>
-                {col.map((o) => (
-                  <OfferCard key={o.id} offer={o} docs={docs.filter((d) => d.offerId === o.id)} resumes={resumes} onEdit={() => setEditing(o.id)} />
-                ))}
+                {col.map((o) => row(o, true))}
               </div>
             )
           })}
         </div>
       ) : (
-        <div className="offer-grid">
-          {shown.map((o) => (
-            <OfferCard key={o.id} offer={o} docs={docs.filter((d) => d.offerId === o.id)} resumes={resumes} onEdit={() => setEditing(o.id)} />
-          ))}
+        <div className={`offer-list${openId && shown.some((o) => o.id === openId) ? ' has-open' : ''}`}>
+          {!shown.length && <p className="muted">Aucune candidature ici{nq ? ' pour cette recherche' : ''}.</p>}
+          {(filter === 'all' ? STAGES : STAGES.filter((g) => g.id === filter)).map((g) => {
+            const items = shown.filter((o) => stageOf(o) === g.id)
+            if (!items.length) return null
+            const collapsed = g.id === 'done' && filter === 'all' && !doneOpen && !items.some((o) => o.id === openId) && !nq
+            return (
+              <section key={g.id} className={`job-zone oz-${g.id}`}>
+                <div className="zone-head">
+                  <span className="zone-dot" />
+                  <h3>{g.title}</h3>
+                  <span className="muted small">{g.sub}</span>
+                  <span className="zone-line" />
+                  <span className="muted small">{items.length}</span>
+                  {g.id === 'done' && doneOpen && filter === 'all' && (
+                    <button className="btn xs ghost" onClick={() => setDoneOpen(false)}>
+                      Replier
+                    </button>
+                  )}
+                </div>
+                {collapsed ? (
+                  <button className="zone-more" onClick={() => setDoneOpen(true)}>
+                    Afficher les {items.length} candidature{items.length > 1 ? 's' : ''} refusée{items.length > 1 ? 's' : ''}
+                  </button>
+                ) : (
+                  items.map((o) => row(o))
+                )}
+              </section>
+            )
+          })}
         </div>
       )}
       {editingOffer && (

@@ -253,3 +253,13 @@ describe('diplôme en fourchette', () => {
     expect(s.degree?.required).toBe(5)
   })
 })
+
+describe('compétence « formation »', () => {
+  it("ne compte pas la formation demandée au candidat, ni « transformation »", () => {
+    const p2 = { ...p, skills: ['formation', 'Jira'] }
+    const a = matchItem(item({ title: 'Chef de projet', fullText: 'Vous pilotez la transformation digitale avec Jira. Formation Bac +2 à Bac +5 en informatique. '.repeat(5) }), p2)
+    expect(a.skills?.matched).toEqual(['Jira'])
+    const b = matchItem(item({ title: 'Chef de projet', fullText: 'Vous animez des formations pour les utilisateurs avec Jira. '.repeat(6) }), p2)
+    expect(b.skills?.matched).toContain('formation')
+  })
+})

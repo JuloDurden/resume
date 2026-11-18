@@ -505,6 +505,8 @@ export function matchItem(i: FeedItem, p: ProfileData, pref: LevelPref = 'any'):
       if (!w.length) return false
       // compétence en plusieurs mots (« Google AI Professional », « gestion de projet ») : l'expression entière, mots dans l'ordre
       if (w.length >= 2) return seq.includes(` ${w.join(' ')} `)
+      // « formation » d'un profil (former des équipes) n'est pas la « formation Bac +2 » demandée au candidat
+      if (w[0] === stem('formation')) return hay.has(w[0]) && strip(text).replace(/formations?\s*:?\s*(de niveau |niveau |de type )?(bac|superieure|initiale|universitaire|d.ingenieur|ingenieur|master|licence|diplom|en informatique|en gestion|technique|commerciale)/g, ' ').match(/\bformations?\b/) !== null
       return hay.has(w[0])
     })
     // savoir-faire ROME (« Encadrer et coordonner une équipe ») : les deux tiers de ses mots principaux dans une même phrase

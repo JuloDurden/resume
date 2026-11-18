@@ -287,9 +287,13 @@ function Highlighted({ text, terms }: { text: string; terms: string[] }) {
       const q = strip(term).replace(/\s+/g, ' ').trim()
       if (q.length < 2) continue
       for (let from = 0, at = norm.indexOf(q); at >= 0; from = at + q.length, at = norm.indexOf(q, from)) {
-        // terme court (« SQL », « PO ») : mot entier seulement
-        if (q.length <= 4 && (/[a-z0-9]/.test(norm[at - 1] ?? '') || /[a-z0-9]/.test(norm[at + q.length] ?? ''))) continue
-        ranges.push([pos[at], pos[at + q.length - 1] + 1])
+        // mot entier seulement (« formation » ne surligne pas « transformation ») ; la fin d'un long extrait peut couper un mot
+        if (/[a-z0-9]/.test(norm[at - 1] ?? '')) continue
+        let len = q.length
+        // pluriel accepté (« formations », « outils »)
+        if (q.length <= 40 && /[sx]/.test(norm[at + len] ?? '') && !/[a-z0-9]/.test(norm[at + len + 1] ?? '')) len++
+        if (q.length <= 40 && /[a-z0-9]/.test(norm[at + len] ?? '')) continue
+        ranges.push([pos[at], pos[at + len - 1] + 1])
       }
     }
     ranges.sort((a, b) => a[0] - b[0])

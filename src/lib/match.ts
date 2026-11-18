@@ -426,11 +426,12 @@ function levelOf(i: FeedItem, text: string, pref: LevelPref, years?: number): Ma
  * fortement si l'exigence est ferme.
  */
 function degreeOf(text: string, mine: number): MatchResult['degree'] {
+  // une fourchette (« Bac +2 à Bac +5 », « Bac+3/5 ») demande le plus bas des deux niveaux
   const t = strip(text)
   let req = 0
   let strict = false
   let quote = ''
-  for (const m of t.matchAll(/bac\s*\+\s*(\d)(?:\s*(?:\/|a|ou|-)\s*\+?\s*(\d))?|\b(master|mba|ingenieur|grande ecole|doctorat|\bm2\b|niveau 7|rncp 7)\b/g)) {
+  for (const m of t.matchAll(/bac\s*\+\s*(\d)(?:\s*(?:\/|a|au|ou|-)\s*(?:bac\s*)?\+?\s*(\d))?|\b(master|mba|ingenieur|grande ecole|doctorat|\bm2\b|niveau 7|rncp 7)\b/g)) {
     const n = m[1] ? Number(m[1]) : m[3] === 'doctorat' ? 8 : 5
     if (n > 8) continue
     const ctx = t.slice(Math.max(0, m.index! - 70), m.index! + 70)

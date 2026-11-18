@@ -244,3 +244,12 @@ describe('métiers proches (ROME)', () => {
     expect(near.title.v).toBe(0.6)
   })
 })
+
+describe('diplôme en fourchette', () => {
+  it('« Bac +2 à Bac +5 » demande un Bac+2', () => {
+    const m = matchItem(item({ title: 'Responsable informatique', fullText: "Profil : formation Bac +2 à Bac +5 en informatique, systèmes d'information ou gestion de projets numériques. ".repeat(5) }), p)
+    expect(m.degree).toBeUndefined()
+    const s = matchItem(item({ title: 'Responsable informatique', fullText: 'Formation Bac+5 exigée en informatique. '.repeat(5) }), p)
+    expect(s.degree?.required).toBe(5)
+  })
+})

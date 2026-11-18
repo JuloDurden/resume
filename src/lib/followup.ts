@@ -55,6 +55,24 @@ export function followUpEmail(o: Offer, cv?: ResumeDoc): { subject: string; body
   const hello = contact ? `Bonjour ${contact},` : 'Bonjour,'
   const poste = o.title ? `au poste de ${o.title}` : 'à votre offre'
   const subject = `${first ? 'Relance' : 'Seconde relance'} : candidature ${poste}${o.company ? ` chez ${o.company}` : ''}`
+  // après un entretien sans retour à la date annoncée : relance sur l'entretien, pas sur l'envoi
+  const met = (o.interviews ?? []).filter((s) => s.at && s.at < Date.now()).sort((a, b) => b.at! - a.at!)[0]
+  if (o.status === 'interview' && met?.at) {
+    const who = met.with?.split(/[,(]/)[0].trim()
+    return {
+      subject: `Suite à notre entretien : ${o.title ?? 'candidature'}${o.company ? ` chez ${o.company}` : ''}`,
+      body: `${who ? `Bonjour ${who},` : hello}
+
+Je me permets de revenir vers vous suite à notre entretien du ${frDate(met.at)} pour le poste ${o.title ? `de ${o.title}` : ''}.
+
+Notre échange a renforcé mon intérêt pour ce poste et pour ${o.company || 'votre équipe'}. Auriez-vous des nouvelles sur la suite du processus ?
+
+Je reste disponible si vous avez besoin d'éléments complémentaires.
+
+Bien cordialement,
+${name}`,
+    }
+  }
   const body = first
     ? `${hello}
 

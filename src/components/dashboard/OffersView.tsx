@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BellRing, BookOpen, CalendarClock, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
-import { FollowUpModal, FollowUpPlanner, InterviewModal, ShareModal, followUpLabel } from './OfferTools'
+import { BarChart3, BellRing, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, ShareModal, followUpLabel } from './OfferTools'
+import { MODE_LABEL, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
 import { nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
@@ -72,14 +73,29 @@ const frDay = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'num
 const href = (u: string) => (/^https?:/i.test(u) ? u : `https://${u}`)
 
 type Stage = 'now' | 'interview' | 'wait' | 'done'
-type Next = { text: string; tone: 'hot' | 'ok' | 'muted' | ''; stage: Stage; act?: 'followup' | 'planner' | 'prep' | 'cv' | 'open' }
+type Next = { text: string; tone: 'hot' | 'ok' | 'muted' | ''; stage: Stage; act?: 'followup' | 'planner' | 'prep' | 'cv' | 'open' | 'interview'; title?: string }
 
 /** Prochaine étape d'une candidature, et le groupe où elle se range (à faire, entretien, en attente, terminée). */
 function nextStep(o: Offer, docs: AnyDoc[]): Next {
   const st = o.status ?? 'todo'
   if (st === 'rejected') return { text: `Refusée${o.statusAt?.rejected ? ` le ${frDay(o.statusAt.rejected)}` : ''}`, tone: 'muted', stage: 'done' }
   if (st === 'offer') return { text: 'Proposition reçue : à étudier', tone: 'ok', stage: 'now', act: 'open' }
-  if (st === 'interview') return o.interview ? { text: 'Entretien : préparation prête', tone: 'ok', stage: 'interview', act: 'prep' } : { text: "Entretien : à préparer", tone: 'hot', stage: 'now', act: 'prep' }
+  if (st === 'interview') {
+    const next = upcomingInterview(o)
+    if (next) {
+      const d = daysUntil(next.at)
+      const day = d <= 1 ? `${fmtIn(next.at)}, ${fmtShort(next.at).split(', ')[1]}` : fmtShort(next.at).split(', ')[0]
+      const title = `Entretien ${fmtLong(next.at)}${slotWhere(next) ? `, ${slotWhere(next)}` : ''}`
+      // préparation à faire : urgente à 5 jours de l'entretien
+      if (!o.interview) return d <= 5 ? { text: `Préparer l'entretien (${fmtIn(next.at)})`, tone: 'hot', stage: 'now', act: 'prep', title } : { text: `Entretien ${day}`, tone: '', stage: 'interview', act: 'interview', title }
+      return { text: `Entretien ${day} · prêt`, tone: 'ok', stage: 'interview', act: 'prep', title }
+    }
+    if (!datedInterviews(o).length) return { text: "Entretien : préciser la date", tone: 'hot', stage: 'now', act: 'interview' }
+    const lastFu = Math.max(0, ...(o.followUps ?? []))
+    if (o.answerBy && daysUntil(o.answerBy) < 0 && lastFu > o.answerBy - DAY) return { text: `Relancé le ${frDay(lastFu)}, en attente`, tone: 'muted', stage: 'interview', act: 'interview' }
+    if (o.answerBy) return daysUntil(o.answerBy) >= 0 ? { text: `Retour attendu le ${frDay(o.answerBy)}`, tone: '', stage: 'interview', act: 'interview' } : { text: `Sans retour depuis le ${frDay(o.answerBy)}`, tone: 'hot', stage: 'now', act: 'followup' }
+    return { text: 'Entretien passé : noter la suite', tone: 'hot', stage: 'now', act: 'interview' }
+  }
   if (st === 'todo') return docs.some((d) => d.kind === 'resume') ? { text: 'À envoyer', tone: 'hot', stage: 'now', act: 'open' } : { text: 'Préparer le CV', tone: 'hot', stage: 'now', act: 'cv' }
   const fu = followUpLabel(o)
   if (fu?.due) return { text: fu.label === 'Seconde relance' ? 'Seconde relance à faire' : "Relancer aujourd'hui", tone: 'hot', stage: 'now', act: 'followup' }
@@ -98,6 +114,11 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
   const [planner, setPlanner] = useState(false)
   const [share, setShare] = useState(false)
   const [prep, setPrep] = useState(false)
+  const [ivPlan, setIvPlan] = useState(false)
+  const minPay = useDocs((s) => s.watch.profile?.salary?.min)
+  const pay = offerSalary(offer)
+  const payTone = pay?.max && minPay ? (pay.max < minPay ? 'below' : 'ok') : ''
+  const slots = datedInterviews(offer)
   const openRome = useRomeDrawer((s) => s.open)
   const linkedCv = docs.find((d): d is ResumeDoc => d.kind === 'resume')
   const scores = Object.entries(offer.scores ?? {}).filter(([id]) => docs.some((d) => d.id === id))
@@ -119,6 +140,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
     if (next.act === 'followup') setFollowUp(true)
     else if (next.act === 'planner') setPlanner(true)
     else if (next.act === 'prep') setPrep(true)
+    else if (next.act === 'interview') setIvPlan(true)
     else if (next.act === 'cv') setCvModal(true)
     else onOpen(true)
   }
@@ -138,12 +160,25 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
           <strong title={offer.title}>{offer.title || 'Offre sans titre'}</strong>
           <span>
             {offer.company || 'Entreprise ?'}
+            {pay && pay.max ? (
+              <>
+                {' · '}
+                <span className={payTone ? `pay ${payTone}` : undefined} title={payTone === 'below' ? 'Sous votre salaire minimum' : 'Salaire annoncé'}>
+                  {pay.text}
+                </span>
+              </>
+            ) : null}
             {status === 'todo' ? ` · ajoutée ${since(offer.createdAt)}` : sent ? ` · envoyée ${since(sent)}` : ''}
           </span>
         </div>
         {!narrow && (
           <span className="or-status">
-            <select className={`status-select st-${status}`} value={status} onChange={(e) => saveOffer({ ...offer, status: e.target.value as JobStatus })} aria-label="Statut de la candidature">
+            <select className={`status-select st-${status}`} value={status} onChange={(e) => {
+                const v = e.target.value as JobStatus
+                saveOffer({ ...offer, status: v })
+                // passage en entretien : on demande tout de suite la date, l'heure et le lieu
+                if (v === 'interview' && !offer.interviews?.length) setIvPlan(true)
+              }} aria-label="Statut de la candidature">
               {(Object.keys(JOB_STATUS) as JobStatus[]).map((k) => (
                 <option key={k} value={k}>
                   {JOB_STATUS[k]}
@@ -152,7 +187,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
             </select>
           </span>
         )}
-        <button className={`or-next ${next.tone}`} onClick={act} title={next.act === 'planner' && fu ? fu.title : undefined}>
+        <button className={`or-next ${next.tone}`} onClick={act} title={next.title ?? (next.act === 'planner' && fu ? fu.title : undefined)}>
           {next.tone === 'hot' ? <BellRing size={13} /> : next.act === 'prep' ? <MessagesSquare size={13} /> : next.act === 'planner' ? <CalendarClock size={13} /> : null} {next.text}
         </button>
         <span className="or-docs">
@@ -211,6 +246,15 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                 }}
               >
                 {offer.share ? 'Dossier pour le recruteur (en ligne)' : 'Dossier pour le recruteur…'}
+              </MenuItem>
+              <MenuItem
+                icon={<CalendarDays size={14} />}
+                onClick={() => {
+                  close()
+                  setIvPlan(true)
+                }}
+              >
+                {offer.interviews?.length ? 'Entretien : date, heure et lieu' : 'Planifier un entretien…'}
               </MenuItem>
               <MenuItem
                 icon={<MessagesSquare size={14} />}
@@ -294,6 +338,58 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
               {[offer.location, offer.contract].filter(Boolean).join(' · ') || 'Lieu non précisé'}
             </p>
             <p>
+              <Euro size={13} className="muted" />{' '}
+              {pay ? (
+                <span className={payTone ? `pay ${payTone}` : undefined}>
+                  {pay.text}
+                  {pay.max ? ' brut annuel' : ''}
+                  {payTone === 'below' && ' (sous votre minimum)'}
+                </span>
+              ) : (
+                <span className="muted">
+                  Salaire non indiqué{' '}
+                  <button className="link" onClick={onEdit}>
+                    ajouter
+                  </button>
+                </span>
+              )}
+            </p>
+            {(status === 'interview' || slots.length > 0) && (
+              <div className="or-iv">
+                {slots.map((s, i) => (
+                  <p key={s.id} className={s.at < Date.now() - 2 * 3600000 ? 'muted' : undefined}>
+                    <CalendarDays size={13} /> <strong>{slots.length > 1 ? `Entretien ${i + 1}` : 'Entretien'}</strong> {fmtShort(s.at)}
+                    {s.at > Date.now() ? <span className="muted"> ({fmtIn(s.at)})</span> : ''}
+                    {slotWhere(s) && (
+                      <>
+                        <br />
+                        <span className="small">
+                          {s.mode === 'video' && s.place && /^https?:/i.test(s.place) ? (
+                            <>
+                              {MODE_LABEL.video},{' '}
+                              <a href={s.place} target="_blank" rel="noreferrer">
+                                rejoindre
+                              </a>
+                              {s.with ? `, avec ${s.with}` : ''}
+                            </>
+                          ) : (
+                            slotWhere(s)
+                          )}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                ))}
+                {offer.answerBy && <p>Retour attendu le {new Date(offer.answerBy).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>}
+                <p>
+                  {!slots.length && <span className="muted">Date de l'entretien non précisée </span>}
+                  <button className="link" onClick={() => setIvPlan(true)}>
+                    {slots.length ? 'modifier, ajouter une étape' : 'préciser'}
+                  </button>
+                </p>
+              </div>
+            )}
+            <p>
               Ajoutée le {new Date(offer.createdAt).toLocaleDateString('fr-FR')}
               {sent ? `, envoyée le ${new Date(sent).toLocaleDateString('fr-FR')}` : ''}
               {offer.followUps?.length ? `, relancée le ${offer.followUps.map((t) => new Date(t).toLocaleDateString('fr-FR')).join(' et le ')}` : ''}
@@ -325,6 +421,9 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                   <ExternalLink size={13} /> Voir l'annonce
                 </a>
               )}
+              <button className="btn sm" onClick={() => setIvPlan(true)}>
+                <CalendarDays size={13} /> {offer.interviews?.length ? 'Entretien' : 'Planifier un entretien'}
+              </button>
               <button className="btn sm" onClick={() => setPrep(true)}>
                 <MessagesSquare size={13} /> {offer.interview ? 'Préparation' : "Préparer l'entretien"}
               </button>
@@ -348,6 +447,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
       {planner && <FollowUpPlanner offer={offer} onClose={() => setPlanner(false)} />}
       {share && <ShareModal offer={offer} onClose={() => setShare(false)} />}
       {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
+      {ivPlan && <InterviewPlanner offer={offer} onClose={() => setIvPlan(false)} />}
     </article>
   )
 }
@@ -387,7 +487,7 @@ export function OffersView() {
   const STAGES: { id: Stage; title: string; sub: string }[] = [
     { id: 'now', title: 'À faire maintenant', sub: 'relances dues, entretiens à préparer, candidatures à envoyer' },
     { id: 'wait', title: 'En attente de réponse', sub: 'la relance est proposée à la date prévue' },
-    { id: 'interview', title: 'Entretiens', sub: 'préparation prête' },
+    { id: 'interview', title: 'Entretiens', sub: 'à venir ou en attente du retour' },
     { id: 'done', title: 'Refusées', sub: 'repliées' },
   ]
 

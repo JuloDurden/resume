@@ -4709,3 +4709,43 @@ button.followup-badge {
 .offer-row:has(.menu) {
   z-index: 30;
 }
+
+/* ---------- entretiens ---------- */
+.iv-slot {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px 14px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.iv-slot legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.iv-grid {
+  display: grid;
+  grid-template-columns: 170px 120px minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 640px) {
+  .iv-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.or-iv {
+  border-left: 3px solid var(--ok);
+  padding-left: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.or-iv p {
+  margin: 0;
+}
+.or-iv svg,
+.or-open p > svg {
+  vertical-align: -2px;
+}

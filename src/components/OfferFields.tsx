@@ -61,6 +61,12 @@ export function OfferFields({ offer, onChange, compact }: { offer: Offer; onChan
           <Field label="Lieu">
             <TextInput value={offer.location} onChange={(v) => set({ location: v })} />
           </Field>
+          <Field label="Salaire" hint="Tel qu'annoncé : « 38 à 42 k€ », « 3 200 € brut mensuel »…">
+            <TextInput value={offer.salary} onChange={(v) => set({ salary: v })} />
+          </Field>
+          <Field label="Contrat">
+            <TextInput value={offer.contract} onChange={(v) => set({ contract: v })} placeholder="CDI, CDD…" />
+          </Field>
           <Field label="Suivi">
             <Select value={offer.status ?? 'todo'} onChange={(v) => set({ status: v })} options={(Object.keys(JOB_STATUS) as JobStatus[]).map((k) => ({ value: k, label: JOB_STATUS[k] }))} />
           </Field>

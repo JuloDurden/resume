@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
-import { BellOff, Check, ClipboardCopy, ExternalLink, Globe, Mail, MessagesSquare, RotateCcw } from 'lucide-react'
-import type { InterviewPrep, Offer, ResumeDoc } from '../../types'
+import { BellOff, CalendarPlus, Check, ClipboardCopy, ExternalLink, Globe, Mail, MessagesSquare, Plus, Printer, RotateCcw, Trash2 } from 'lucide-react'
+import type { InterviewMode, InterviewPrep, InterviewSlot, Offer, ResumeDoc } from '../../types'
+import { MODE_LABEL, downloadIcs, fmtIn, fmtLong, printPrep } from '../../lib/interviews'
+import { uid } from '../../lib/ids'
 import { useDocs } from '../../store/documents'
 import { FOLLOW_UP_CHOICES, appliedAt, followUpDays, followUpEmail, nextFollowUp, startOfDay } from '../../lib/followup'
 import { resumeToText } from '../../lib/export'
@@ -198,6 +200,114 @@ export function FollowUpPlanner({ offer, onClose }: { offer: Offer; onClose: () 
   )
 }
 
+/* ---------- Entretiens : date, heure, lieu ---------- */
+
+const timeInput = (t?: number) => (t ? `${String(new Date(t).getHours()).padStart(2, '0')}:${String(new Date(t).getMinutes()).padStart(2, '0')}` : '')
+const withTime = (day: string, time: string) => {
+  const d = fromInput(day)
+  if (!d) return undefined
+  const [h, m] = (time || '09:00').split(':').map(Number)
+  const x = new Date(d)
+  x.setHours(h || 0, m || 0, 0, 0)
+  return x.getTime()
+}
+const PLACE_HINT: Record<InterviewMode, string> = { site: 'Adresse', phone: 'Numéro (si c\'est vous qui appelez)', video: 'Lien de la visio (Teams, Meet, Zoom…)' }
+
+/** Entretiens de la candidature (un par étape) et date de retour annoncée. */
+export function InterviewPlanner({ offer, onClose }: { offer: Offer; onClose: () => void }) {
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const blank = (): InterviewSlot => ({ id: uid(), mode: 'site', place: offer.location })
+  const [slots, setSlots] = useState<InterviewSlot[]>(offer.interviews?.length ? offer.interviews : [blank()])
+  // jour et heure saisis à part : la date n'est enregistrée que si le jour est rempli
+  const [days, setDays] = useState<Record<string, { day: string; time: string }>>(() => Object.fromEntries((offer.interviews ?? []).map((s) => [s.id, { day: toInput(s.at), time: timeInput(s.at) }])))
+  const [answer, setAnswer] = useState(toInput(offer.answerBy))
+  const set = (id: string, p: Partial<InterviewSlot>) => setSlots((l) => l.map((s) => (s.id === id ? { ...s, ...p } : s)))
+  const dt = (id: string) => days[id] ?? { day: '', time: '' }
+  const setDt = (id: string, p: Partial<{ day: string; time: string }>) => setDays((d) => ({ ...d, [id]: { ...dt(id), ...p } }))
+  const result = (): InterviewSlot[] => slots.map((s) => ({ ...s, at: withTime(dt(s.id).day, dt(s.id).time), place: s.place?.trim() || undefined, with: s.with?.trim() || undefined, notes: s.notes?.trim() || undefined }))
+  const save = () => {
+    const list = result().filter((s) => s.at || s.place || s.with || s.notes)
+    const now = Date.now()
+    saveOffer({ ...offer, interviews: list, answerBy: fromInput(answer), status: offer.status === 'rejected' || offer.status === 'offer' ? offer.status : 'interview' })
+    const next = list.filter((s) => s.at && s.at > now).sort((a, b) => a.at! - b.at!)[0]
+    toast.ok(next ? `Entretien le ${fmtLong(next.at!)} (${fmtIn(next.at!)})` : 'Entretien enregistré')
+    onClose()
+  }
+  return (
+    <Modal
+      open
+      wide
+      onClose={onClose}
+      title={`Entretien : ${[offer.title, offer.company].filter(Boolean).join(', ')}`}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Annuler
+          </button>
+          <button className="btn primary" onClick={save}>
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      <div className="form-stack">
+        {slots.map((s, i) => {
+          const at = withTime(dt(s.id).day, dt(s.id).time)
+          const mode = s.mode ?? 'site'
+          return (
+            <fieldset key={s.id} className="iv-slot">
+              <legend>
+                {slots.length > 1 ? `Entretien ${i + 1}` : 'Entretien'}
+                {at && <span className="muted small"> · {fmtIn(at)}</span>}
+              </legend>
+              <div className="iv-grid">
+                <Field label="Jour">
+                  <input className="input" type="date" value={dt(s.id).day} onChange={(e) => setDt(s.id, { day: e.target.value })} />
+                </Field>
+                <Field label="Heure">
+                  <input className="input" type="time" step={300} value={dt(s.id).time} onChange={(e) => setDt(s.id, { time: e.target.value })} />
+                </Field>
+                <Field label="Format">
+                  <Segmented value={mode} onChange={(m) => set(s.id, { mode: m })} options={(Object.keys(MODE_LABEL) as InterviewMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))} />
+                </Field>
+              </div>
+              <div className="grid-2">
+                <Field label={PLACE_HINT[mode]}>
+                  <TextInput value={s.place} onChange={(v) => set(s.id, { place: v })} placeholder={mode === 'site' ? '12 rue…, Montpellier' : mode === 'video' ? 'https://…' : ''} />
+                </Field>
+                <Field label="Avec">
+                  <TextInput value={s.with} onChange={(v) => set(s.id, { with: v })} placeholder="Nom et fonction (DRH, manager…)" />
+                </Field>
+              </div>
+              <Field label="Notes">
+                <TextArea value={s.notes} minRows={2} onChange={(v) => set(s.id, { notes: v })} placeholder="Durée, test technique, documents à apporter, code d'accès…" />
+              </Field>
+              <div className="row-gap">
+                {at && (
+                  <button className="btn sm" onClick={() => downloadIcs(offer, { ...s, at, place: s.place })} title="Fichier .ics à ouvrir dans Google Agenda, Outlook ou Calendrier">
+                    <CalendarPlus size={14} /> Ajouter à mon agenda
+                  </button>
+                )}
+                {slots.length > 1 && (
+                  <button className="btn sm ghost" onClick={() => setSlots((l) => l.filter((x) => x.id !== s.id))}>
+                    <Trash2 size={14} /> Retirer
+                  </button>
+                )}
+              </div>
+            </fieldset>
+          )
+        })}
+        <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => setSlots((l) => [...l, blank()])}>
+          <Plus size={14} /> Ajouter l'étape suivante (autre entretien)
+        </button>
+        <Field label="Retour attendu le" hint="Date annoncée par le recruteur après l'entretien : passé ce jour sans nouvelles, une relance est proposée.">
+          <input className="input" type="date" value={answer} onChange={(e) => setAnswer(e.target.value)} style={{ maxWidth: 200 }} />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
 /* ---------- Préparation d'entretien ---------- */
 
 function PrepView({ prep }: { prep: InterviewPrep }) {
@@ -330,6 +440,9 @@ export function InterviewModal({ offer, onClose }: { offer: Offer; onClose: () =
             </button>
             <button className="btn" onClick={async () => toast[(await copyText(prepText(offer.interview!))) ? 'ok' : 'error']('Préparation copiée')}>
               <ClipboardCopy size={15} /> Copier en texte
+            </button>
+            <button className="btn primary" onClick={() => printPrep(offer, offer.interview!) || toast.error("Fenêtre bloquée : autorisez les fenêtres pop-up pour imprimer")}>
+              <Printer size={15} /> Imprimer
             </button>
           </>
         )

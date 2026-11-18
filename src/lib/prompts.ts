@@ -1,4 +1,4 @@
-import type { ContactLink, DateValue, JobTarget, LetterDoc, ResumeDoc, Section, SectionItem, SectionType } from '../types'
+import type { ContactLink, DateValue, InterviewSlot, JobTarget, LetterDoc, ResumeDoc, Section, SectionItem, SectionType } from '../types'
 import { ICONS, PICKABLE_ICONS } from './icons'
 import { resumeContentJson } from './export'
 import { uid } from './ids'
@@ -387,7 +387,11 @@ export interface ClaudeReviews {
 
 /* ---------- Préparation d'entretien ---------- */
 
-export function interviewPrepPrompt(cvText: string, offer: { title?: string; company?: string; location?: string; description?: string; url?: string }): string {
+export function interviewPrepPrompt(cvText: string, offer: { title?: string; company?: string; location?: string; description?: string; url?: string; interviews?: InterviewSlot[] }): string {
+  const slots = (offer.interviews ?? []).filter((s) => s.at || s.with || s.mode)
+  const iv = slots.length
+    ? `\n\n## L'entretien\n${slots.map((s, i) => `${slots.length > 1 ? `Étape ${i + 1} : ` : ''}${[s.at ? new Date(s.at).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '', s.mode === 'phone' ? 'par téléphone' : s.mode === 'video' ? 'en visio' : s.mode === 'site' ? 'sur place' : '', s.with ? `avec ${s.with}` : '', s.notes ?? ''].filter(Boolean).join(', ')}`).join('\n')}\nAdapte la préparation à ce format et à ces interlocuteurs (un échange téléphonique avec un recruteur ne se prépare pas comme un entretien technique avec le futur manager).`
+    : ''
   return `Tu es un coach en recrutement. Prépare-moi à l'entretien pour le poste ci-dessous, à partir de mon CV. Sois concret et honnête, n'invente rien sur mon parcours.
 
 Réponds uniquement avec un bloc \`\`\`json de la forme :
@@ -407,5 +411,5 @@ ${cvText}
 
 ## Le poste
 ${[offer.title, offer.company, offer.location].filter(Boolean).join(', ')}${offer.url ? `\nLien : ${offer.url}` : ''}
-${offer.description?.trim() || '(texte de l\'annonce non disponible : appuie-toi sur l\'intitulé et sur ce que tu sais de l\'employeur)'}`
+${offer.description?.trim() || '(texte de l\'annonce non disponible : appuie-toi sur l\'intitulé et sur ce que tu sais de l\'employeur)'}${iv}`
 }

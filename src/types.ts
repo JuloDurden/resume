@@ -198,6 +198,24 @@ export interface Offer extends JobTarget {
   jobIds?: string[]
   /** préparation d'entretien rédigée par Claude */
   interview?: InterviewPrep
+  /** entretiens prévus ou passés (un par étape du recrutement) */
+  interviews?: InterviewSlot[]
+  /** date de retour annoncée après le dernier entretien */
+  answerBy?: number
+}
+
+export type InterviewMode = 'site' | 'phone' | 'video'
+
+export interface InterviewSlot {
+  id: string
+  /** date et heure (heure locale) */
+  at?: number
+  mode?: InterviewMode
+  /** adresse, numéro ou lien de visio */
+  place?: string
+  /** interlocuteurs */
+  with?: string
+  notes?: string
 }
 
 export interface InterviewPrep {

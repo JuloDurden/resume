@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { strip } from '../../lib/ats'
 import { loadRomeIndex } from '../../lib/rome'
 import { buildRomeNear, type RomeNear } from '../../lib/romeNear'
-import { Link2, Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, RefreshCw, Search, Settings2, Star } from 'lucide-react'
+import { Link2, Plus, Pin, ShieldBan, Flag, Wand2, BellRing, BookOpen, CalendarClock, Ban, Trash2, X, Target, Sparkles, Check, AlertTriangle, ArrowDownWideNarrow, Briefcase, ChevronDown, ChevronUp, Clock, Euro, ExternalLink, Eye, EyeOff, MapPin, MoreVertical, RefreshCw, Search, Settings2, Star } from 'lucide-react'
 import type { FeedItem, JobReview, MarkState, Offer, ResumeDoc } from '../../types'
 import { useNavigate } from 'react-router-dom'
 import { uid } from '../../lib/ids'
@@ -20,9 +20,12 @@ import { ago, offerFromItem, runWatchAndWait } from '../../lib/watch'
 import { GitHubError, loadConfig } from '../../lib/github'
 import { useRomeDrawer } from '../RomeDrawer'
 import { AlertsModal } from './AlertsModal'
-import { Modal, Segmented, toast } from '../ui'
+import { Menu, MenuItem, Modal, Segmented, toast } from '../ui'
 
 type Filter = 'new' | 'fav' | 'applied' | 'hidden' | 'out'
+
+/** Types de contrat transmis en anglais par certains sites (données structurées schema.org). */
+const CONTRACT_LABEL: Record<string, string> = { FULL_TIME: 'Temps plein', PART_TIME: 'Temps partiel', CONTRACTOR: 'Freelance', TEMPORARY: 'CDD ou intérim', INTERN: 'Stage', PER_DIEM: 'À la journée', VOLUNTEER: 'Bénévolat', OTHER: 'Autre contrat' }
 
 const norm = (s: string) =>
   s
@@ -317,8 +320,9 @@ function Highlighted({ text, terms }: { text: string; terms: string[] }) {
   )
 }
 
-/** Critères de la note, visibles sans déplier l'annonce ; un clic surligne le passage de l'annonce qui le justifie. */
-function MatchChips({ m, active, onFocus, textLoc }: { m: MatchResult; active?: string; onFocus: (key: string, terms: string[]) => void; textLoc?: string }) {
+/** Critères de la note, visibles sans déplier l'annonce ; un clic surligne le passage de l'annonce qui le justifie.
+ *  limit : carte compacte, seulement les critères décisifs (problèmes d'abord, puis points forts nets). */
+function MatchChips({ m, active, onFocus, textLoc, limit }: { m: MatchResult; active?: string; onFocus: (key: string, terms: string[]) => void; textLoc?: string; limit?: number }) {
   const pct = (v: number) => `${Math.round(v * 100)} %`
   const skillTerms = m.skills?.matched.map((x) => m.skills?.quotes?.[x] ?? x) ?? []
   const focus = (key: string, terms: (string | undefined)[]) => {
@@ -338,43 +342,140 @@ function MatchChips({ m, active, onFocus, textLoc }: { m: MatchResult; active?: 
         }
       : {}
   }
-  return (
-    <div className="match-chips compact">
-      {m.out && (
-        <span className="no" title={m.out}>
+  const compact = !!limit
+  // prio : 0 = bloquant, 1 = problème, 2 = point fort net, 3 = information ; skip = masqué en carte compacte
+  type Chip = { key: string; prio: number; skip?: boolean; el: React.ReactElement }
+  const chips: Chip[] = []
+  if (m.out)
+    chips.push({
+      key: 'out',
+      prio: 0,
+      el: (
+        <span key="out" className="no" title={m.out}>
           <AlertTriangle size={12} /> {/contrat/.test(m.out) ? `${m.out.split(' : ')[0]} non recherché` : /métier éloigné/.test(m.out) ? 'Métier éloigné' : 'Hors périmètre'}
         </span>
-      )}
-      <span className={m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'} title="Intitulé comparé à vos métiers visés">
-        <Target size={12} /> Intitulé {pct(m.title.v)}
-        {m.title.target && m.title.v > 0 ? ` (${m.title.target})` : ''}
-        {m.title.other ? `, autre métier : « ${m.title.other} »` : ''}
+      ),
+    })
+  const tCls = m.title.v >= 0.75 ? 'ok' : m.title.v >= 0.4 ? 'mid' : 'no'
+  chips.push({
+    key: 'title',
+    prio: m.title.other || m.title.v < 0.4 ? 1 : m.title.v >= 0.75 ? 2 : 3,
+    el: (
+      <span key="title" className={tCls} title={`Intitulé comparé à vos métiers visés${m.title.target ? ` (${m.title.target})` : ''}`}>
+        <Target size={12} />{' '}
+        {compact ? (m.title.other ? `Autre métier : ${m.title.other}` : m.title.v >= 0.75 ? 'Intitulé visé' : m.title.v >= 0.4 ? 'Intitulé proche' : 'Intitulé éloigné') : <>Intitulé {pct(m.title.v)}{m.title.target && m.title.v > 0 ? ` (${m.title.target})` : ''}{m.title.other ? `, autre métier : « ${m.title.other} »` : ''}</>}
       </span>
-      {m.skills ? (
-        <span className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={`${m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}${skillTerms.length ? '\nCliquez pour les surligner dans l\'annonce' : ''}`} {...focus('skills', skillTerms)}>
-          <Check size={12} /> {m.skills.matched.length} compétence{m.skills.matched.length > 1 ? 's' : ''} retrouvée{m.skills.matched.length > 1 ? 's' : ''}
+    ),
+  })
+  if (m.skills)
+    chips.push({
+      key: 'skills',
+      prio: m.skills.v >= 0.5 ? 2 : m.skills.v < 0.25 ? 1 : 3,
+      el: (
+        <span key="skills" className={m.skills.v >= 0.5 ? 'ok' : m.skills.v >= 0.25 ? 'mid' : 'no'} title={`${m.skills.matched.join(', ') || 'Aucune compétence du CV trouvée'}${skillTerms.length ? "\nCliquez pour les surligner dans l'annonce" : ''}`} {...focus('skills', skillTerms)}>
+          <Check size={12} /> {m.skills.matched.length} compétence{m.skills.matched.length > 1 ? 's' : ''}{compact ? '' : ` retrouvée${m.skills.matched.length > 1 ? 's' : ''}`}
         </span>
-      ) : (
-        <span className="na" title="Le texte complet de l'annonce n'est pas disponible">Compétences : texte indisponible</span>
-      )}
-      <span className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte ou profil)${m.level.quote ? "\nCliquez pour surligner le passage dans l'annonce" : ''}`} {...focus('level', [m.level.quote])}>
+      ),
+    })
+  else
+    chips.push({
+      key: 'text',
+      prio: 3,
+      el: (
+        <span key="text" className="na" title="Le texte complet de l'annonce n'est pas disponible : la note est incomplète. Ouvrez l'annonce pour coller son texte.">
+          {compact ? 'Texte incomplet' : 'Compétences : texte indisponible'}
+        </span>
+      ),
+    })
+  chips.push({
+    key: 'level',
+    prio: m.level.v <= 0.45 ? 1 : m.level.v >= 0.8 && m.level.kind !== 'neutral' ? 2 : 4,
+    skip: m.level.kind === 'neutral',
+    el: (
+      <span key="level" className={m.level.v >= 0.8 ? 'ok' : m.level.v >= 0.45 ? 'mid' : 'no'} title={`${m.level.quote ? `« ${m.level.quote} »\n` : ''}Niveau visé pour ce métier : ${m.level.pref === 'junior' ? 'junior ou débutant' : m.level.pref === 'senior' ? 'confirmé ou management' : 'tous niveaux'} (réglable dans chaque alerte ou profil)${m.level.quote ? "\nCliquez pour surligner le passage dans l'annonce" : ''}`} {...focus('level', [m.level.quote])}>
         {m.level.label}
       </span>
-      <span className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'} {...focus('place', [textLoc])}>
+    ),
+  })
+  const km = Number(/(\d+)\s*km/.exec(m.place.label)?.[1] ?? NaN)
+  chips.push({
+    key: 'place',
+    prio: m.place.v < 0.5 ? 1 : 4,
+    skip: m.place.v >= 0.5 && (Number.isNaN(km) || km <= 15),
+    el: (
+      <span key="place" className={m.place.v >= 0.85 ? 'ok' : m.place.v >= 0.5 ? 'mid' : 'no'} {...focus('place', [textLoc])}>
         <MapPin size={12} /> {m.place.label}
       </span>
-      {!!m.learned && (
-        <span className={m.learned > 0 ? 'ok' : 'no'} title="Selon les annonces que vous avez mises en favori, en candidature ou masquées">
+    ),
+  })
+  if (m.degree)
+    chips.push({
+      key: 'degree',
+      prio: 1,
+      el: (
+        <span key="degree" className="no" title={m.degree.quote ? "Cliquez pour surligner le passage dans l'annonce" : undefined} {...focus('degree', [m.degree.quote])}>
+          <AlertTriangle size={12} /> Bac+{m.degree.required} {m.degree.strict ? 'exigé' : 'demandé'}
+        </span>
+      ),
+    })
+  if (m.learned)
+    chips.push({
+      key: 'learned',
+      prio: 4,
+      // déjà compté dans la note : visible seulement dans le détail
+      skip: true,
+      el: (
+        <span key="learned" className={m.learned > 0 ? 'ok' : 'no'} title="Selon les annonces que vous avez mises en favori, en candidature ou masquées">
           {m.learned > 0 ? '+' : ''}
           {m.learned} selon vos choix
         </span>
-      )}
-      {m.degree && (
-        <span className="no" title={m.degree.quote ? "Cliquez pour surligner le passage dans l'annonce" : undefined} {...focus('degree', [m.degree.quote])}>
-          <AlertTriangle size={12} /> Bac+{m.degree.required} {m.degree.strict ? 'exigé' : 'demandé'}
-        </span>
-      )}
-    </div>
+      ),
+    })
+  const list = compact
+    ? chips
+        .filter((c) => !c.skip)
+        .map((c, k) => ({ ...c, k }))
+        .sort((a, b) => a.prio - b.prio || a.k - b.k)
+        .slice(0, m.out ? 1 : limit)
+    : chips
+  return <div className={`match-chips compact${compact ? ' mini' : ''}`}>{list.map((c) => c.el)}</div>
+}
+
+/** Note de l'annonce en tête de carte : chiffre, jauge et profil retenu. */
+function ScoreBlock({ match, review, onClick, flash }: { match?: MatchResult; review?: JobReview; onClick: () => void; flash?: { from: number; to: number } }) {
+  const target = review?.score ?? match?.score
+  const [shown, setShown] = useState(target)
+  // la note défile jusqu'à sa nouvelle valeur (texte collé)
+  useEffect(() => {
+    if (target === undefined) return
+    if (!flash || matchMedia('(prefers-reduced-motion: reduce)').matches) return setShown(target)
+    const t0 = performance.now()
+    let raf = 0
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0 - 250) / 700)
+      setShown(Math.round(flash.from + (flash.to - flash.from) * Math.max(0, k)))
+      if (k < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [target, flash])
+  if (target === undefined) return <div className="jc-score empty" />
+  const s = shown ?? target
+  const tone = s >= 70 ? 'high' : s >= 50 ? 'mid' : 'low'
+  const title = review ? `Avis de Claude : ${review.score}/100 ${review.verdict ?? ''}` : match?.capped ? `Note plafonnée à ${match.capped} : texte complet de l'annonce non lu (cliquez pour le détail)` : `Indice de correspondance avec votre profil${match?.track ? ` « ${match.track.name} »` : ''} (cliquez pour le détail)`
+  return (
+    <button className={`jc-score ${tone}${match?.capped && !review ? ' capped' : ''}`} onClick={onClick} title={title}>
+      <span className="jc-score-n">
+        {review && <Sparkles size={11} />}
+        {s}
+        {match?.capped && !review ? <small>?</small> : null}
+      </span>
+      <span className="jc-gauge" aria-hidden="true">
+        <span style={{ width: `${Math.max(3, s)}%` }} />
+      </span>
+      <span className="jc-score-t">{match?.out ? 'hors critères' : match?.track?.name ?? ''}</span>
+      {flash && flash.to !== flash.from && <span className={`jc-delta ${flash.to > flash.from ? 'up' : 'down'}`}>{flash.to > flash.from ? '+' : ''}{flash.to - flash.from}</span>}
+    </button>
   )
 }
 
@@ -448,9 +549,9 @@ function MatchDetails({ m, review, tracks, onTrack }: { m: MatchResult; review?:
   )
 }
 
-function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
+function JobCard({ item, compact, open, onOpen, flash, tracks, onTrack, linked, offers, onLink, degraded, salary, flags, others, mark, onMark, alertNames, onApply, onTailor, isNew, selected, onSelect, match, review }: { item: FeedItem; compact: boolean; open: boolean; onOpen: (v: boolean) => void; flash?: { from: number; to: number }; tracks?: { id: string; name: string }[]; onTrack?: (id: string) => void; linked?: { offer: Offer; sure: boolean }; offers: Offer[]; onLink: (o: Offer) => void; degraded?: boolean; salary?: SalaryInfo; flags: RedFlag[]; others: FeedItem[]; mark: MarkState; onMark: (s: MarkState) => void; alertNames: string[]; onApply: () => void; onTailor: () => void; isNew: boolean; selected: boolean; onSelect: (v: boolean) => void; match?: MatchResult; review?: JobReview }) {
   const openRome = useRomeDrawer((s) => s.open)
-  const [open, setOpen] = useState(false)
+  const setOpen = (v: boolean | ((o: boolean) => boolean)) => onOpen(typeof v === 'function' ? v(open) : v)
   // passage surligné dans le texte de l'annonce (clic sur un critère)
   const [hl, setHl] = useState<{ key: string; terms: string[]; n: number } | null>(null)
   const cardRef = useRef<HTMLElement>(null)
@@ -472,8 +573,228 @@ function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, sala
     const w = locationOf(item)
     return w.fromText ? w.loc : undefined
   })()
+
+  const sources = (
+    <div className="jc-tags">
+      <span className="jc-source">{item.source.replace(' (alerte email)', '')}</span>
+      {others.map((o) => (
+        <a key={o.id} className="jc-source also" href={o.url} target="_blank" rel="noreferrer" title="Même offre publiée sur un autre site">
+          + {o.source.replace(' (alerte email)', '')}
+        </a>
+      ))}
+      {alertNames.filter((n) => n !== 'Alerte email').map((n) => (
+        <span key={n} className="jc-alert">
+          {n}
+        </span>
+      ))}
+    </div>
+  )
+  const details = (
+    <>
+      {match && <MatchDetails m={match} review={review} tracks={tracks} onTrack={onTrack} />}
+      <Insights salary={salary} flags={flags} />
+      {item.fullText ? (
+        <details className="jc-full" open>
+          <summary>Texte complet de l'annonce</summary>
+          <div className="jc-desc">
+            <Highlighted text={item.fullText} terms={hl?.terms ?? []} />
+          </div>
+        </details>
+      ) : (
+        item.description && (
+          <p className="jc-desc">
+            <Highlighted text={item.description} terms={hl?.terms ?? []} />
+          </p>
+        )
+      )}
+      <PasteText item={item} />
+    </>
+  )
+
+  if (compact) {
+    const w = locationOf(item)
+    const meta: React.ReactNode[] = []
+    if (w.loc) meta.push(<span key="loc">{w.loc}{w.fromText ? ' *' : ''}</span>)
+    if (item.contract) meta.push(<span key="ct">{CONTRACT_LABEL[item.contract] ?? item.contract}</span>)
+    if (salary?.s || item.salary)
+      meta.push(
+        <span key="sal" className={salary?.cmp ? `sal-cmp ${salary.cmp.tone}` : undefined} title={salary?.cmp?.label ?? (salary?.bench ? benchLabel(salary.bench) : undefined)}>
+          {salary?.s ? fmtSalary(salary.s) : item.salary}
+          {salary?.cmp?.tone === 'low' ? ' ↓' : salary?.cmp?.tone === 'high' ? ' ↑' : ''}
+        </span>,
+      )
+    else if (salary?.bench) meta.push(<span key="sal" className="muted" title={`Salaire non indiqué. ${benchLabel(salary.bench)}`}>≈ {fmtK(salary.bench.median)} (médiane)</span>)
+    if (flags.length)
+      meta.push(
+        <span key="fl" className={`jc-flags lvl${Math.max(...flags.map((f) => f.level))}`} title={flags.map((f) => f.label).join(', ')}>
+          <Flag size={11} /> {flags.length}
+        </span>,
+      )
+    meta.push(<span key="d">{ago(item.date)}</span>)
+    if (item.until && new Date(item.until).getTime() - Date.now() < 7 * 86400000)
+      meta.push(
+        <span key="u" className="jc-until">
+          jusqu'au {new Date(item.until).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+        </span>,
+      )
+    const stop = (e: React.MouseEvent) => e.stopPropagation()
+    return (
+      <article
+        ref={cardRef}
+        data-id={item.id}
+        className={`job-card compact${open ? ' open' : ''}${flash ? ' flash' : ''}${mark === 'hidden' ? ' hidden' : ''}${selected ? ' selected' : ''}`}
+        onClick={(e) => {
+          // un clic sur la carte (hors boutons, liens et contenu déplié) l'ouvre ou la referme
+          if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, summary, [role=button], .jc-open, .menu-wrap')) return
+          setOpen((o) => !o)
+        }}
+      >
+        <div className="jc-row">
+          <input type="checkbox" className="jc-check" checked={selected} onChange={(e) => onSelect(e.target.checked)} title="Sélectionner" aria-label="Sélectionner l'annonce" />
+          <ScoreBlock match={match} review={review} flash={flash} onClick={() => setOpen((o) => !o)} />
+          <div className="jc-main">
+            <div className="jc-line1">
+              {isNew && <span className="new-dot" title="Nouvelle depuis votre dernière visite" />}
+              {item.closed && <span className="jc-closed">Expirée</span>}
+              <strong className="jc-t">{item.title}</strong>
+              <span className="jc-co">{item.company ?? 'Entreprise non communiquée'}</span>
+            </div>
+            <div className="jc-line2">{meta.flatMap((x, k) => (k ? [<span key={`s${k}`} className="sep">·</span>, x] : [x]))}</div>
+          </div>
+          {match && <MatchChips m={match} active={hl?.key} onFocus={onFocus} textLoc={textLoc} limit={3} />}
+          <div className="jc-quick" onClick={stop}>
+            {linked?.sure ? (
+              <span className="applied-badge" title={linked.offer.title}>
+                {JOB_STATUS[linked.offer.status ?? 'todo']}
+              </span>
+            ) : linked ? (
+              <button className="btn sm" onClick={() => onLink(linked.offer)} title={`Rattacher à votre candidature « ${linked.offer.title} »`}>
+                <Link2 size={13} /> Rattacher
+              </button>
+            ) : mark === 'applied' ? (
+              <span className="applied-badge">Candidature créée</span>
+            ) : (
+              <button className="btn sm primary jc-apply" onClick={onApply}>
+                Candidater
+              </button>
+            )}
+            <button className="btn sm claude icon-only" onClick={onTailor} title="CV adapté : crée la candidature et une copie de votre CV de référence, puis ouvre l'adaptation avec Claude" aria-label="CV adapté">
+              <Wand2 size={14} />
+            </button>
+            <a className="btn sm icon-only" href={item.url} target="_blank" rel="noreferrer" title={degraded ? "Voir l'annonce (site en mode dégradé : le lien peut afficher « offre indisponible »)" : "Voir l'annonce"} aria-label="Voir l'annonce">
+              <ExternalLink size={14} />
+            </a>
+            <button className={`icon-btn${mark === 'fav' ? ' fav' : ''}`} title={mark === 'fav' ? 'Retirer des favoris' : 'Mettre en favori'} aria-label="Favori" onClick={() => onMark(mark === 'fav' ? 'none' : 'fav')}>
+              <Star size={16} fill={mark === 'fav' ? 'currentColor' : 'none'} />
+            </button>
+            <Menu
+              align="right"
+              trigger={(t) => (
+                <button className="icon-btn" onClick={t} title="Plus d'actions" aria-label="Plus d'actions">
+                  <MoreVertical size={16} />
+                </button>
+              )}
+            >
+              {(close) => (
+                <>
+                  {!linked?.sure && mark !== 'applied' && offers.length > 0 && (
+                    <MenuItem
+                      icon={<Link2 size={14} />}
+                      onClick={() => {
+                        close()
+                        setOpen(true)
+                      }}
+                    >
+                      Déjà postulé…
+                    </MenuItem>
+                  )}
+                  <MenuItem
+                    icon={<Search size={14} />}
+                    onClick={() => {
+                      close()
+                      window.open(findUrl(item), '_blank', 'noopener')
+                    }}
+                  >
+                    Retrouver l'annonce ailleurs
+                  </MenuItem>
+                  {item.rome && (
+                    <MenuItem
+                      icon={<BookOpen size={14} />}
+                      onClick={() => {
+                        close()
+                        openRome({ code: item.rome, query: item.title, label: 'Fiche métier du poste' })
+                      }}
+                    >
+                      Fiche métier
+                    </MenuItem>
+                  )}
+                  {mark === 'hidden' ? (
+                    <MenuItem
+                      icon={<Eye size={14} />}
+                      onClick={() => {
+                        close()
+                        onMark('none')
+                      }}
+                    >
+                      Restaurer
+                    </MenuItem>
+                  ) : (
+                    mark !== 'applied' && (
+                      <MenuItem
+                        icon={<EyeOff size={14} />}
+                        onClick={() => {
+                          close()
+                          onMark('hidden')
+                        }}
+                      >
+                        Masquer
+                      </MenuItem>
+                    )
+                  )}
+                  {mark !== 'applied' && (
+                    <MenuItem
+                      danger
+                      icon={<Trash2 size={14} />}
+                      onClick={() => {
+                        close()
+                        onMark('deleted')
+                      }}
+                    >
+                      Supprimer définitivement
+                    </MenuItem>
+                  )}
+                </>
+              )}
+            </Menu>
+          </div>
+        </div>
+        {open && (
+          <div className="jc-open">
+            <div className="jc-open-bar">
+              {sources}
+              {!linked?.sure && mark !== 'applied' && offers.length > 0 && <LinkPicker offers={offers} item={item} onPick={onLink} />}
+              {linked && !linked.sure && (
+                <span className="link-suggest">
+                  Déjà une candidature « {linked.offer.title} » ?{' '}
+                  <button className="btn sm" onClick={() => onLink(linked.offer)}>
+                    <Link2 size={13} /> Rattacher
+                  </button>
+                </span>
+              )}
+              <button className="btn sm ghost" onClick={() => setOpen(false)}>
+                <ChevronUp size={14} /> Réduire
+              </button>
+            </div>
+            {degraded && <p className="jc-degraded">Le site {item.source.replace(' (alerte email)', '')} est en mode dégradé en ce moment : ses liens peuvent afficher « offre indisponible ». Réessayez plus tard ou utilisez « Retrouver l'annonce ailleurs ».</p>}
+            {details}
+          </div>
+        )}
+      </article>
+    )
+  }
+
   return (
-    <article ref={cardRef} className={`job-card${mark === 'hidden' ? ' hidden' : ''}${selected ? ' selected' : ''}`}>
+    <article ref={cardRef} data-id={item.id} className={`job-card${open ? ' open' : ''}${flash ? ' flash' : ''}${mark === 'hidden' ? ' hidden' : ''}${selected ? ' selected' : ''}`}>
       <div className="jc-head">
         <input type="checkbox" className="jc-check" checked={selected} onChange={(e) => onSelect(e.target.checked)} title="Sélectionner" />
         {item.logo ? <img className="offer-logo" src={item.logo} alt="" width={36} height={36} /> : <span className="offer-logo fallback" style={{ width: 36, height: 36, fontSize: 16 }}>{(item.company ?? item.title).charAt(0).toUpperCase()}</span>}
@@ -515,7 +836,7 @@ function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, sala
         })()}
         {item.contract && (
           <span>
-            <Briefcase size={12} /> {item.contract}
+            <Briefcase size={12} /> {CONTRACT_LABEL[item.contract] ?? item.contract}
             {item.worktime ? `, ${item.worktime.toLowerCase()}` : ''}
           </span>
         )}
@@ -546,44 +867,12 @@ function JobCard({ item, tracks, onTrack, linked, offers, onLink, degraded, sala
           </span>
         )}
       </div>
-      <div className="jc-tags">
-        <span className="jc-source">{item.source.replace(' (alerte email)', '')}</span>
-        {others.map((o) => (
-          <a key={o.id} className="jc-source also" href={o.url} target="_blank" rel="noreferrer" title="Même offre publiée sur un autre site">
-            + {o.source.replace(' (alerte email)', '')}
-          </a>
-        ))}
-        {alertNames.filter((n) => n !== 'Alerte email').map((n) => (
-          <span key={n} className="jc-alert">
-            {n}
-          </span>
-        ))}
-      </div>
+      {sources}
         </div>
         {match && <MatchChips m={match} active={hl?.key} onFocus={onFocus} textLoc={textLoc} />}
       </div>
       {degraded && <p className="jc-degraded">Le site {item.source.replace(' (alerte email)', '')} est en mode dégradé en ce moment : ses liens peuvent afficher « offre indisponible ». Réessayez plus tard ou utilisez « Retrouver ».</p>}
-      {open && (
-        <div className="jc-open">
-          {match && <MatchDetails m={match} review={review} tracks={tracks} onTrack={onTrack} />}
-          <Insights salary={salary} flags={flags} />
-          {item.fullText ? (
-            <details className="jc-full" open>
-              <summary>Texte complet de l'annonce</summary>
-              <div className="jc-desc">
-                <Highlighted text={item.fullText} terms={hl?.terms ?? []} />
-              </div>
-            </details>
-          ) : (
-            item.description && (
-              <p className="jc-desc">
-                <Highlighted text={item.description} terms={hl?.terms ?? []} />
-              </p>
-            )
-          )}
-          <PasteText item={item} />
-        </div>
-      )}
+      {open && <div className="jc-open">{details}</div>}
       <div className="jc-actions">
         {linked?.sure ? (
           <span className="applied-badge" title={linked.offer.title}>
@@ -707,6 +996,16 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
       return 'date'
     }
   })
+  const [density, setDensity] = useState<'compact' | 'detailed'>(() => {
+    try {
+      return localStorage.getItem('resume-jobs-density') === 'detailed' ? 'detailed' : 'compact'
+    } catch {
+      return 'compact'
+    }
+  })
+  // carte ouverte (une seule à la fois) : les autres s'atténuent
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [lowOpen, setLowOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [claudeOpen, setClaudeOpen] = useState(false)
   const [geoTick, setGeoTick] = useState(0)
@@ -803,7 +1102,34 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     [gitems, benches], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const flagsOf = useMemo(() => Object.fromEntries(gitems.map((i) => [i.id, redFlags(i)])), [gitems])
-  const rank = (i: FeedItem) => reviews[i.id]?.score ?? matches[i.id]?.score ?? 0
+  // note recalculée après collage d'un texte : la note défile, puis la carte rejoint sa nouvelle place
+  const [flash, setFlash] = useState<{ id: string; from: number; to: number } | null>(null)
+  const [frozen, setFrozen] = useState<string[] | null>(null)
+  const lastScores = useRef<Record<string, number>>({})
+  const lastOrder = useRef<string[]>([])
+  const lastTexts = useRef(watch.texts ?? {})
+  const pendingText = useRef<{ id: string; from: number } | null>(null)
+  if (watch.texts !== lastTexts.current) {
+    const prev = lastTexts.current
+    const changed = Object.keys({ ...prev, ...(watch.texts ?? {}) }).find((id) => (prev[id] ?? '') !== (watch.texts?.[id] ?? ''))
+    lastTexts.current = watch.texts ?? {}
+    if (changed && lastScores.current[changed] !== undefined) pendingText.current = { id: changed, from: lastScores.current[changed] }
+  }
+  useEffect(() => {
+    const p = pendingText.current
+    if (p) {
+      pendingText.current = null
+      const to = matches[p.id]?.score
+      if (to !== undefined && to !== p.from) {
+        setFlash({ ...p, to })
+        setFrozen(lastOrder.current)
+        setTimeout(() => setFrozen(null), 1000)
+        setTimeout(() => setFlash((f) => (f?.id === p.id ? null : f)), 3200)
+      }
+    }
+    lastScores.current = Object.fromEntries(Object.entries(matches).map(([k, v]) => [k, v.score]))
+  }, [matches])
+  const rank = (i: FeedItem) => (frozen && flash?.id === i.id ? flash.from : reviews[i.id]?.score ?? matches[i.id]?.score ?? 0)
   // onglet de chaque annonce : son marquage, ou « hors critères » (note 0) si elle n'est pas encore triée
   // candidature déjà créée pour cette annonce : liée (veille, rattachement manuel) ou même poste chez la même entreprise
   const offersList = useMemo(() => Object.values(offers), [offers])
@@ -849,7 +1175,35 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     if (nq && !`${i.title} ${i.company ?? ''} ${i.location ?? ''}`.toLowerCase().includes(nq)) return false
     return true
   })
-  const shown = sort === 'score' ? [...filtered].sort((a, b) => rank(b) - rank(a)) : filtered
+  const sorted = sort === 'score' ? [...filtered].sort((a, b) => rank(b) - rank(a)) : filtered
+  // pendant l'animation de la note, l'ordre précédent est conservé ; la carte se déplace ensuite
+  const shown = frozen ? [...sorted].sort((a, b) => (frozen.indexOf(a.id) + 1 || 1e6) - (frozen.indexOf(b.id) + 1 || 1e6)) : sorted
+  lastOrder.current = shown.map((i) => i.id)
+  // zones de note (tri par correspondance) : très bonnes, à examiner, faibles (repliées)
+  const zoneOf = (i: FeedItem) => (rank(i) >= 70 ? 'high' : rank(i) >= 50 ? 'mid' : 'low')
+  const zoned = sort === 'score' && filter !== 'out' && shown.length > 4
+  const listRef = useRef<HTMLDivElement>(null)
+  const rects = useRef<Map<string, number>>(new Map())
+  // déplacement en douceur des cartes quand l'ordre change (technique FLIP), puis la page suit la carte recalculée
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+    const cards = [...el.querySelectorAll<HTMLElement>('.job-card[data-id]')]
+    const next = new Map(cards.map((c) => [c.dataset.id!, c.getBoundingClientRect().top]))
+    if (!reduce && flash && !frozen)
+      for (const c of cards) {
+        const before = rects.current.get(c.dataset.id!)
+        const dy = before === undefined ? 0 : before - next.get(c.dataset.id!)!
+        if (Math.abs(dy) > 2) c.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: 550, easing: 'cubic-bezier(.2,.8,.2,1)' })
+      }
+    rects.current = next
+  })
+  useEffect(() => {
+    if (!flash || frozen) return
+    const t = setTimeout(() => listRef.current?.querySelector(`.job-card[data-id="${CSS.escape(flash.id)}"]`)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }), 120)
+    return () => clearTimeout(t)
+  }, [flash, frozen])
 
   useEffect(() => setSelected(new Set()), [filter, alert, q, terms, quick])
   const shownIds = shown.map((i) => i.id)
@@ -1001,6 +1355,21 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
                   ]}
                 />
               </div>
+              <Segmented
+                value={density}
+                onChange={(v) => {
+                  setDensity(v)
+                  try {
+                    localStorage.setItem('resume-jobs-density', v)
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                options={[
+                  { value: 'compact', label: 'Compact', title: "Une ligne par annonce, les critères décisifs seulement ; un clic ouvre l'annonce" },
+                  { value: 'detailed', label: 'Détaillé', title: 'Tous les critères et toutes les actions sur chaque carte' },
+                ]}
+              />
             </div>
             <ExcludeBar
               terms={quick}
@@ -1078,10 +1447,41 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
               </button>
             </div>
           ) : shown.length ? (
-            <div className="job-list">
-              {shown.map((i) => (
-                <JobCard key={i.id} item={i} tracks={profile.tracks} onTrack={(t) => setTrackFor(expand([i.id]), t)} linked={linkedOffer[i.id]} offers={offersList} onLink={(o) => linkTo(i, o)} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
-              ))}
+            <div ref={listRef} className={`job-list${density === 'compact' ? ' dense' : ''}${openId && shown.some((x) => x.id === openId) ? ' has-open' : ''}${sel.length ? ' selecting' : ''}`}>
+              {(zoned ? (['high', 'mid', 'low'] as const) : ([null] as const)).map((z) => {
+                const items = z ? shown.filter((i) => zoneOf(i) === z) : shown
+                if (!items.length) return null
+                const collapsed = z === 'low' && !lowOpen && !items.some((i) => i.id === openId || i.id === flash?.id)
+                return (
+                  <section key={z ?? 'all'} className={`job-zone${z ? ` z-${z}` : ''}`}>
+                    {z && (
+                      <div className="zone-head">
+                        <span className="zone-dot" />
+                        <h3>{z === 'high' ? 'Très bonnes correspondances' : z === 'mid' ? 'À examiner' : 'Faibles'}</h3>
+                        <span className="muted small">{z === 'high' ? 'note de 70 et plus' : z === 'mid' ? 'note de 50 à 69' : 'note sous 50'}</span>
+                        <span className="zone-line" />
+                        <span className="muted small">
+                          {items.length} annonce{items.length > 1 ? 's' : ''}
+                        </span>
+                        {z === 'low' && lowOpen && (
+                          <button className="btn xs ghost" onClick={() => setLowOpen(false)}>
+                            Replier
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {collapsed ? (
+                      <button className="zone-more" onClick={() => setLowOpen(true)}>
+                        Afficher les {items.length} annonce{items.length > 1 ? 's' : ''} faible{items.length > 1 ? 's' : ''}
+                      </button>
+                    ) : (
+                      items.map((i) => (
+                        <JobCard key={i.id} item={i} compact={density === 'compact'} open={openId === i.id} onOpen={(v) => setOpenId(v ? i.id : null)} flash={flash?.id === i.id ? flash : undefined} tracks={profile.tracks} onTrack={(t) => setTrackFor(expand([i.id]), t)} linked={linkedOffer[i.id]} offers={offersList} onLink={(o) => linkTo(i, o)} degraded={Object.keys(feed?.sources?.degraded ?? {}).some((h) => i.url.includes(h))} salary={salaries[i.id]} flags={flagsOf[i.id] ?? []} others={(groupOf.get(i.id)?.members ?? []).filter((m) => m.id !== i.id && m.url !== i.url)} mark={markOf(i.id)} onMark={(st) => markGroup([i.id], st)} onTailor={() => tailor(i)} selected={selected.has(i.id)} onSelect={(v) => toggle(i.id, v)} alertNames={i.alerts.map((a) => names[a]).filter(Boolean)} match={matches[i.id]} review={reviews[i.id]} onApply={() => apply(i)} isNew={!!i.firstSeen && new Date(i.firstSeen).getTime() > lastSeen && lastSeen > 0} />
+                      ))
+                    )}
+                  </section>
+                )
+              })}
             </div>
           ) : (
             <div className="empty-state">

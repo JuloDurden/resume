@@ -30,6 +30,9 @@ const RULES = `Règles impératives :
 - Style sobre et factuel, sans superlatifs creux.
 - Écris comme une personne écrit son CV : des phrases courtes et naturelles, jamais une juxtaposition de mots-clés.`
 
+/** Claude connaît souvent l'utilisateur (mémoire, projets, conversations) : la lettre peut en profiter, sans rien inventer. */
+const KNOW_ME = `- Si tu as des souvenirs de nos échanges ou un projet qui me concerne (parcours, façon d'écrire, ce que je cherche, ce que je veux mettre en avant ou éviter), sers-t'en pour que la lettre me ressemble. Uniquement des faits que je t'ai donnés moi-même ou qui figurent dans le CV ; en cas de doute, laisse de côté.`
+
 const jobBlock = (job?: JobTarget) =>
   job?.description?.trim()
     ? `\n<offre_d_emploi>\n${job.title ? `Intitulé : ${job.title}\n` : ''}${job.company ? `Entreprise : ${job.company}\n` : ''}${job.description.trim()}\n</offre_d_emploi>\n`
@@ -88,13 +91,15 @@ ${JSON_SCHEMA}`
 - Honnêteté : si un écart existe entre mon parcours et l'offre (secteur, diplôme, poste jamais occupé), dis-le simplement et dis ce que j'ai fait pour le combler.
 - Une phrase qui dit ce que je sais faire, avec des mots simples, en lien avec les missions de l'offre.
 - Fin courte : la demande d'entretien en une phrase, sans surenchère.
-- Pas de jargon RH, pas de mots-clés en série, pas de superlatifs. Dans la lettre, pas de [X] : si un chiffre manque, formule sans chiffre.${opts.styleExample ? `\n- Voici une lettre que j'ai réécrite moi-même : reprends son ton, sa façon de raconter et sa longueur, pas son contenu.\n<exemple_de_ma_lettre>\n${opts.styleExample}\n</exemple_de_ma_lettre>` : ''}
+- Pas de jargon RH, pas de mots-clés en série, pas de superlatifs. Dans la lettre, pas de [X] : si un chiffre manque, formule sans chiffre.
+${KNOW_ME}${opts.styleExample ? `\n- Voici une lettre que j'ai réécrite moi-même : reprends son ton, sa façon de raconter et sa longueur, pas son contenu.\n<exemple_de_ma_lettre>\n${opts.styleExample}\n</exemple_de_ma_lettre>` : ''}
 ${RULES}
 ${cvBlock(doc)}${jobBlock(job)}
 Réponds uniquement avec un bloc \`\`\`json de la forme :
 {"subject": "Candidature au poste de ...", "salutation": "Madame, Monsieur,", "body": "paragraphe 1\\n\\nparagraphe 2\\n\\nparagraphe 3", "closing": "formule de politesse", "recipient": {"name": "", "title": "", "company": "", "address": ""}}`
     case 'improve-letter':
       return `Relis et améliore ma lettre de motivation : clarté, concision, orthographe. Garde ma voix, mes faits et ma façon de raconter ; ne la rends pas plus formelle, ne remplace pas les situations concrètes par des listes de compétences.
+${KNOW_ME}
 ${RULES}
 
 <lettre>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { BellOff, CalendarPlus, Check, ClipboardCopy, ExternalLink, Globe, Mail, MessagesSquare, Plus, Printer, RotateCcw, Trash2 } from 'lucide-react'
-import type { InterviewMode, InterviewPrep, InterviewSlot, Offer, ResumeDoc } from '../../types'
-import { MODE_LABEL, downloadIcs, fmtIn, fmtLong, printPrep } from '../../lib/interviews'
+import type { InterviewFeeling, InterviewMode, InterviewPrep, InterviewSlot, Offer, ResumeDoc } from '../../types'
+import { FEELING, MODE_LABEL, datedInterviews, downloadIcs, fmtIn, fmtLong, printPrep, slotWhere } from '../../lib/interviews'
 import { uid } from '../../lib/ids'
 import { useDocs } from '../../store/documents'
 import { FOLLOW_UP_CHOICES, appliedAt, followUpDays, followUpEmail, nextFollowUp, startOfDay } from '../../lib/followup'
@@ -214,10 +214,10 @@ const withTime = (day: string, time: string) => {
 const PLACE_HINT: Record<InterviewMode, string> = { site: 'Adresse', phone: 'Numéro (si c\'est vous qui appelez)', video: 'Lien de la visio (Teams, Meet, Zoom…)' }
 
 /** Entretiens de la candidature (un par étape) et date de retour annoncée. */
-export function InterviewPlanner({ offer, onClose }: { offer: Offer; onClose: () => void }) {
+export function InterviewPlanner({ offer, onClose, addNext }: { offer: Offer; onClose: () => void; addNext?: boolean }) {
   const saveOffer = useDocs((s) => s.saveOffer)
   const blank = (): InterviewSlot => ({ id: uid(), mode: 'site', place: offer.location })
-  const [slots, setSlots] = useState<InterviewSlot[]>(offer.interviews?.length ? offer.interviews : [blank()])
+  const [slots, setSlots] = useState<InterviewSlot[]>(offer.interviews?.length ? [...offer.interviews, ...(addNext ? [blank()] : [])] : [blank()])
   // jour et heure saisis à part : la date n'est enregistrée que si le jour est rempli
   const [days, setDays] = useState<Record<string, { day: string; time: string }>>(() => Object.fromEntries((offer.interviews ?? []).map((s) => [s.id, { day: toInput(s.at), time: timeInput(s.at) }])))
   const [answer, setAnswer] = useState(toInput(offer.answerBy))
@@ -303,6 +303,78 @@ export function InterviewPlanner({ offer, onClose }: { offer: Offer; onClose: ()
         <Field label="Retour attendu le" hint="Date annoncée par le recruteur après l'entretien : passé ce jour sans nouvelles, une relance est proposée.">
           <input className="input" type="date" value={answer} onChange={(e) => setAnswer(e.target.value)} style={{ maxWidth: 200 }} />
         </Field>
+      </div>
+    </Modal>
+  )
+}
+
+const REPORT_HINT = `Déroulé : durée, interlocuteurs, ambiance
+Questions posées et mes réponses
+Ce qui a bien marché
+Ce que je dirais autrement
+Ce que j'ai appris sur le poste (missions, équipe, salaire, télétravail)
+Suite annoncée`
+
+/** Compte rendu d'un entretien : passé ou non, impression, notes libres, retour attendu. */
+export function InterviewReport({ offer, slotId, onClose, onNext }: { offer: Offer; slotId: string; onClose: () => void; onNext: () => void }) {
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const slot = offer.interviews?.find((s) => s.id === slotId)
+  const [done, setDone] = useState(slot?.done ?? true)
+  const [feeling, setFeeling] = useState<InterviewFeeling | undefined>(slot?.feeling)
+  const [report, setReport] = useState(slot?.report ?? '')
+  const [answer, setAnswer] = useState(toInput(offer.answerBy))
+  if (!slot) return null
+  const n = datedInterviews(offer).findIndex((s) => s.id === slotId)
+  const save = (next?: boolean) => {
+    saveOffer({ ...offer, answerBy: fromInput(answer), interviews: (offer.interviews ?? []).map((s) => (s.id === slotId ? { ...s, done, feeling: done ? feeling : undefined, report: report.trim() || undefined } : s)) })
+    toast.ok(done ? 'Compte rendu enregistré' : 'Entretien enregistré comme non passé')
+    onClose()
+    if (next) onNext()
+  }
+  return (
+    <Modal
+      open
+      wide
+      onClose={onClose}
+      title={`Compte rendu${(offer.interviews?.length ?? 0) > 1 ? ` de l'entretien ${n + 1}` : " d'entretien"} : ${[offer.title, offer.company].filter(Boolean).join(', ')}`}
+      footer={
+        <>
+          <button className="btn" onClick={() => save(true)} disabled={!done}>
+            <Plus size={15} /> Enregistrer et prévoir l'étape suivante
+          </button>
+          <button className="btn primary" onClick={() => save()}>
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      <div className="form-stack">
+        <p className="muted small">
+          {slot.at ? fmtLong(slot.at).replace(/^./, (c) => c.toUpperCase()) : 'Date non précisée'}
+          {slotWhere(slot) ? `, ${slotWhere(slot)}` : ''}
+        </p>
+        <Toggle checked={done} onChange={setDone} label="J'ai passé cet entretien" />
+        {done ? (
+          <>
+            <Field label="Mon impression">
+              <div className="feel-pick" role="radiogroup" aria-label="Mon impression">
+                {(Object.keys(FEELING) as InterviewFeeling[]).map((f) => (
+                  <button key={f} role="radio" aria-checked={feeling === f} className={`feel f-${f}${feeling === f ? ' on' : ''}`} onClick={() => setFeeling(feeling === f ? undefined : f)}>
+                    <span className="feel-dot" /> {FEELING[f].label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Compte rendu" hint="À écrire à chaud : il nourrit la préparation de l'étape suivante.">
+              <TextArea value={report} minRows={9} onChange={setReport} placeholder={REPORT_HINT} />
+            </Field>
+            <Field label="Retour attendu le" hint="Passé ce jour sans nouvelles, une relance « suite à notre entretien » est proposée.">
+              <input className="input" type="date" value={answer} onChange={(e) => setAnswer(e.target.value)} style={{ maxWidth: 200 }} />
+            </Field>
+          </>
+        ) : (
+          <p className="muted small">Entretien reporté ou annulé ? Changez sa date dans « Entretien : date, heure et lieu ».</p>
+        )}
       </div>
     </Modal>
   )

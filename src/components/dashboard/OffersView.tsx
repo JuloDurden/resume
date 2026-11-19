@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart3, BellRing, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
-import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, ShareModal, followUpLabel } from './OfferTools'
-import { MODE_LABEL, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
+import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, ShareModal, followUpLabel } from './OfferTools'
+import { FEELING, MODE_LABEL, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
 import { nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
@@ -73,7 +73,7 @@ const frDay = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'num
 const href = (u: string) => (/^https?:/i.test(u) ? u : `https://${u}`)
 
 type Stage = 'now' | 'interview' | 'wait' | 'done'
-type Next = { text: string; tone: 'hot' | 'ok' | 'muted' | ''; stage: Stage; act?: 'followup' | 'planner' | 'prep' | 'cv' | 'open' | 'interview'; title?: string }
+type Next = { text: string; tone: 'hot' | 'ok' | 'muted' | ''; stage: Stage; act?: 'followup' | 'planner' | 'prep' | 'cv' | 'open' | 'interview' | 'report'; title?: string; slot?: string }
 
 /** Prochaine étape d'une candidature, et le groupe où elle se range (à faire, entretien, en attente, terminée). */
 function nextStep(o: Offer, docs: AnyDoc[]): Next {
@@ -81,6 +81,8 @@ function nextStep(o: Offer, docs: AnyDoc[]): Next {
   if (st === 'rejected') return { text: `Refusée${o.statusAt?.rejected ? ` le ${frDay(o.statusAt.rejected)}` : ''}`, tone: 'muted', stage: 'done' }
   if (st === 'offer') return { text: 'Proposition reçue : à étudier', tone: 'ok', stage: 'now', act: 'open' }
   if (st === 'interview') {
+    const past = toReport(o)
+    if (past) return { text: "Compte rendu d'entretien", tone: 'hot', stage: 'now', act: 'report', slot: past.id, title: `Entretien du ${fmtLong(past.at)} : confirmez-le et notez vos impressions` }
     const next = upcomingInterview(o)
     if (next) {
       const d = daysUntil(next.at)
@@ -94,7 +96,8 @@ function nextStep(o: Offer, docs: AnyDoc[]): Next {
     const lastFu = Math.max(0, ...(o.followUps ?? []))
     if (o.answerBy && daysUntil(o.answerBy) < 0 && lastFu > o.answerBy - DAY) return { text: `Relancé le ${frDay(lastFu)}, en attente`, tone: 'muted', stage: 'interview', act: 'interview' }
     if (o.answerBy) return daysUntil(o.answerBy) >= 0 ? { text: `Retour attendu le ${frDay(o.answerBy)}`, tone: '', stage: 'interview', act: 'interview' } : { text: `Sans retour depuis le ${frDay(o.answerBy)}`, tone: 'hot', stage: 'now', act: 'followup' }
-    return { text: 'Entretien passé : noter la suite', tone: 'hot', stage: 'now', act: 'interview' }
+    const last = datedInterviews(o).at(-1)!
+    return { text: last.feeling ? `Entretien passé · ${FEELING[last.feeling].label.toLowerCase()}` : 'Entretien passé, en attente', tone: 'muted', stage: 'interview', act: 'report', slot: last.id, title: 'Ajoutez la date de retour annoncée pour être averti au bon moment' }
   }
   if (st === 'todo') return docs.some((d) => d.kind === 'resume') ? { text: 'À envoyer', tone: 'hot', stage: 'now', act: 'open' } : { text: 'Préparer le CV', tone: 'hot', stage: 'now', act: 'cv' }
   const fu = followUpLabel(o)
@@ -114,7 +117,8 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
   const [planner, setPlanner] = useState(false)
   const [share, setShare] = useState(false)
   const [prep, setPrep] = useState(false)
-  const [ivPlan, setIvPlan] = useState(false)
+  const [ivPlan, setIvPlan] = useState<false | true | 'add'>(false)
+  const [reportFor, setReportFor] = useState<string | null>(null)
   const minPay = useDocs((s) => s.watch.profile?.salary?.min)
   const pay = offerSalary(offer)
   const payTone = pay?.max && minPay ? (pay.max < minPay ? 'below' : 'ok') : ''
@@ -141,6 +145,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
     else if (next.act === 'planner') setPlanner(true)
     else if (next.act === 'prep') setPrep(true)
     else if (next.act === 'interview') setIvPlan(true)
+    else if (next.act === 'report' && next.slot) setReportFor(next.slot)
     else if (next.act === 'cv') setCvModal(true)
     else onOpen(true)
   }
@@ -357,9 +362,18 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
             {(status === 'interview' || slots.length > 0) && (
               <div className="or-iv">
                 {slots.map((s, i) => (
-                  <p key={s.id} className={s.at < Date.now() - 2 * 3600000 ? 'muted' : undefined}>
+                  <div key={s.id} className={`iv-line${s.at < Date.now() - 2 * 3600000 && !s.done ? ' muted' : ''}`}>
                     <CalendarDays size={13} /> <strong>{slots.length > 1 ? `Entretien ${i + 1}` : 'Entretien'}</strong> {fmtShort(s.at)}
                     {s.at > Date.now() ? <span className="muted"> ({fmtIn(s.at)})</span> : ''}
+                    {s.done && <span className={`feel-chip f-${s.feeling ?? 'none'}`}>{s.feeling ? FEELING[s.feeling].label : 'Passé'}</span>}
+                    {s.at < Date.now() && (
+                      <>
+                        {' '}
+                        <button className="link small" onClick={() => setReportFor(s.id)}>
+                          {s.done ? (s.report ? 'modifier le compte rendu' : 'ajouter un compte rendu') : 'passé ? compte rendu'}
+                        </button>
+                      </>
+                    )}
                     {slotWhere(s) && (
                       <>
                         <br />
@@ -378,7 +392,13 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                         </span>
                       </>
                     )}
-                  </p>
+                    {s.report && (
+                      <details className="iv-report">
+                        <summary>Compte rendu</summary>
+                        <p>{s.report}</p>
+                      </details>
+                    )}
+                  </div>
                 ))}
                 {offer.answerBy && <p>Retour attendu le {new Date(offer.answerBy).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>}
                 <p>
@@ -447,7 +467,8 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
       {planner && <FollowUpPlanner offer={offer} onClose={() => setPlanner(false)} />}
       {share && <ShareModal offer={offer} onClose={() => setShare(false)} />}
       {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
-      {ivPlan && <InterviewPlanner offer={offer} onClose={() => setIvPlan(false)} />}
+      {ivPlan && <InterviewPlanner offer={offer} addNext={ivPlan === 'add'} onClose={() => setIvPlan(false)} />}
+      {reportFor && <InterviewReport offer={offer} slotId={reportFor} onClose={() => setReportFor(null)} onNext={() => setIvPlan('add')} />}
     </article>
   )
 }

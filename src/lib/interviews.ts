@@ -1,6 +1,16 @@
 // Entretiens d'une candidature : dates, lieux, agenda (.ics) et impression de la préparation.
-import type { InterviewMode, InterviewPrep, InterviewSlot, Offer } from '../types'
+import type { InterviewFeeling, InterviewMode, InterviewPrep, InterviewSlot, Offer } from '../types'
 import { fmtSalary, parseSalary } from './salary'
+
+export const FEELING: Record<InterviewFeeling, { label: string; tone: string }> = {
+  great: { label: 'Très bien passé', tone: 'great' },
+  good: { label: 'Plutôt bien', tone: 'good' },
+  mixed: { label: 'Mitigé', tone: 'mixed' },
+  bad: { label: 'Pas bien passé', tone: 'bad' },
+}
+
+/** Entretien dont l'heure est passée mais pas encore confirmé ni raconté. */
+export const toReport = (o: Offer, now = Date.now()) => datedInterviews(o).find((s) => !s.done && s.at < now - 3600000)
 
 export const MODE_LABEL: Record<InterviewMode, string> = { site: 'Sur place', phone: 'Téléphone', video: 'Visio' }
 
@@ -132,6 +142,7 @@ ul.check li::before{content:"\\2610  ";font-size:12pt}
 <h1>${esc(o.title || 'Préparation d\'entretien')}</h1>
 <p class="sub">${esc(o.company ?? '')}</p>
 ${facts ? `<ul class="facts">${facts}</ul>` : ''}
+${sec('Étapes déjà passées', datedInterviews(o).filter((s) => s.done && (s.report || s.feeling)).map((s) => `<div class="q"><h3>${esc(fmtLong(s.at))}${s.feeling ? ` · ${esc(FEELING[s.feeling].label)}` : ''}</h3>${para(s.report)}</div>`).join(''))}
 ${sec("L'employeur", para(p.company))}
 ${sec('Ma présentation (1 minute)', p.pitch ? `<div class="pitch">${para(p.pitch)}</div>` : '')}
 ${sec(`Questions probables`, (p.questions ?? []).map((q, i) => `<div class="q"><h3>${i + 1}. ${esc(q.q)}</h3>${q.why ? `<p class="why">Ce qui est vérifié : ${esc(q.why)}</p>` : ''}${para(q.answer)}</div>`).join(''))}

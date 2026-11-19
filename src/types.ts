@@ -216,7 +216,15 @@ export interface InterviewSlot {
   /** interlocuteurs */
   with?: string
   notes?: string
+  /** entretien passé (confirmé par l'utilisateur) */
+  done?: boolean
+  /** impression à la sortie de l'entretien */
+  feeling?: InterviewFeeling
+  /** compte rendu libre */
+  report?: string
 }
+
+export type InterviewFeeling = 'great' | 'good' | 'mixed' | 'bad'
 
 export interface InterviewPrep {
   at: number

@@ -210,7 +210,7 @@ function ExternalApplyModal({ item, onClose, onSave }: { item: FeedItem; onClose
       }
     >
       <div className="form-stack">
-        <p className="muted small">La candidature est ajoutée à l'onglet Offres avec l'annonce{item.company ? ` de ${item.company}` : ''}, et l'annonce passe dans « Candidatures ».</p>
+        <p className="muted small">La candidature est ajoutée à l'onglet Candidatures avec l'annonce{item.company ? ` de ${item.company}` : ''}, et l'annonce passe dans « Postulées ».</p>
         <label className="field">
           <span className="field-label">Date de candidature</span>
           <input className="input" type="date" value={date} max={iso(today)} onChange={(e) => setDate(e.target.value)} />
@@ -1344,11 +1344,11 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     const now = Date.now()
     saveOffer({ ...base, jobIds: [...new Set([...(base.jobIds ?? []), ...ids])], status, statusAt: { ...base.statusAt, applied: at, ...(status !== 'applied' ? { [status]: now } : {}) }, ...(status === 'rejected' ? { noFollowUp: true } : {}) })
     markGroup([i.id], 'applied')
-    toast.ok(`Candidature enregistrée (${JOB_STATUS[status].toLowerCase()}) : elle apparaît dans l'onglet Offres`)
+    toast.ok(`Candidature enregistrée (${JOB_STATUS[status].toLowerCase()}) : elle apparaît dans l'onglet Candidatures`)
   }
   const apply = (i: FeedItem) => {
     offerFor(i)
-    toast.ok('Candidature créée : rattachez-y un CV et une lettre depuis l\'onglet Offres')
+    toast.ok('Candidature créée : rattachez-y un CV et une lettre depuis l\'onglet Candidatures')
     onShowOffers()
   }
   const tailor = (i: FeedItem) => {
@@ -1383,7 +1383,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           options={[
             { value: 'new', label: `À trier (${counts.new})` },
             { value: 'fav', label: `Favoris (${counts.fav})` },
-            { value: 'applied', label: `Candidatures (${counts.applied})` },
+            { value: 'applied', label: `Postulées (${counts.applied})` },
             { value: 'hidden', label: `Masquées (${counts.hidden})` },
             { value: 'out', label: `Hors critères (${counts.out})`, title: "Offres en présentiel au-delà de votre périmètre, dont le type de contrat n'est pas recherché, ou dont le métier est sans rapport avec vos profils (note 0)" },
           ]}

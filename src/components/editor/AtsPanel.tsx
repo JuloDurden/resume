@@ -84,7 +84,7 @@ function OffersList({ doc, onLink, onImportLink }: Pick<Props, 'doc' | 'onLink' 
         </div>
       </div>
       {offers.length === 0 ? (
-        <p className="muted small">Aucune offre pour l'instant. Créez-en une ou collez son lien : elle sera visible dans la vue « Offres » de l'accueil, avec ce CV et la lettre associée.</p>
+        <p className="muted small">Aucune offre pour l'instant. Créez-en une ou collez son lien : elle sera visible dans l'onglet « Candidatures » de l'accueil, avec ce CV et la lettre associée.</p>
       ) : (
         <ul className="offers">
           {shown.map((j) => {

@@ -44,7 +44,7 @@ export function LinkOfferModal({ doc, onClose }: { doc: AnyDoc; onClose: () => v
       {list.length ? (
         <Select value={value} onChange={setValue} options={[{ value: '', label: 'Aucune offre' }, ...list.map((o) => ({ value: o.id, label: [o.title || 'Sans titre', o.company].filter(Boolean).join(' - ') }))]} />
       ) : (
-        <p className="muted">Aucune offre pour l'instant : créez-en une depuis la vue « Offres ».</p>
+        <p className="muted">Aucune offre pour l'instant : créez-en une depuis l'onglet « Candidatures ».</p>
       )}
     </Modal>
   )

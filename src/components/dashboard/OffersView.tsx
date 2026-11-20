@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BellRing, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, ShareModal, followUpLabel } from './OfferTools'
 import { FEELING, MODE_LABEL, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
 import { nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
+import { useFeed } from '../../store/feed'
 import { JOB_STATUS, newOffer } from '../../lib/offers'
 import { uid } from '../../lib/ids'
 import { newLetter } from '../../data/factory'
@@ -111,6 +112,26 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
   const navigate = useNavigate()
   const saveOffer = useDocs((s) => s.saveOffer)
   const removeOffer = useDocs((s) => s.removeOffer)
+  const markMany = useDocs((s) => s.markMany)
+  const feedIds = useFeed((s) => s.feed?.items)
+  const sourceIds = [...new Set([offer.sourceId, ...(offer.jobIds ?? [])].filter((x): x is string => !!x))]
+  /** Annule la candidature : l'annonce d'origine redevient une annonce à examiner, les documents restent dans « Documents ». */
+  const backToJobs = () => {
+    const live = sourceIds.filter((id) => feedIds?.some((i) => i.id === id))
+    const msg = [
+      `Renvoyer « ${offer.title ?? ''} » dans les annonces ?`,
+      'La candidature est retirée de cet onglet.',
+      docs.length ? `Ses ${docs.length} document(s) (CV, lettre) sont conservés dans « Documents ».` : '',
+      status !== 'todo' ? `Attention : son suivi (statut « ${JOB_STATUS[status]} », relances, entretiens) sera perdu.` : '',
+      live.length ? '' : "L'annonce n'est plus dans la veille (expirée ou retirée) : elle ne réapparaîtra que si elle est de nouveau publiée.",
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    if (!confirmAction(msg)) return
+    markMany(sourceIds, 'none')
+    removeOffer(offer.id)
+    toast.ok(live.length ? "Annonce renvoyée dans « Annonces »" : 'Candidature retirée')
+  }
   const add = useDocs((s) => s.add)
   const [cvModal, setCvModal] = useState(false)
   const [followUp, setFollowUp] = useState(false)
@@ -301,6 +322,17 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
               >
                 Fiche métier
               </MenuItem>
+              {sourceIds.length > 0 && (
+                <MenuItem
+                  icon={<Undo2 size={14} />}
+                  onClick={() => {
+                    close()
+                    backToJobs()
+                  }}
+                >
+                  Renvoyer dans les annonces
+                </MenuItem>
+              )}
               <MenuItem
                 danger
                 icon={<Trash2 size={14} />}

@@ -277,7 +277,7 @@ export default function Dashboard() {
           <Files size={16} /> Documents
         </button>
         <button className={view === 'offers' ? 'on' : ''} onClick={() => setView('offers')}>
-          <Briefcase size={16} /> Offres <em>{offersCount}</em>
+          <Briefcase size={16} /> Candidatures <em>{offersCount}</em>
         </button>
         <button className={view === 'jobs' ? 'on' : ''} onClick={() => setView('jobs')}>
           <BellRing size={16} /> Annonces {newJobs > 0 && view !== 'jobs' && <em className="badge-new">{newJobs}</em>}

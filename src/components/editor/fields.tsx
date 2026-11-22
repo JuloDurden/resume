@@ -4,6 +4,7 @@ import type { DateValue } from '../../types'
 import { MONTH_OPTIONS } from '../../lib/dates'
 import { Icon, PICKABLE_ICONS } from '../../lib/icons'
 import { TextArea, Toggle, toast } from '../ui'
+import { formatSkill, hasTopSeparator, openDepth, parseSkill, splitTop } from '../../lib/skills'
 
 export function DateInput({ value, onChange, disabled }: { value?: DateValue; onChange: (v: DateValue | undefined) => void; disabled?: boolean }) {
   return (
@@ -31,65 +32,108 @@ export function DateInput({ value, onChange, disabled }: { value?: DateValue; on
   )
 }
 
-export function TagsInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
+export function TagsInput({ value, onChange, placeholder, details = false }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string; details?: boolean }) {
   const [text, setText] = useState('')
   const [drag, setDrag] = useState<number | null>(null)
+  const [edit, setEdit] = useState<number | null>(null)
+  // les virgules entre parenthèses ne créent pas de nouvelle étiquette
   const add = (raw: string) => {
-    const parts = raw.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean)
+    const parts = splitTop(raw)
     if (!parts.length) return
     onChange([...value, ...parts.filter((p) => !value.includes(p))])
     setText('')
   }
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
+    if (e.key === 'Enter' || (e.key === ',' && openDepth(text) === 0)) {
       e.preventDefault()
       add(text)
     } else if (e.key === 'Backspace' && !text && value.length) {
       onChange(value.slice(0, -1))
     }
   }
+  const set = (i: number, v: string) => onChange(value.map((t, j) => (j === i ? v : t)))
+  const cur = edit !== null && edit < value.length ? parseSkill(value[edit]) : null
   return (
-    <div className="tags-input">
-      {value.map((t, i) => (
-        <span
-          key={`${t}-${i}`}
-          className={`chip${drag === i ? ' dragging' : ''}`}
-          draggable
-          onDragStart={() => setDrag(i)}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
-            if (drag === null || drag === i) return
-            const next = [...value]
-            const [m] = next.splice(drag, 1)
-            next.splice(i, 0, m)
-            onChange(next)
-            setDrag(null)
+    <div className="tags-wrap">
+      <div className="tags-input">
+        {value.map((t, i) => {
+          const p = details ? parseSkill(t) : { name: t, details: [] }
+          return (
+            <span
+              key={`${t}-${i}`}
+              className={`chip${drag === i ? ' dragging' : ''}${edit === i ? ' editing' : ''}`}
+              draggable
+              onDragStart={() => setDrag(i)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => {
+                if (drag === null || drag === i) return
+                const next = [...value]
+                const [m] = next.splice(drag, 1)
+                next.splice(i, 0, m)
+                onChange(next)
+                setDrag(null)
+                setEdit(null)
+              }}
+              onDragEnd={() => setDrag(null)}
+            >
+              <button
+                type="button"
+                className="chip-label"
+                title={details ? (p.details.length ? `${t}\nCliquer pour modifier ou ajuster les précisions` : 'Cliquer pour modifier ou ajouter des précisions') : 'Cliquer pour modifier'}
+                onClick={() => setEdit(edit === i ? null : i)}
+              >
+                {p.name}
+                {p.details.length > 0 && <em className="chip-count">{p.details.length}</em>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(value.filter((_, j) => j !== i))
+                  setEdit(null)
+                }}
+                aria-label={`Retirer ${t}`}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )
+        })}
+        <input
+          value={text}
+          placeholder={value.length ? '' : placeholder ?? 'Tapez puis Entrée'}
+          onChange={(e) => {
+            const v = e.target.value
+            if (hasTopSeparator(v)) add(v)
+            else setText(v)
           }}
-          onDragEnd={() => setDrag(null)}
-        >
-          {t}
-          <button type="button" onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label={`Retirer ${t}`}>
-            <X size={12} />
+          onKeyDown={onKey}
+          onBlur={() => text.trim() && add(text)}
+          onPaste={(e) => {
+            const t = e.clipboardData.getData('text')
+            if (hasTopSeparator(t)) {
+              e.preventDefault()
+              add(text + t)
+            }
+          }}
+        />
+      </div>
+      {edit !== null && cur && (
+        <div className="tag-edit">
+          <label className="field">
+            <span className="field-label">{details ? 'Compétence' : 'Texte'}</span>
+            <input className="input" autoFocus value={details ? cur.name : value[edit]} onChange={(e) => set(edit, details ? formatSkill(e.target.value, cur.details) : e.target.value)} />
+          </label>
+          {details && (
+            <div className="field">
+              <span className="field-label">Précisions (outils, versions, domaines)</span>
+              <TagsInput value={cur.details} onChange={(d) => set(edit, formatSkill(cur.name, d))} placeholder="Teams, SharePoint… puis Entrée" />
+            </div>
+          )}
+          <button type="button" className="btn sm" onClick={() => setEdit(null)}>
+            OK
           </button>
-        </span>
-      ))}
-      <input
-        value={text}
-        placeholder={value.length ? '' : placeholder ?? 'Tapez puis Entrée'}
-        onChange={(e) => {
-          if (/[,;]/.test(e.target.value)) add(e.target.value)
-          else setText(e.target.value)
-        }}
-        onKeyDown={onKey}
-        onBlur={() => text.trim() && add(text)}
-        onPaste={(e) => {
-          const t = e.clipboardData.getData('text')
-          if (/[,;\n]/.test(t)) {
-            e.preventDefault()
-            add(t)
-          }
-        }}
-      />
+        </div>
+      )}
     </div>
   )
 }

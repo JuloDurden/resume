@@ -590,3 +590,13 @@
 .al-right .lt-sign-img {
   object-position: left center;
 }
+.cv-skill-det {
+  color: var(--c-muted);
+}
+.cv-skill-det.sub {
+  display: block;
+  font-size: 0.9em;
+}
+.cv-tag .cv-skill-det.sub {
+  font-size: 0.88em;
+}

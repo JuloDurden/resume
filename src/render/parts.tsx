@@ -3,6 +3,7 @@ import type { ContactLink, Header, Section, SectionItem, StyleSettings } from '.
 import { Icon } from '../lib/icons'
 import { toRows } from '../lib/contactRows'
 import { renderInline } from '../lib/inline'
+import { parseSkill, skillsInline, type SkillDetailsDisplay } from '../lib/skills'
 import { formatRange } from '../lib/dates'
 import { SECTION_DEFS } from '../data/sectionDefs'
 import type { Block } from './Paginator'
@@ -129,14 +130,14 @@ export function SectionHeading({ section, style }: { section: Section; style: St
   )
 }
 
-function Bullets({ items, style }: { items: string[]; style: StyleSettings }) {
+function Bullets({ items, style, render }: { items: string[]; style: StyleSettings; render?: (t: string) => ReactNode }) {
   if (!items.length) return null
   return (
     <ul className="cv-bullets">
       {items.map((b, i) => (
         <li key={i}>
           <span className="cv-bullet-mark">{style.bullet}</span>
-          <span className="cv-bullet-text">{renderInline(b)}</span>
+          <span className="cv-bullet-text">{render ? render(b) : renderInline(b)}</span>
         </li>
       ))}
     </ul>
@@ -212,8 +213,28 @@ function entryBlocks(section: Section, item: SectionItem, style: StyleSettings, 
   return [head, ...rest]
 }
 
+/** Une compétence et ses précisions, selon l'affichage choisi. */
+function Skill({ raw, det }: { raw: string; det: SkillDetailsDisplay }) {
+  const p = parseSkill(raw)
+  if (!p.details.length || det === 'paren') return <>{renderInline(raw)}</>
+  if (det === 'colon')
+    return (
+      <>
+        {renderInline(p.name)}
+        <span className="cv-skill-det"> : {p.details.join(', ')}</span>
+      </>
+    )
+  return (
+    <>
+      {renderInline(p.name)}
+      <span className="cv-skill-det sub">{p.details.join(', ')}</span>
+    </>
+  )
+}
+
 function skillBlocks(section: Section, style: StyleSettings): ReactNode[] {
   const mode = section.options.skillDisplay ?? 'tags'
+  const det = section.options.skillDetails ?? 'paren'
   const items = section.items.filter((i) => !i.hidden)
   return items.map((it, idx) => {
     const tags = (it.tags ?? []).filter((t) => t.trim())
@@ -223,34 +244,38 @@ function skillBlocks(section: Section, style: StyleSettings): ReactNode[] {
         <div className="cv-tags">
           {tags.map((t, i) => (
             <span key={i} className="cv-tag">
-              {t}
+              <Skill raw={t} det={det} />
             </span>
           ))}
         </div>
       )
-    else if (mode === 'inline') body = <div className="cv-inline">{tags.join(', ')}</div>
+    else if (mode === 'inline') body = <div className="cv-inline">{skillsInline(tags, det === 'sub' ? 'colon' : det)}</div>
     else if (mode === 'flow')
       body = (
         <div className="cv-flow">
           {tags.map((t, i) => (
-            <span key={i}>{renderInline(t)}</span>
+            <span key={i}>
+              <Skill raw={t} det={det === 'sub' ? 'colon' : det} />
+            </span>
           ))}
         </div>
       )
     else if (mode === 'list')
-      body = <Bullets items={tags} style={style} />
+      body = det === 'paren' ? <Bullets items={tags} style={style} /> : <Bullets items={tags} style={style} render={(t) => <Skill raw={t} det={det} />} />
     else if (mode === 'lines')
       body = (
         <div className="cv-lines">
           {tags.map((t, i) => (
-            <div key={i}>{renderInline(t)}</div>
+            <div key={i}>
+              <Skill raw={t} det={det} />
+            </div>
           ))}
         </div>
       )
     else
       body = (
         <div className="cv-skill-level">
-          <div className="cv-inline">{tags.join(', ')}</div>
+          <div className="cv-inline">{skillsInline(tags, det === 'sub' ? 'colon' : det)}</div>
           <Level level={it.level} mode={mode === 'bars' ? 'bars' : 'dots'} />
         </div>
       )

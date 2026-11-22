@@ -4797,3 +4797,53 @@ button.followup-badge {
 .iv-line { font-size: 13px; }
 .iv-report summary { cursor: pointer; font-size: 12.5px; color: var(--ok); }
 .iv-report p { white-space: pre-wrap; margin: 4px 0 0; font-size: 12.5px; color: #374151; }
+
+/* ---------- compétences avec précisions ---------- */
+.tags-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chip .chip-label {
+  text-align: left;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  cursor: pointer;
+}
+.chip .chip-label:hover {
+  background: none;
+  text-decoration: underline;
+}
+.chip.editing {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.chip-count {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  display: inline-grid;
+  place-items: center;
+}
+.tag-edit {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 0 6px 6px 0;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fafbfc;
+}
+.tag-edit .btn {
+  align-self: flex-end;
+}

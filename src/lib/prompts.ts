@@ -70,7 +70,7 @@ Le CV sera filtré par un logiciel, mais c'est un recruteur humain qui décidera
 - Résumé : 3 phrases complètes, 450 caractères au plus. Qui je suis, ce que j'apporte de précis pour ce poste, ce que je cherche. Pas d'énumération d'outils ni de certifications (elles figurent plus bas).
 - Puces d'expérience : 3 à 5 par poste, la plus utile pour l'offre en premier. Chaque puce est une phrase d'une à deux lignes qui commence par un nom d'action (« Administration de Microsoft 365 et du site WordPress… », « Recueil et formalisation des besoins de 5 équipes métier… », « Formation des utilisateurs à… ») et dit ce que j'ai fait, dans quel contexte, et le résultat ou l'objectif. Un verbe est possible quand la phrase le demande, mais garde la même forme dans tout le CV. Pas de format « Thème : nom, nom, nom ».
 - Mots-clés de l'offre : reprends ceux qui décrivent exactement ce que j'ai fait, glissés dans les phrases. Chacun une ou deux fois dans tout le CV, pas répété dans le résumé, les puces, les réalisations et les compétences à la fois.
-- Compétences : 8 à 12, courtes (2 à 4 mots), celles demandées par l'offre en tête, sans reprendre mot pour mot les réalisations.
+- Compétences : 8 à 12, courtes (2 à 4 mots), celles demandées par l'offre en tête, sans reprendre mot pour mot les réalisations. Une compétence peut porter des précisions entre parenthèses, par exemple « Microsoft 365 (Teams, SharePoint, Intune) » : garde ce format, ne garde que les précisions utiles pour l'offre (au plus 4), place en premier celles que l'offre cite, n'en invente aucune ; les précisions ne comptent pas dans les 8 à 12.
 - Réalisations : 3 à 5 faits concrets et vérifiables, avec un chiffre quand il existe dans le CV.
 - Formations, projets, langues et centres d'intérêt : garde le contenu, adapte seulement l'ordre si utile.
 - Vise une page : en cas de doute, raccourcis plutôt que d'ajouter.${opts.keywords?.length ? `\n- Mots-clés absents de mon CV d'après l'analyse : ${opts.keywords.join(', ')}. Intègre-les uniquement s'ils correspondent à une compétence réelle déjà visible dans le CV.` : ''}
@@ -298,7 +298,7 @@ Champs d'une entrée selon le type :
 - summary, text : {"description": "texte, paragraphes séparés par une ligne vide"}
 - experience, education, projects, volunteering, custom : {"title": "poste ou diplôme", "subtitle": "entreprise ou école", "location": "ville", "start": {...}, "end": {...}, "current": false, "description": "contexte éventuel", "bullets": ["..."], "link": "url éventuelle"}
 - certifications, awards, publications : {"title", "subtitle": "organisme", "end": {"year": AAAA}, "description"}
-- skills : une entrée par groupe {"title": "nom du groupe ou vide", "tags": ["compétence 1", "compétence 2"], "level": 0 à 5 si une jauge est affichée}
+- skills : une entrée par groupe {"title": "nom du groupe ou vide", "tags": ["compétence 1", "compétence 2 (précision, précision)"], "level": 0 à 5 si une jauge est affichée}
 - languages : {"title": "Anglais", "subtitle": "niveau écrit (ex. C1, courant)", "level": 0 à 5}
 - achievements, interests : {"icon": un nom parmi ${PICKABLE_ICONS.join(', ')}, "title", "description"}
 - references : {"title": "nom", "subtitle": "poste, entreprise", "description": "coordonnées"}

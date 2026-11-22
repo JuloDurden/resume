@@ -50,6 +50,8 @@ export interface SectionOptions {
   showLink?: boolean
   showIcons?: boolean
   skillDisplay?: SkillDisplay
+  /** affichage des précisions d'une compétence : « A (x, y) », « A : x, y » ou sous le nom */
+  skillDetails?: 'paren' | 'colon' | 'sub'
   levelDisplay?: LevelDisplay
   compact?: boolean
   columns?: 1 | 2

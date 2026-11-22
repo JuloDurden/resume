@@ -7,8 +7,9 @@ import type { RomeFiche } from '../../lib/rome'
 import { SECTION_DEFS, emptyItem } from '../../data/sectionDefs'
 import { uid } from '../../lib/ids'
 import { stripInline } from '../../lib/inline'
-import { Field, Segmented, TextArea, TextInput, Toggle } from '../ui'
+import { Field, Segmented, TextArea, TextInput, Toggle, toast } from '../ui'
 import { BulletsEditor, DateInput, IconPicker, LevelInput, TagsInput } from './fields'
+import { dashesToDetails, parseSkill } from '../../lib/skills'
 
 const OPTION_LABELS: Partial<Record<keyof SectionOptions, string>> = {
   showDates: 'Dates',
@@ -74,6 +75,36 @@ export function SectionEditor({ section, onChange, onAskClaude, offerId }: { sec
                   { value: 'lines', label: 'Lignes' },
                   { value: 'bars', label: 'Barres' },
                   { value: 'dots', label: 'Points' },
+                ]}
+              />
+            </Field>
+          )}
+          {section.type === 'skills' && (() => {
+            const n = section.items.reduce((k, it) => k + (it.tags ?? []).filter((t) => dashesToDetails(t) !== t).length, 0)
+            return n > 0 ? (
+              <div className="notice small">
+                {n} compétence{n > 1 ? 's' : ''} séparent leurs précisions par des tirets, par exemple « Reporting (Excel - Power BI) » ou « Gestion : commandes - stocks ».{' '}
+                <button
+                  className="link"
+                  onClick={() => {
+                    onChange({ ...section, items: section.items.map((it) => ({ ...it, tags: it.tags?.map(dashesToDetails) })) })
+                    toast.ok(`${n} compétence${n > 1 ? 's' : ''} converties : chaque précision est maintenant séparée`)
+                  }}
+                >
+                  Les convertir en précisions
+                </button>
+              </div>
+            ) : null
+          })()}
+          {section.type === 'skills' && section.items.some((it) => (it.tags ?? []).some((t) => parseSkill(t).details.length)) && (
+            <Field label="Précisions des compétences" hint={section.options.skillDisplay === 'inline' || section.options.skillDisplay === 'flow' ? 'En texte suivi, « en dessous » s\'affiche comme « après deux-points ».' : undefined}>
+              <Segmented
+                value={section.options.skillDetails ?? 'paren'}
+                onChange={(v) => setOpt({ skillDetails: v })}
+                options={[
+                  { value: 'paren', label: 'Entre parenthèses' },
+                  { value: 'colon', label: 'Après deux-points' },
+                  { value: 'sub', label: 'En dessous' },
                 ]}
               />
             </Field>
@@ -219,8 +250,8 @@ function ItemFields({ section, item, onChange, onAskClaude, offerId }: { section
         </Field>
       )}
       {f.includes('tags') && (
-        <Field label={L.tags} hint="Entrée ou virgule pour ajouter, glisser pour réordonner.">
-          <TagsInput value={item.tags ?? []} onChange={(v) => onChange({ tags: v })} />
+        <Field label={L.tags} hint={section.type === 'skills' ? 'Entrée ou virgule pour ajouter, glisser pour réordonner. Cliquez sur une compétence pour la modifier ou lui ajouter des précisions (ex. Microsoft 365 : Teams, Intune) ; les virgules entre parenthèses sont conservées.' : 'Entrée ou virgule pour ajouter, glisser pour réordonner, clic pour modifier.'}>
+          <TagsInput value={item.tags ?? []} onChange={(v) => onChange({ tags: v })} details={section.type === 'skills'} />
         </Field>
       )}
       {f.includes('level') && (section.type !== 'skills' || ['bars', 'dots'].includes(section.options.skillDisplay ?? '')) && (

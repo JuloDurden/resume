@@ -4847,3 +4847,46 @@ button.followup-badge {
 .tag-edit .btn {
   align-self: flex-end;
 }
+
+/* ---------- éditeur : section ouverte mise en avant, saut depuis l'aperçu ---------- */
+.panel-content .sec-card,
+.items .item-card {
+  transition: opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.panel-content.has-open .sec-card:not(.open),
+.items.has-open .item-card:not(.open) {
+  opacity: 0.5;
+}
+.panel-content.has-open .sec-card:not(.open):hover,
+.items.has-open .item-card:not(.open):hover {
+  opacity: 0.85;
+}
+.panel-content .sec-card.open {
+  border-color: #7f93b3;
+  box-shadow: 0 14px 36px rgba(17, 24, 39, 0.14);
+}
+.items .item-card.open {
+  border-color: #9fb0c8;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.1);
+}
+.jump-flash {
+  border-radius: 6px;
+  animation: jump-flash 2.2s ease-out;
+}
+@keyframes jump-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.55);
+    background-color: rgba(37, 99, 235, 0.08);
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0);
+    background-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jump-flash {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.55);
+  }
+}

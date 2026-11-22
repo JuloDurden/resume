@@ -14,6 +14,8 @@ interface Props {
   update: (fn: (d: ResumeDoc) => ResumeDoc) => void
   active: string | null
   setActive: (id: string | null) => void
+  /** cible précise cliquée dans l'aperçu */
+  focus?: { sid: string; item?: string; at: number }
   onAskClaude: (action: 'summary' | 'bullets', itemId?: string) => void
 }
 
@@ -57,7 +59,7 @@ export function AddSectionModal({ open, onClose, onPick }: { open: boolean; onCl
   )
 }
 
-export function ContentPanel({ doc, update, active, setActive, onAskClaude }: Props) {
+export function ContentPanel({ doc, update, active, setActive, onAskClaude, focus }: Props) {
   const [adding, setAdding] = useState(false)
   const refs = useRef<Record<string, HTMLDivElement | null>>({})
   const order = [...doc.layout.main, ...doc.layout.side]
@@ -118,7 +120,7 @@ export function ContentPanel({ doc, update, active, setActive, onAskClaude }: Pr
     const isOpen = active === id
     const col = column(id)
     return (
-      <div key={id} ref={(el) => void (refs.current[id] = el)} className={`sec-card${isOpen ? ' open' : ''}${s.hidden ? ' is-hidden' : ''}`}>
+      <div key={id} data-sec={id} ref={(el) => void (refs.current[id] = el)} className={`sec-card${isOpen ? ' open' : ''}${s.hidden ? ' is-hidden' : ''}`}>
         <div className="sec-head" onClick={() => setActive(isOpen ? null : id)}>
           {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           <Icon name={SECTION_DEFS[s.type].icon} size={16} className="sec-icon" />
@@ -181,7 +183,7 @@ export function ContentPanel({ doc, update, active, setActive, onAskClaude }: Pr
         </div>
         {isOpen && (
           <div className="sec-body">
-            <SectionEditor section={s} onChange={setSection} onAskClaude={onAskClaude} offerId={doc.offerId} />
+            <SectionEditor section={s} onChange={setSection} onAskClaude={onAskClaude} offerId={doc.offerId} focusItem={focus?.sid === id ? { id: focus.item, at: focus.at } : undefined} />
           </div>
         )}
       </div>
@@ -189,8 +191,8 @@ export function ContentPanel({ doc, update, active, setActive, onAskClaude }: Pr
   }
 
   return (
-    <div className="panel-content">
-      <div ref={(el) => void (refs.current.header = el)} className={`sec-card${active === 'header' ? ' open' : ''}`}>
+    <div className={`panel-content${active ? ' has-open' : ''}`}>
+      <div data-sec="header" ref={(el) => void (refs.current.header = el)} className={`sec-card${active === 'header' ? ' open' : ''}`}>
         <div className="sec-head" onClick={() => setActive(active === 'header' ? null : 'header')}>
           {active === 'header' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           <Icon name="user" size={16} className="sec-icon" />

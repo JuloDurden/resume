@@ -10,6 +10,17 @@ export const PAGE_SIZES: Record<PageFormat, { w: number; h: number; css: string 
   Letter: { w: 215.9 * MM, h: 279.4 * MM, css: 'letter' },
 }
 
+/** Élément précis cliqué dans l'aperçu : entrée (data-item) et champ (data-f, ex. « bullet:2 », « tag:0 », « title »). */
+export interface CvTarget {
+  item?: string
+  field?: string
+}
+
+export const cvTargetOf = (el: EventTarget | null): CvTarget => {
+  const e = el instanceof Element ? el : null
+  return { item: e?.closest('[data-item]')?.getAttribute('data-item') ?? undefined, field: e?.closest('[data-f]')?.getAttribute('data-f') ?? undefined }
+}
+
 export interface Block {
   key: string
   node: ReactNode
@@ -61,7 +72,7 @@ interface Props {
   main: Block[]
   side: Block[]
   maxPages?: number
-  onSectionClick?: (sectionId: string) => void
+  onSectionClick?: (sectionId: string, target?: CvTarget) => void
   activeSection?: string
   onPageCount?: (n: number) => void
   className?: string
@@ -173,7 +184,7 @@ export function Paginator(props: Props) {
         key={key}
         className={`cv-blk${clickable ? ' cv-clickable' : ''}${b.sectionId && b.sectionId === props.activeSection ? ' cv-active' : ''}`}
         data-section={b.sectionId}
-        onClick={clickable ? () => props.onSectionClick!(b.sectionId!) : undefined}
+        onClick={clickable ? (e) => props.onSectionClick!(b.sectionId!, cvTargetOf(e.target)) : undefined}
       >
         {b.node}
       </div>

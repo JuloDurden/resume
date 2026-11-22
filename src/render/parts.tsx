@@ -130,12 +130,12 @@ export function SectionHeading({ section, style }: { section: Section; style: St
   )
 }
 
-function Bullets({ items, style, render }: { items: string[]; style: StyleSettings; render?: (t: string) => ReactNode }) {
+function Bullets({ items, style, render, start = 0, field = 'bullet', indices }: { items: string[]; style: StyleSettings; render?: (t: string) => ReactNode; start?: number; field?: string; indices?: number[] }) {
   if (!items.length) return null
   return (
     <ul className="cv-bullets">
       {items.map((b, i) => (
-        <li key={i}>
+        <li key={i} data-f={`${field}:${indices?.[start + i] ?? start + i}`}>
           <span className="cv-bullet-mark">{style.bullet}</span>
           <span className="cv-bullet-text">{render ? render(b) : renderInline(b)}</span>
         </li>
@@ -170,12 +170,14 @@ function entryBlocks(section: Section, item: SectionItem, style: StyleSettings, 
   const loc = o.showLocation !== false ? item.location : ''
   const link = o.showLink && item.link ? item.link : ''
   const bullets = o.showBullets !== false ? visibleBullets(item) : []
+  // position de chaque puce affichée dans la liste complète (les puces vides ne sont pas affichées)
+  const bIdx = (item.bullets ?? []).flatMap((b, i) => (b.trim() ? [i] : []))
   const desc = o.showDescription !== false ? item.description : ''
 
   if (section.type === 'certifications' && o.compact) {
     return [
-      <div className={`cv-entry compact${isFirst ? ' first' : ''}`}>
-        <span className="cv-etitle">{renderInline(item.title)}</span>
+      <div className={`cv-entry compact${isFirst ? ' first' : ''}`} data-item={item.id}>
+        <span className="cv-etitle" data-f="title">{renderInline(item.title)}</span>
         {item.subtitle && <span className="cv-esub">, {item.subtitle}</span>}
         {dates && <span className="cv-edates"> ({dates})</span>}
       </div>,
@@ -184,30 +186,30 @@ function entryBlocks(section: Section, item: SectionItem, style: StyleSettings, 
 
   const keep = 2
   const head = (
-    <div className={`cv-entry${isFirst ? ' first' : ''}`}>
+    <div className={`cv-entry${isFirst ? ' first' : ''}`} data-item={item.id}>
       <div className="cv-erow">
-        <span className="cv-etitle">{renderInline(item.title)}</span>
+        <span className="cv-etitle" data-f="title">{renderInline(item.title)}</span>
         {dates && <span className="cv-edates">{dates}</span>}
       </div>
       {(item.subtitle || loc) && (
         <div className="cv-erow sub">
-          <span className="cv-esub">{renderInline(item.subtitle)}</span>
-          {loc && <span className="cv-eloc">{loc}</span>}
+          <span className="cv-esub" data-f="subtitle">{renderInline(item.subtitle)}</span>
+          {loc && <span className="cv-eloc" data-f="location">{loc}</span>}
         </div>
       )}
-      {desc && <div className="cv-edesc">{renderInline(desc)}</div>}
+      {desc && <div className="cv-edesc" data-f="description">{renderInline(desc)}</div>}
       {link && (
         <a className="cv-elink" href={/^https?:/i.test(link) ? link : `https://${link}`} target="_blank" rel="noreferrer">
           <Icon name="link" size={10} />
           {link.replace(/^https?:\/\//i, '')}
         </a>
       )}
-      <Bullets items={bullets.slice(0, keep)} style={style} />
+      <Bullets items={bullets.slice(0, keep)} style={style} indices={bIdx} />
     </div>
   )
   const rest = bullets.slice(keep).map((b, i) => (
-    <div className="cv-entry-cont" key={i}>
-      <Bullets items={[b]} style={style} />
+    <div className="cv-entry-cont" key={i} data-item={item.id}>
+      <Bullets items={[b]} style={style} start={keep + i} indices={bIdx} />
     </div>
   ))
   return [head, ...rest]
@@ -243,7 +245,7 @@ function skillBlocks(section: Section, style: StyleSettings): ReactNode[] {
       body = (
         <div className="cv-tags">
           {tags.map((t, i) => (
-            <span key={i} className="cv-tag">
+            <span key={i} className="cv-tag" data-f={`tag:${i}`}>
               <Skill raw={t} det={det} />
             </span>
           ))}
@@ -254,19 +256,19 @@ function skillBlocks(section: Section, style: StyleSettings): ReactNode[] {
       body = (
         <div className="cv-flow">
           {tags.map((t, i) => (
-            <span key={i}>
+            <span key={i} data-f={`tag:${i}`}>
               <Skill raw={t} det={det === 'sub' ? 'colon' : det} />
             </span>
           ))}
         </div>
       )
     else if (mode === 'list')
-      body = det === 'paren' ? <Bullets items={tags} style={style} /> : <Bullets items={tags} style={style} render={(t) => <Skill raw={t} det={det} />} />
+      body = det === 'paren' ? <Bullets items={tags} style={style} field="tag" /> : <Bullets items={tags} style={style} field="tag" render={(t) => <Skill raw={t} det={det} />} />
     else if (mode === 'lines')
       body = (
         <div className="cv-lines">
           {tags.map((t, i) => (
-            <div key={i}>
+            <div key={i} data-f={`tag:${i}`}>
               <Skill raw={t} det={det} />
             </div>
           ))}
@@ -280,8 +282,8 @@ function skillBlocks(section: Section, style: StyleSettings): ReactNode[] {
         </div>
       )
     return (
-      <div className={`cv-skill-group${idx === 0 ? ' first' : ''}`}>
-        {it.title && <div className="cv-group-title">{it.title}</div>}
+      <div className={`cv-skill-group${idx === 0 ? ' first' : ''}`} data-item={it.id}>
+        {it.title && <div className="cv-group-title" data-f="title">{it.title}</div>}
         {body}
       </div>
     )
@@ -293,7 +295,7 @@ function languageBlocks(section: Section): ReactNode[] {
   return section.items
     .filter((i) => !i.hidden)
     .map((it, idx) => (
-      <div className={`cv-lang${idx === 0 ? ' first' : ''}`}>
+      <div className={`cv-lang${idx === 0 ? ' first' : ''}`} data-item={it.id}>
         <div className="cv-lang-text">
           <span className="cv-etitle">{it.title}</span>
           {it.subtitle && <span className="cv-esub">{it.subtitle}</span>}
@@ -312,15 +314,15 @@ function iconListBlocks(section: Section): ReactNode[] {
   return rows.map((row, idx) => (
     <div className={`cv-iconrow cols-${cols}${idx === 0 ? ' first' : ''}`}>
       {row.map((it) => (
-        <div className="cv-iconitem" key={it.id}>
+        <div className="cv-iconitem" key={it.id} data-item={it.id}>
           {o.showIcons !== false && (
             <span className="cv-iconwrap">
               <Icon name={it.icon} size={14} />
             </span>
           )}
           <div>
-            <div className="cv-etitle">{renderInline(it.title)}</div>
-            {o.showDescription !== false && it.description && <div className="cv-edesc">{renderInline(it.description)}</div>}
+            <div className="cv-etitle" data-f="title">{renderInline(it.title)}</div>
+            {o.showDescription !== false && it.description && <div className="cv-edesc" data-f="description">{renderInline(it.description)}</div>}
           </div>
         </div>
       ))}
@@ -332,8 +334,8 @@ function referenceBlocks(section: Section): ReactNode[] {
   return section.items
     .filter((i) => !i.hidden)
     .map((it, idx) => (
-      <div className={`cv-entry${idx === 0 ? ' first' : ''}`}>
-        <div className="cv-etitle">{it.title}</div>
+      <div className={`cv-entry${idx === 0 ? ' first' : ''}`} data-item={it.id}>
+        <div className="cv-etitle" data-f="title">{it.title}</div>
         {it.subtitle && <div className="cv-esub">{it.subtitle}</div>}
         {section.options.showDescription !== false && it.description && <div className="cv-edesc pre">{it.description}</div>}
       </div>
@@ -344,7 +346,12 @@ function textBlocks(section: Section): ReactNode[] {
   const text = section.items[0]?.description ?? ''
   const paras = text.split(/\n\s*\n/).filter((p) => p.trim())
   if (!paras.length) return [<div className="cv-text first" />]
-  return paras.map((p, i) => <div className={`cv-text${i === 0 ? ' first' : ''}`}>{renderInline(p)}</div>)
+  const id = section.items[0]?.id
+  return paras.map((p, i) => (
+    <div className={`cv-text${i === 0 ? ' first' : ''}`} data-item={id} data-f="description">
+      {renderInline(p)}
+    </div>
+  ))
 }
 
 export function sectionBlocks(section: Section, style: StyleSettings): Block[] {

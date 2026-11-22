@@ -41,6 +41,35 @@ function ResumeEditor({ id }: { id: string | undefined }) {
   const [pages, setPages] = useState(1)
   const [request, setRequest] = useState<ClaudeRequest | null>(null)
   const [importing, setImporting] = useState(false)
+  const [focus, setFocus] = useState<{ sid: string; item?: string; field?: string; at: number } | null>(null)
+  // clic dans l'aperçu : on amène l'éditeur sur le champ cliqué et on le met en évidence
+  useEffect(() => {
+    if (!focus) return
+    let tries = 0
+    let timer = 0
+    const run = () => {
+      const sec = document.querySelector(`.sec-card[data-sec="${focus.sid}"]`)
+      const item = focus.item ? sec?.querySelector(`[data-item="${focus.item}"]`) : null
+      const scope = item ?? sec
+      const field = focus.field ? scope?.querySelector<HTMLElement>(`[data-f="${focus.field}"]`) : null
+      const waiting = !sec || (focus.item && !item) || (focus.field && !field)
+      if (waiting && tries++ < 12) {
+        timer = window.setTimeout(run, 40)
+        return
+      }
+      const el = (field ?? item ?? sec) as HTMLElement | null
+      if (!el) return
+      el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' })
+      if (field?.classList.contains('chip')) field.querySelector<HTMLElement>('.chip-label')?.click()
+      else field?.querySelector<HTMLElement>('textarea, input')?.focus({ preventScroll: true })
+      el.classList.remove('jump-flash')
+      void el.offsetWidth
+      el.classList.add('jump-flash')
+      timer = window.setTimeout(() => el.classList.remove('jump-flash'), 2200)
+    }
+    timer = window.setTimeout(run, 30)
+    return () => window.clearTimeout(timer)
+  }, [focus])
   const { print, portal } = usePrint(doc)
   const offer = useOffer(doc?.offerId)
   // vue du CV avec l'offre rattachée, utilisée par l'ATS et les prompts Claude
@@ -66,7 +95,7 @@ function ResumeEditor({ id }: { id: string | undefined }) {
   const panel = (() => {
     switch (tab) {
       case 'content':
-        return <ContentPanel doc={doc} update={update} active={active} setActive={setActive} onAskClaude={(a, item) => askClaude(a, item)} />
+        return <ContentPanel doc={doc} update={update} active={active} setActive={setActive} onAskClaude={(a, item) => askClaude(a, item)} focus={focus ?? undefined} />
       case 'templates':
         return (
           <TemplatesPanel
@@ -118,9 +147,10 @@ function ResumeEditor({ id }: { id: string | undefined }) {
             doc={doc}
             active={tab === 'content' ? active : null}
             onPageCount={setPages}
-            onSectionClick={(sid) => {
+            onSectionClick={(sid, target) => {
               setTab('content')
               setActive(sid)
+              setFocus({ sid, item: target?.item, field: target?.field, at: Date.now() })
             }}
           />
         }

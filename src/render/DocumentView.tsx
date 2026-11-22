@@ -3,13 +3,13 @@ import type { LetterDoc, ResumeDoc } from '../types'
 import { ensureFont } from '../lib/fonts'
 import { renderInline, paragraphs } from '../lib/inline'
 import { HeaderBlock, sectionBlocks } from './parts'
-import { Paginator, type Block } from './Paginator'
+import { Paginator, type Block, type CvTarget } from './Paginator'
 import { letterOptions } from '../data/letterTemplates'
 import './cv.css'
 
 interface CommonProps {
   maxPages?: number
-  onSectionClick?: (id: string) => void
+  onSectionClick?: (id: string, target?: CvTarget) => void
   activeSection?: string
   onPageCount?: (n: number) => void
   className?: string

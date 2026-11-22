@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BookOpen, X, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Plus, Sparkles, Trash2 } from 'lucide-react'
 import type { Offer, Section, SectionItem, SectionOptions } from '../../types'
 import { useRomeDrawer } from '../RomeDrawer'
@@ -23,9 +23,14 @@ const OPTION_LABELS: Partial<Record<keyof SectionOptions, string>> = {
 
 const FORMAT_HINT = 'Mise en forme : **gras**, *italique*, [texte](lien)'
 
-export function SectionEditor({ section, onChange, onAskClaude, offerId }: { section: Section; onChange: (s: Section) => void; onAskClaude?: (action: 'summary' | 'bullets', itemId?: string) => void; offerId?: string }) {
+export function SectionEditor({ section, onChange, onAskClaude, offerId, focusItem }: { section: Section; onChange: (s: Section) => void; onAskClaude?: (action: 'summary' | 'bullets', itemId?: string) => void; offerId?: string; focusItem?: { id?: string; at: number } }) {
   const def = SECTION_DEFS[section.type]
-  const [open, setOpen] = useState<string | null>(section.items.length === 1 ? section.items[0].id : null)
+  const [open, setOpen] = useState<string | null>(focusItem?.id ?? (section.items.length === 1 ? section.items[0].id : null))
+  // clic sur une entrée dans l'aperçu : on l'ouvre
+  useEffect(() => {
+    if (focusItem?.id && section.items.some((i) => i.id === focusItem.id)) setOpen(focusItem.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusItem?.at])
   const setItem = (id: string, patch: Partial<SectionItem>) => onChange({ ...section, items: section.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) })
   const setOpt = (patch: Partial<SectionOptions>) => onChange({ ...section, options: { ...section.options, ...patch } })
   const moveItem = (i: number, d: number) => {
@@ -44,7 +49,9 @@ export function SectionEditor({ section, onChange, onAskClaude, offerId }: { sec
           <TextInput value={section.title} onChange={(v) => onChange({ ...section, title: v })} />
         </Field>
         <Field label={def.labels.description} hint={FORMAT_HINT}>
+          <div data-f="description" className="jump-target">
           <TextArea value={item.description} minRows={4} onChange={(v) => onChange({ ...section, items: [{ ...item, description: v }] })} placeholder={def.hint} />
+          </div>
         </Field>
         {section.type === 'summary' && onAskClaude && (
           <button className="btn ghost sm claude self-start" onClick={() => onAskClaude('summary')}>
@@ -137,12 +144,12 @@ export function SectionEditor({ section, onChange, onAskClaude, offerId }: { sec
         </div>
       )}
 
-      <div className="items">
+      <div className={`items${open ? ' has-open' : ''}`}>
         {section.items.map((it, i) => {
           const isOpen = open === it.id
           const summary = stripInline(it.title) || (it.tags?.length ? it.tags.join(', ') : '') || 'Nouvelle entrée'
           return (
-            <div key={it.id} className={`item-card${isOpen ? ' open' : ''}${it.hidden ? ' is-hidden' : ''}`}>
+            <div key={it.id} data-item={it.id} className={`item-card${isOpen ? ' open' : ''}${it.hidden ? ' is-hidden' : ''}`}>
               <div className="item-head" onClick={() => setOpen(isOpen ? null : it.id)}>
                 {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                 <div className="item-sum">
@@ -211,7 +218,9 @@ function ItemFields({ section, item, onChange, onAskClaude, offerId }: { section
           {f.includes('icon') && <IconPicker value={item.icon} onChange={(v) => onChange({ icon: v })} />}
           {f.includes('title') && (
             <Field label={L.title}>
-              <TextInput value={item.title} onChange={(v) => onChange({ title: v })} />
+              <div data-f="title" className="jump-target">
+                <TextInput value={item.title} onChange={(v) => onChange({ title: v })} />
+              </div>
               {['experience', 'volunteering'].includes(section.type) && <TitleVariants item={item} onChange={onChange} offerId={offerId} />}
             </Field>
           )}
@@ -221,12 +230,16 @@ function ItemFields({ section, item, onChange, onAskClaude, offerId }: { section
         <div className="grid-2">
           {f.includes('subtitle') && (
             <Field label={L.subtitle}>
-              <TextInput value={item.subtitle} onChange={(v) => onChange({ subtitle: v })} />
+              <div data-f="subtitle" className="jump-target">
+                <TextInput value={item.subtitle} onChange={(v) => onChange({ subtitle: v })} />
+              </div>
             </Field>
           )}
           {f.includes('location') && (
             <Field label={L.location}>
-              <TextInput value={item.location} onChange={(v) => onChange({ location: v })} />
+              <div data-f="location" className="jump-target">
+                <TextInput value={item.location} onChange={(v) => onChange({ location: v })} />
+              </div>
             </Field>
           )}
         </div>
@@ -261,7 +274,9 @@ function ItemFields({ section, item, onChange, onAskClaude, offerId }: { section
       )}
       {f.includes('description') && (
         <Field label={L.description} hint={FORMAT_HINT}>
-          <TextArea value={item.description} minRows={2} onChange={(v) => onChange({ description: v })} />
+          <div data-f="description" className="jump-target">
+            <TextArea value={item.description} minRows={2} onChange={(v) => onChange({ description: v })} />
+          </div>
         </Field>
       )}
       {f.includes('bullets') && (

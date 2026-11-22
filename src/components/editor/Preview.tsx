@@ -3,13 +3,13 @@ import { createPortal } from 'react-dom'
 import { Maximize2, Minus, Plus } from 'lucide-react'
 import type { AnyDoc } from '../../types'
 import { AnyDocView } from '../../render/DocumentView'
-import { PAGE_SIZES } from '../../render/Paginator'
+import { PAGE_SIZES, type CvTarget } from '../../render/Paginator'
 import { printDocument } from '../../lib/export'
 
 interface Props {
   doc: AnyDoc
   active?: string | null
-  onSectionClick?: (id: string) => void
+  onSectionClick?: (id: string, target?: CvTarget) => void
   onPageCount?: (n: number) => void
 }
 

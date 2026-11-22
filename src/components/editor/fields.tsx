@@ -35,7 +35,13 @@ export function DateInput({ value, onChange, disabled }: { value?: DateValue; on
 export function TagsInput({ value, onChange, placeholder, details = false }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string; details?: boolean }) {
   const [text, setText] = useState('')
   const [drag, setDrag] = useState<number | null>(null)
-  const [edit, setEdit] = useState<number | null>(null)
+  const [edit, setEditRaw] = useState<number | null>(null)
+  // texte du nom en cours de saisie : gardé tel quel (espaces compris) tant qu'on édite
+  const [draft, setDraft] = useState<string | null>(null)
+  const setEdit = (i: number | null) => {
+    setEditRaw(i)
+    setDraft(null)
+  }
   // les virgules entre parenthèses ne créent pas de nouvelle étiquette
   const add = (raw: string) => {
     const parts = splitTop(raw)
@@ -61,6 +67,7 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
           return (
             <span
               key={`${t}-${i}`}
+              data-f={`tag:${i}`}
               className={`chip${drag === i ? ' dragging' : ''}${edit === i ? ' editing' : ''}`}
               draggable
               onDragStart={() => setDrag(i)}
@@ -121,7 +128,16 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
         <div className="tag-edit">
           <label className="field">
             <span className="field-label">{details ? 'Compétence' : 'Texte'}</span>
-            <input className="input" autoFocus value={details ? cur.name : value[edit]} onChange={(e) => set(edit, details ? formatSkill(e.target.value, cur.details) : e.target.value)} />
+            <input
+              className="input"
+              autoFocus
+              value={draft ?? (details ? cur.name : value[edit])}
+              onChange={(e) => {
+                setDraft(e.target.value)
+                set(edit, details ? formatSkill(e.target.value, cur.details) : e.target.value.trim())
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && setEdit(null)}
+            />
           </label>
           {details && (
             <div className="field">
@@ -152,7 +168,7 @@ export function BulletsEditor({ value, onChange, onAskClaude }: { value: string[
   return (
     <div className="bullets-editor">
       {value.map((b, i) => (
-        <div className="bullet-row" key={i}>
+        <div className="bullet-row" key={i} data-f={`bullet:${i}`}>
           <span className="bullet-dot">•</span>
           <TextArea
             value={b}

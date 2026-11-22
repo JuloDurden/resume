@@ -1,3 +1,4 @@
+import { fileSafe } from './filename'
 import type { AnyDoc, LetterDoc, Offer, ResumeDoc, Section } from '../types'
 import { formatRange } from './dates'
 import { paragraphs, stripInline } from './inline'
@@ -158,7 +159,7 @@ export function resumeContentJson(doc: ResumeDoc) {
 
 export function printDocument(name: string, format: 'A4' | 'Letter') {
   const prevTitle = document.title
-  document.title = safeFileName(name)
+  document.title = fileSafe(name)
   const style = document.createElement('style')
   style.id = 'print-page-size'
   style.textContent = `@page { size: ${format === 'Letter' ? 'letter' : 'A4'}; margin: 0; }`

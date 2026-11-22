@@ -1,3 +1,4 @@
+import { shortDocName } from './filename'
 import type { AnyDoc, Offer } from '../types'
 import { uid } from './ids'
 
@@ -27,3 +28,24 @@ export function migrate(state: { docs: Record<string, AnyDoc>; offers: Record<st
   return { docs, offers }
 }
 
+
+/** Une fois par navigateur : « Poste H/F - Entreprise » devient « Poste » (l'entreprise et la ville sont dans l'offre). Les noms personnalisés ne changent pas. */
+export function shortenDocNames(docs: Record<string, AnyDoc>, offers: Record<string, Offer>): Record<string, AnyDoc> | null {
+  const KEY = 'resume-doc-names-v1'
+  try {
+    if (localStorage.getItem(KEY)) return null
+    localStorage.setItem(KEY, String(Date.now()))
+  } catch {
+    return null
+  }
+  let changed = false
+  const out = { ...docs }
+  for (const [id, d] of Object.entries(docs)) {
+    const name = shortDocName(d, d.offerId ? offers[d.offerId] : undefined)
+    if (!name) continue
+    // date à peine avancée : la synchronisation retient le nouveau nom sans bouleverser l'ordre des documents
+    out[id] = { ...d, name, updatedAt: d.updatedAt + 1 }
+    changed = true
+  }
+  return changed ? out : null
+}

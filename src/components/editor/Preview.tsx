@@ -5,6 +5,8 @@ import type { AnyDoc } from '../../types'
 import { AnyDocView } from '../../render/DocumentView'
 import { PAGE_SIZES, type CvTarget } from '../../render/Paginator'
 import { printDocument } from '../../lib/export'
+import { pdfFileName } from '../../lib/filename'
+import { useDocs } from '../../store/documents'
 
 interface Props {
   doc: AnyDoc
@@ -92,7 +94,7 @@ export function usePrint(doc: AnyDoc | undefined) {
       await document.fonts?.ready
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
       await new Promise((r) => setTimeout(r, 250))
-      if (!cancelled) printDocument(doc.name, doc.style.pageFormat)
+      if (!cancelled) printDocument(pdfFileName(doc, doc.offerId ? useDocs.getState().offers[doc.offerId] : undefined), doc.style.pageFormat)
     })()
     return () => {
       cancelled = true

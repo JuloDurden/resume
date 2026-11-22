@@ -4890,3 +4890,26 @@ button.followup-badge {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.55);
   }
 }
+.topbar .pdf-name {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.topbar .pdf-name:hover {
+  background: rgba(31, 58, 95, 0.08);
+  color: inherit;
+}
+@media (max-width: 900px) {
+  .topbar .pdf-name {
+    display: none;
+  }
+}

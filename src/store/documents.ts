@@ -3,7 +3,7 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 import { del, get, set } from 'idb-keyval'
 import type { Alert, AnyDoc, Company, FeedItem, JobReview, MarkState, MatchProfile, Offer, WatchState } from '../types'
 import { uid } from '../lib/ids'
-import { migrate } from '../lib/migrate'
+import { migrate, shortenDocNames } from '../lib/migrate'
 import { EMPTY_WATCH, differs, mergeData, type DataSet } from '../lib/merge'
 export { migrate }
 
@@ -214,7 +214,9 @@ export const useDocs = create<DocsState>()(
       migrate: (persisted) => persisted as DocsState,
       onRehydrateStorage: () => () => {
         const s = useDocs.getState()
-        useDocs.setState({ ...migrate({ docs: s.docs, offers: s.offers ?? {} }), deleted: s.deleted ?? {}, watch: s.watch ?? EMPTY_WATCH, hydrated: true })
+        const m = migrate({ docs: s.docs, offers: s.offers ?? {} })
+        const named = Object.keys(m.docs).length ? shortenDocNames(m.docs, m.offers) : null
+        useDocs.setState({ ...m, ...(named ? { docs: named } : {}), deleted: s.deleted ?? {}, watch: s.watch ?? EMPTY_WATCH, hydrated: true })
       },
     },
   ),

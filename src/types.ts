@@ -242,6 +242,8 @@ export interface ResumeDoc {
   id: string
   kind: 'resume'
   name: string
+  /** nom du PDF imposé (sinon calculé : Prénom NOM - CV - Poste - Entreprise) */
+  fileName?: string
   /** CV de référence : modèle personnel d'un type de poste, à dupliquer pour chaque candidature */
   reference?: boolean
   createdAt: number
@@ -284,6 +286,8 @@ export interface LetterDoc {
   id: string
   kind: 'letter'
   name: string
+  /** nom du PDF imposé (sinon calculé : Prénom NOM - Lettre de motivation - Poste - Entreprise) */
+  fileName?: string
   createdAt: number
   updatedAt: number
   templateId: string

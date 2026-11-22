@@ -1,3 +1,4 @@
+import { docNameFor } from '../../lib/filename'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ClipboardCopy, ExternalLink, Sparkles, Wand2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -154,7 +155,7 @@ export function ClaudePanel({ doc, update, request, onGoAts }: Props) {
             navigate(`/lettre/${existing.id}`)
             break
           }
-          const letter = newLetter(doc.templateId, false, doc, doc.job ? [doc.job.title, doc.job.company].filter(Boolean).join(' - ') || doc.name : doc.name)
+          const letter = newLetter(doc.templateId, false, doc, doc.job?.title ? docNameFor(doc.job.title) : doc.name)
           Object.assign(letter, {
             subject: data.subject ?? letter.subject,
             salutation: data.salutation ?? letter.salutation,

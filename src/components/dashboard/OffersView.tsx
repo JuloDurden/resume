@@ -1,3 +1,4 @@
+import { docNameFor } from '../../lib/filename'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
@@ -22,7 +23,7 @@ import { openPath } from './DocCard'
 type Filter = 'all' | Stage
 type View = 'cards' | 'columns' | 'stats'
 
-const docName = (o: Offer) => [o.title || 'Poste', o.company].filter(Boolean).join(' - ')
+const docName = (o: Offer) => docNameFor(o.title, o.location)
 
 function NewCvForOffer({ offer, resumes, onClose }: { offer: Offer; resumes: ResumeDoc[]; onClose: () => void }) {
   const [from, setFrom] = useState(resumes[0]?.id ?? '')

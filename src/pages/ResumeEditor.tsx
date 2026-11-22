@@ -1,3 +1,4 @@
+import { docNameFor } from '../lib/filename'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Columns2, FileSignature, LayoutTemplate, ListChecks, Palette, PenLine, Sparkles } from 'lucide-react'
@@ -159,7 +160,7 @@ function ResumeEditor({ id }: { id: string | undefined }) {
             icon={<FileSignature size={15} />}
             onClick={() => {
               close()
-              const l = newLetter(doc.templateId, false, doc, offer ? [offer.title, offer.company].filter(Boolean).join(' - ') : doc.name)
+              const l = newLetter(doc.templateId, false, doc, offer ? docNameFor(offer.title, offer.location) : doc.name)
               l.offerId = doc.offerId
               if (offer?.company) l.recipient.company = offer.company
               if (offer?.title) l.subject = `Candidature au poste de ${offer.title}`

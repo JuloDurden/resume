@@ -1,3 +1,4 @@
+import { docNameFor } from '../../lib/filename'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { strip } from '../../lib/ats'
 import { loadRomeIndex } from '../../lib/rome'
@@ -1367,7 +1368,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
     }
     const now = Date.now()
     const title = i.title.replace(/\s*[(-]?\s*\b[hfHF]\s*\/\s*[hfHF](\s*\/\s*\w+)?\s*\)?/g, '').replace(/\s*\((cdi|cdd)\)\s*$/i, '').trim()
-    const copy: ResumeDoc = { ...structuredClone(cv), reference: undefined, id: uid(), name: [title, o.company].filter(Boolean).join(' - '), offerId: o.id, createdAt: now, updatedAt: now, header: { ...cv.header, title } }
+    const copy: ResumeDoc = { ...structuredClone(cv), reference: undefined, id: uid(), name: docNameFor(title, o.location), offerId: o.id, createdAt: now, updatedAt: now, header: { ...cv.header, title } }
     addDoc(copy)
     navigate(`/cv/${copy.id}?claude=tailor`)
     toast.ok(`CV créé à partir de « ${cv.name} » : copiez le prompt d'adaptation pour Claude`)

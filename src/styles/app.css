@@ -5026,3 +5026,4 @@ button.followup-badge {
 .steps-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; }
 .steps-list p { margin: 4px 0 0; }
 .error-text { color: #b91c1c; margin: 0; }
+.co-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

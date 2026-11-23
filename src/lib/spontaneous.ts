@@ -124,3 +124,42 @@ export const VERDICT: Record<NonNullable<CompanyAnalysis['verdict']>, { label: s
   angle: { label: 'Possible avec un angle précis', tone: 'mid' },
   no: { label: 'Pas pour moi', tone: 'low' },
 }
+
+/** Fiche entreprise en Markdown, à coller dans Claude pour préparer la candidature. */
+export function analysisMarkdown(o: Pick<Offer, 'company' | 'posts' | 'analysis' | 'website' | 'location'>): string {
+  const a = o.analysis
+  if (!a) return ''
+  const list = (xs?: string[]) => (xs?.length ? xs.map((x) => `- ${x}`).join('\n') : '')
+  const sec = (title: string, body: string) => (body.trim() ? `## ${title}\n\n${body.trim()}\n` : '')
+  const v = a.verdict ? VERDICT[a.verdict].label : ''
+  return [
+    `# Candidature spontanée : ${o.company ?? ''}`.trim(),
+    '',
+    [
+      a.fit !== undefined ? `**Adéquation de mon profil :** ${a.fit}/100${v ? ` (${v})` : ''}` : v ? `**Verdict :** ${v}` : '',
+      [a.sector, a.size].filter(Boolean).length ? `**Secteur, taille :** ${[a.sector, a.size].filter(Boolean).join(', ')}` : '',
+      o.location ? `**Lieu :** ${o.location}` : '',
+      o.website || a.website ? `**Site :** ${o.website || a.website}` : '',
+      a.careersUrl ? `**Page carrières :** ${a.careersUrl}` : '',
+      `**Analyse du :** ${new Date(a.at).toLocaleDateString('fr-FR')}`,
+    ]
+      .filter(Boolean)
+      .join('  \n'),
+    '',
+    sec("L'entreprise", a.summary ?? ''),
+    sec("Angle d'approche", a.angle ?? ''),
+    sec('Besoins probables', (a.needs ?? []).map((n) => `- **${n.need}**${n.why ? ` : ${n.why}` : ''}`).join('\n')),
+    sec('Ce qui colle', list(a.matches)),
+    sec('Ce qui manque', list(a.gaps)),
+    sec('Postes visés', list(o.posts)),
+    sec('Autres postes proposés par l\'analyse', (a.posts ?? []).filter((p) => !o.posts?.includes(p.title)).map((p) => `- ${p.title}${p.fit !== undefined ? ` (${p.fit}/100)` : ''}${p.why ? ` : ${p.why}` : ''}`).join('\n')),
+    sec('À qui écrire', (a.contacts ?? []).map((c) => `- ${[c.name, c.role].filter(Boolean).join(', ')}${c.url ? ` (${c.url})` : ''}`).join('\n')),
+    sec('Actualités', list(a.news)),
+    sec('Offres publiées', (a.openings ?? []).map((x) => `- ${x.title}${x.url ? ` (${x.url})` : ''}`).join('\n')),
+    sec('Sources', list(a.sources)),
+  ]
+    .filter((x) => x !== undefined)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}

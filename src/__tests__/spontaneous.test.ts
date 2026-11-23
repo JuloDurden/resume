@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCompanyAnalysis, postSuggestions, sameCompany, spontaneousDescription } from '../lib/spontaneous'
+import { analysisMarkdown, parseCompanyAnalysis, postSuggestions, sameCompany, spontaneousDescription } from '../lib/spontaneous'
 import { migrate } from '../lib/migrate'
 import type { FeedItem, Offer } from '../types'
 
@@ -29,6 +29,10 @@ describe('candidatures spontanées', () => {
     const d = spontaneousDescription({ company: 'GSF', posts: ['Chef de projet SI'], analysis })
     expect(d).toContain('Pilotage de prestataires IT')
     expect(d).toContain('Postes visés : Chef de projet SI')
+  })
+  it('exporte la fiche en Markdown', () => {
+    const md = analysisMarkdown({ company: 'GSF', posts: ['Chef de projet SI'], analysis: parseCompanyAnalysis(answer) })
+    for (const t of ['# Candidature spontanée : GSF', '72/100', "## Angle d'approche", '## Besoins probables', '**Pilotage de prestataires IT** : migration ERP', '## Ce qui colle', '## Ce qui manque', '## Postes visés', "- Responsable d'exploitation IT (78/100)", '## À qui écrire', '## Actualités', '## Offres publiées']) expect(md).toContain(t)
   })
   it('convertit les anciennes candidatures spontanées', () => {
     const o = { id: 'a', title: 'Candidature Spontanée Support Applicatif & Accompagnement utilisateurs', company: 'AB+ Software', createdAt: 1, updatedAt: 1 } as Offer

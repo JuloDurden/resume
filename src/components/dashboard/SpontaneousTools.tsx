@@ -1,14 +1,15 @@
 // Candidatures spontanées : création, analyse de l'entreprise par Claude, fiche entreprise.
 import { useMemo, useState } from 'react'
-import { Building2, ClipboardCopy, ExternalLink, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Download, Building2, ClipboardCopy, ExternalLink, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import type { Company, FeedItem, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { newOffer } from '../../lib/offers'
 import { uid } from '../../lib/ids'
-import { resumeToText } from '../../lib/export'
+import { download, resumeToText } from '../../lib/export'
+import { fileSafe } from '../../lib/filename'
 import { CLAUDE_URL, copyText } from '../../lib/prompts'
-import { VERDICT, companyAnalysisPrompt, companyOpenings, parseCompanyAnalysis, postSuggestions, sameCompany, spontaneousDescription, spontaneousTitle } from '../../lib/spontaneous'
+import { analysisMarkdown, VERDICT, companyAnalysisPrompt, companyOpenings, parseCompanyAnalysis, postSuggestions, sameCompany, spontaneousDescription, spontaneousTitle } from '../../lib/spontaneous'
 import { Field, Modal, TextArea, TextInput, toast } from '../ui'
 
 const href = (u: string) => (/^https?:/i.test(u) ? u : `https://${u}`)
@@ -270,9 +271,17 @@ export function CompanyCard({ offer, onAnalyse }: { offer: Offer; onAnalyse: () 
           <p>{a.summary}</p>
           <p className="muted small">{[a.sector, a.size].filter(Boolean).join(' · ')}</p>
         </div>
-        <button className="btn sm ghost" onClick={onAnalyse} title={`Analyse du ${new Date(a.at).toLocaleDateString('fr-FR')}`}>
-          <RefreshCw size={13} /> Refaire
-        </button>
+        <div className="co-actions">
+          <button className="btn sm" onClick={async () => toast[(await copyText(analysisMarkdown(offer))) ? 'ok' : 'error']('Fiche copiée : collez-la dans Claude')} title="Copier la fiche en Markdown, prête à coller dans Claude">
+            <ClipboardCopy size={13} /> Copier la fiche
+          </button>
+          <button className="btn sm" onClick={() => download(`${fileSafe(`Analyse - ${offer.company || 'entreprise'}`)}.md`, analysisMarkdown(offer), 'text/markdown')} title="Télécharger la fiche (.md), à joindre dans Claude">
+            <Download size={13} /> .md
+          </button>
+          <button className="btn sm ghost" onClick={onAnalyse} title={`Analyse du ${new Date(a.at).toLocaleDateString('fr-FR')}`}>
+            <RefreshCw size={13} /> Refaire
+          </button>
+        </div>
       </div>
       {a.angle && (
         <p className="co-angle">

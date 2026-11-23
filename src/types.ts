@@ -158,6 +158,28 @@ export interface JobTarget {
   extra?: string[]
 }
 
+export interface CompanyAnalysis {
+  at: number
+  summary?: string
+  sector?: string
+  size?: string
+  news?: string[]
+  needs?: { need: string; why?: string }[]
+  openings?: { title: string; url?: string }[]
+  contacts?: { role: string; name?: string; url?: string }[]
+  posts?: { title: string; why?: string; fit?: number }[]
+  /** adéquation de mon profil, sur 100 */
+  fit?: number
+  verdict?: 'go' | 'angle' | 'no'
+  matches?: string[]
+  gaps?: string[]
+  /** angle d'approche conseillé */
+  angle?: string
+  website?: string
+  careersUrl?: string
+  sources?: string[]
+}
+
 export interface OfferContact {
   name?: string
   role?: string
@@ -198,6 +220,12 @@ export interface Offer extends JobTarget {
   followUpDate?: number
   /** annonces de la veille rattachées à cette candidature */
   jobIds?: string[]
+  /** candidature spontanée : pas d'annonce, l'entreprise est analysée par Claude */
+  spontaneous?: boolean
+  /** postes visés (candidature spontanée) */
+  posts?: string[]
+  /** fiche entreprise rédigée par Claude (candidature spontanée) */
+  analysis?: CompanyAnalysis
   /** préparation d'entretien rédigée par Claude */
   interview?: InterviewPrep
   /** entretiens prévus ou passés (un par étape du recrutement) */

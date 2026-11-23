@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { AlertTriangle, Building2, CheckCircle2, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
+import { Send, AlertTriangle, Building2, CheckCircle2, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
 import type { Alert, Company } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { uid } from '../../lib/ids'
 import { searchLinks } from '../../lib/watch'
 import { Field, TextInput, Toggle, toast } from '../ui'
+import { CompanyAnalysisModal, SpontaneousModal } from './SpontaneousTools'
+import type { Offer } from '../../types'
 
 /** Une ligne de liens par métier : chaque alerte, et chaque intitulé d'une alerte à plusieurs intitulés. */
 function linkLines(alerts: Alert[]) {
@@ -24,7 +26,7 @@ function linkLines(alerts: Alert[]) {
 const NONE: Company[] = []
 const ATS_HINT = /lever\.co|greenhouse\.io|smartrecruiters\.com|recruitee\.com|apply\.workable\.com|teamtailor\.com/
 
-function CompanyRow({ c, onChange, onDelete }: { c: Company; onChange: (p: Partial<Company>) => void; onDelete: () => void }) {
+function CompanyRow({ c, onChange, onDelete, onApply }: { c: Company; onChange: (p: Partial<Company>) => void; onDelete: () => void; onApply: () => void }) {
   const st = useFeed((s) => s.feed?.sources?.companies?.[c.id])
   const n = useFeed((s) => (s.feed?.items ?? []).filter((i) => i.id.startsWith(`co-${c.id}-`)).length)
   return (
@@ -52,6 +54,9 @@ function CompanyRow({ c, onChange, onDelete }: { c: Company; onChange: (p: Parti
           )}
         </span>
       </div>
+      <button className="btn sm" onClick={onApply} title="Candidature spontanée chez cette entreprise, avec analyse de ses besoins par Claude">
+        <Send size={13} /> Candidature spontanée
+      </button>
       <Toggle label="Toutes les offres" checked={!!c.all} onChange={(v) => onChange({ all: v })} />
       <Toggle label="Active" checked={c.active !== false} onChange={(v) => onChange({ active: v })} />
       <button className="icon-btn xs" title="Retirer cette entreprise" onClick={onDelete}>
@@ -68,6 +73,8 @@ export function SitesView() {
   const setCompanies = useDocs((s) => s.setCompanies)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
+  const [applyTo, setApplyTo] = useState<Company | null>(null)
+  const [analyse, setAnalyse] = useState<Offer | null>(null)
   const lines = linkLines(alerts)
   const add = () => {
     let u = url.trim()
@@ -114,6 +121,7 @@ export function SitesView() {
                 onDelete={() => {
                   if (window.confirm(`Retirer ${c.name} ? Ses offres disparaîtront de vos annonces au prochain passage.`)) setCompanies(companies.filter((x) => x.id !== c.id))
                 }}
+                onApply={() => setApplyTo(c)}
               />
             ))}
           </div>
@@ -148,6 +156,8 @@ export function SitesView() {
           <p className="muted small">Créez une recherche dans l'onglet Annonces, bouton « Alertes et veille ».</p>
         )}
       </section>
+      {applyTo && <SpontaneousModal preset={{ name: applyTo.name, careers: applyTo.url }} onClose={() => setApplyTo(null)} onCreated={(o) => setAnalyse(o)} />}
+      {analyse && <CompanyAnalysisModal offer={useDocs.getState().offers[analyse.id] ?? analyse} onClose={() => setAnalyse(null)} />}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { shortDocName } from './filename'
+import { cleanPost, shortDocName } from './filename'
 import type { AnyDoc, Offer } from '../types'
 import { uid } from './ids'
 
@@ -24,6 +24,12 @@ export function migrate(state: { docs: Record<string, AnyDoc>; offers: Record<st
     const next = { ...d, offerId: activeId, job: undefined } as AnyDoc
     if (next.kind === 'resume') delete next.jobs
     docs[id] = next
+  }
+  // anciennes candidatures spontanées saisies comme des offres « Candidature spontanée <poste> »
+  for (const [id, o] of Object.entries(offers)) {
+    if (o.spontaneous || !/^\s*candidature\s+spontan[ée]e\b/i.test(o.title ?? '')) continue
+    const post = cleanPost(o.title)
+    offers[id] = { ...o, spontaneous: true, posts: post ? [post] : [], title: post || 'Candidature spontanée', updatedAt: (o.updatedAt ?? 0) + 1 }
   }
   return { docs, offers }
 }

@@ -1,11 +1,12 @@
 import { docNameFor } from '../../lib/filename'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, ShareModal, followUpLabel } from './OfferTools'
 import { FEELING, MODE_LABEL, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
 import { nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
+import { CompanyAnalysisModal, CompanyCard, SpontaneousModal } from './SpontaneousTools'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -23,7 +24,7 @@ import { openPath } from './DocCard'
 type Filter = 'all' | Stage
 type View = 'cards' | 'columns' | 'stats'
 
-const docName = (o: Offer) => docNameFor(o.title, o.location)
+const docName = (o: Offer) => (o.spontaneous ? (o.posts?.length === 1 ? docNameFor(o.posts[0]) : 'Candidature spontanée') : docNameFor(o.title, o.location))
 
 function NewCvForOffer({ offer, resumes, onClose }: { offer: Offer; resumes: ResumeDoc[]; onClose: () => void }) {
   const [from, setFrom] = useState(resumes[0]?.id ?? '')
@@ -75,13 +76,14 @@ const frDay = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'num
 const href = (u: string) => (/^https?:/i.test(u) ? u : `https://${u}`)
 
 type Stage = 'now' | 'interview' | 'wait' | 'done'
-type Next = { text: string; tone: 'hot' | 'ok' | 'muted' | ''; stage: Stage; act?: 'followup' | 'planner' | 'prep' | 'cv' | 'open' | 'interview' | 'report'; title?: string; slot?: string }
+type Next = { text: string; tone: 'hot' | 'ok' | 'muted' | ''; stage: Stage; act?: 'followup' | 'planner' | 'prep' | 'cv' | 'open' | 'interview' | 'report' | 'analysis'; title?: string; slot?: string }
 
 /** Prochaine étape d'une candidature, et le groupe où elle se range (à faire, entretien, en attente, terminée). */
 function nextStep(o: Offer, docs: AnyDoc[]): Next {
   const st = o.status ?? 'todo'
   if (st === 'rejected') return { text: `Refusée${o.statusAt?.rejected ? ` le ${frDay(o.statusAt.rejected)}` : ''}`, tone: 'muted', stage: 'done' }
   if (st === 'offer') return { text: 'Proposition reçue : à étudier', tone: 'ok', stage: 'now', act: 'open' }
+  if (o.spontaneous && !o.analysis && st === 'todo') return { text: "Analyser l'entreprise", tone: 'hot', stage: 'now', act: 'analysis', title: 'Claude cherche ses besoins et note ton adéquation' }
   if (st === 'interview') {
     const past = toReport(o)
     if (past) return { text: "Compte rendu d'entretien", tone: 'hot', stage: 'now', act: 'report', slot: past.id, title: `Entretien du ${fmtLong(past.at)} : confirmez-le et notez vos impressions` }
@@ -140,6 +142,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
   const [share, setShare] = useState(false)
   const [prep, setPrep] = useState(false)
   const [ivPlan, setIvPlan] = useState<false | true | 'add'>(false)
+  const [analysing, setAnalysing] = useState(false)
   const [reportFor, setReportFor] = useState<string | null>(null)
   const minPay = useDocs((s) => s.watch.profile?.salary?.min)
   const pay = offerSalary(offer)
@@ -167,6 +170,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
     else if (next.act === 'planner') setPlanner(true)
     else if (next.act === 'prep') setPrep(true)
     else if (next.act === 'interview') setIvPlan(true)
+    else if (next.act === 'analysis') setAnalysing(true)
     else if (next.act === 'report' && next.slot) setReportFor(next.slot)
     else if (next.act === 'cv') setCvModal(true)
     else onOpen(true)
@@ -177,7 +181,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
     <article
       className={`offer-row${open ? ' open' : ''}${narrow ? ' narrow' : ''}${next.stage === 'now' ? ' hot' : ''}${status === 'rejected' ? ' done' : ''}`}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, .or-open, .menu-wrap')) return
+        if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, .or-open, .co-card, .menu-wrap')) return
         onOpen(!open)
       }}
     >
@@ -186,7 +190,20 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
         <div className="or-main">
           <strong title={offer.title}>{offer.title || 'Offre sans titre'}</strong>
           <span>
+            {offer.spontaneous && (
+              <em className="spont-badge" title="Candidature spontanée">
+                Spontanée
+              </em>
+            )}
             {offer.company || 'Entreprise ?'}
+            {offer.spontaneous && offer.analysis?.fit !== undefined && (
+              <>
+                {' · '}
+                <span className={`co-fit-inline ${offer.analysis.fit >= 70 ? 'ok' : offer.analysis.fit >= 50 ? 'mid' : 'low'}`} title="Adéquation selon Claude">
+                  adéquation {offer.analysis.fit}
+                </span>
+              </>
+            )}
             {pay && pay.max ? (
               <>
                 {' · '}
@@ -262,7 +279,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                     window.open(href(offer.url!), '_blank', 'noopener')
                   }}
                 >
-                  Voir l'annonce
+                  {offer.spontaneous ? 'Page carrières' : "Voir l'annonce"}
                 </MenuItem>
               )}
               <MenuItem
@@ -274,6 +291,17 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
               >
                 {offer.share ? 'Dossier pour le recruteur (en ligne)' : 'Dossier pour le recruteur…'}
               </MenuItem>
+              {offer.spontaneous && (
+                <MenuItem
+                  icon={<Sparkles size={14} />}
+                  onClick={() => {
+                    close()
+                    setAnalysing(true)
+                  }}
+                >
+                  {offer.analysis ? "Refaire l'analyse de l'entreprise" : "Analyser l'entreprise"}
+                </MenuItem>
+              )}
               <MenuItem
                 icon={<CalendarDays size={14} />}
                 onClick={() => {
@@ -349,6 +377,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
         </Menu>
       </div>
 
+      {open && offer.spontaneous && <CompanyCard offer={offer} onAnalyse={() => setAnalysing(true)} />}
       {open && (
         <div className="or-open">
           <section>
@@ -471,7 +500,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
             <div className="row-gap wrap">
               {offer.url && (
                 <a className="btn sm" href={href(offer.url)} target="_blank" rel="noreferrer">
-                  <ExternalLink size={13} /> Voir l'annonce
+                  <ExternalLink size={13} /> {offer.spontaneous ? 'Page carrières' : "Voir l'annonce"}
                 </a>
               )}
               <button className="btn sm" onClick={() => setIvPlan(true)}>
@@ -500,6 +529,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
       {planner && <FollowUpPlanner offer={offer} onClose={() => setPlanner(false)} />}
       {share && <ShareModal offer={offer} onClose={() => setShare(false)} />}
       {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
+      {analysing && <CompanyAnalysisModal offer={offer} onClose={() => setAnalysing(false)} />}
       {ivPlan && <InterviewPlanner offer={offer} addNext={ivPlan === 'add'} onClose={() => setIvPlan(false)} />}
       {reportFor && <InterviewReport offer={offer} slotId={reportFor} onClose={() => setReportFor(null)} onNext={() => setIvPlan('add')} />}
     </article>
@@ -521,6 +551,8 @@ export function OffersView() {
   })
   const [editing, setEditing] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+  const [spontaneous, setSpontaneous] = useState(false)
+  const [analyseNew, setAnalyseNew] = useState<Offer | null>(null)
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const [doneOpen, setDoneOpen] = useState(false)
@@ -580,19 +612,48 @@ export function OffersView() {
               { value: 'stats', label: <BarChart3 size={15} />, title: 'Statistiques de recherche' },
             ]}
           />
-          <button className="btn" onClick={() => setImporting(true)}>
-            <Link2 size={16} /> Offre depuis un lien
-          </button>
-          <button
-            className="btn"
-            onClick={() => {
-              const o = newOffer()
-              saveOffer(o)
-              setEditing(o.id)
-            }}
+          <Menu
+            align="right"
+            trigger={(t) => (
+              <button className="btn primary" onClick={t}>
+                <Plus size={16} /> Candidature <ChevronDown size={14} />
+              </button>
+            )}
           >
-            <Plus size={16} /> Offre manuelle
-          </button>
+            {(close) => (
+              <>
+                <MenuItem
+                  icon={<Link2 size={15} />}
+                  onClick={() => {
+                    close()
+                    setImporting(true)
+                  }}
+                >
+                  À une offre, depuis son lien
+                </MenuItem>
+                <MenuItem
+                  icon={<Pencil size={15} />}
+                  onClick={() => {
+                    close()
+                    const o = newOffer()
+                    saveOffer(o)
+                    setEditing(o.id)
+                  }}
+                >
+                  À une offre, saisie à la main
+                </MenuItem>
+                <MenuItem
+                  icon={<Building2 size={15} />}
+                  onClick={() => {
+                    close()
+                    setSpontaneous(true)
+                  }}
+                >
+                  Candidature spontanée
+                </MenuItem>
+              </>
+            )}
+          </Menu>
         </div>
       </div>
       {!offers.length ? (
@@ -600,9 +661,14 @@ export function OffersView() {
           <Briefcase size={28} className="muted" />
           <h2>Aucune offre</h2>
           <p>Ajoutez une offre depuis son lien : vous y rattacherez ensuite un CV et une lettre de motivation, et suivrez l'avancement de la candidature.</p>
-          <button className="btn primary" onClick={() => setImporting(true)}>
-            <Link2 size={16} /> Ajouter une offre
-          </button>
+          <div className="row-gap">
+            <button className="btn primary" onClick={() => setImporting(true)}>
+              <Link2 size={16} /> Ajouter une offre
+            </button>
+            <button className="btn" onClick={() => setSpontaneous(true)}>
+              <Building2 size={16} /> Candidature spontanée
+            </button>
+          </div>
         </div>
       ) : view === 'stats' ? (
         <OfferStats offers={offers} />
@@ -669,6 +735,8 @@ export function OffersView() {
         </Modal>
       )}
       <OfferImportModal open={importing} onClose={() => setImporting(false)} />
+      {spontaneous && <SpontaneousModal onClose={() => setSpontaneous(false)} onCreated={(o) => setAnalyseNew(o)} />}
+      {analyseNew && <CompanyAnalysisModal offer={useDocs.getState().offers[analyseNew.id] ?? analyseNew} onClose={() => setAnalyseNew(null)} />}
     </>
   )
 }

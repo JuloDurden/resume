@@ -45,7 +45,7 @@ export function pdfFileName(doc: AnyDoc, offer?: Offer): string {
   const job = doc.job
   const company = offer?.company || job?.company || (doc.kind === 'letter' ? doc.recipient.company : '') || ''
   const rawTitle = offer?.title || job?.title || (doc.kind === 'resume' ? doc.header.title.split('|')[0] : doc.subject?.replace(/^.*\bposte\s+(?:de|d['’])\s*/i, '')) || ''
-  const post = cut(cleanPost(rawTitle, offer?.location))
+  const post = offer?.spontaneous ? (offer.posts?.length === 1 ? cut(cleanPost(offer.posts[0])) : 'Candidature spontanée') : cut(cleanPost(rawTitle, offer?.location))
   return fileSafe([personName(doc.header.name), type, post, company].filter((x) => x && x.trim()).join(' - '))
 }
 

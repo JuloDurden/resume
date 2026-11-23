@@ -34,7 +34,9 @@ const RULES = `Règles impératives :
 const KNOW_ME = `- Si tu as des souvenirs de nos échanges ou un projet qui me concerne (parcours, façon d'écrire, ce que je cherche, ce que je veux mettre en avant ou éviter), sers-t'en pour que la lettre me ressemble. Uniquement des faits que je t'ai donnés moi-même ou qui figurent dans le CV ; en cas de doute, laisse de côté.`
 
 const jobBlock = (job?: JobTarget) =>
-  job?.description?.trim()
+  (job as { spontaneous?: boolean } | undefined)?.spontaneous && job?.description?.trim()
+    ? `\n<candidature_spontanee>\nPas d'annonce : voici ce que j'ai appris de l'entreprise et ses besoins probables. Traite-les comme les attentes d'une offre, sans jamais écrire qu'il existe une annonce.\n${job.company ? `Entreprise : ${job.company}\n` : ''}${job.description.trim()}\n</candidature_spontanee>\n`
+    : job?.description?.trim()
     ? `\n<offre_d_emploi>\n${job.title ? `Intitulé : ${job.title}\n` : ''}${job.company ? `Entreprise : ${job.company}\n` : ''}${job.description.trim()}\n</offre_d_emploi>\n`
     : ''
 
@@ -84,7 +86,8 @@ Ne rajoute aucune information.
 ${cvBlock(doc)}
 ${JSON_SCHEMA}`
     case 'letter':
-      return `Aide-moi à écrire ma lettre de motivation pour l'offre ci-dessous, à partir de mon CV. Elle doit sonner comme si je l'avais écrite moi-même : simple, directe, humaine, à la première personne. Un recruteur doit y entendre quelqu'un, pas lire un résumé de CV.
+      return `Aide-moi à écrire ma lettre de motivation ${(job as { spontaneous?: boolean } | undefined)?.spontaneous ? `pour une candidature spontanée chez ${job?.company || "l'entreprise ci-dessous"}` : "pour l'offre ci-dessous"}, à partir de mon CV.${(job as { spontaneous?: boolean } | undefined)?.spontaneous ? `
+Il n'y a pas d'annonce : ne parle jamais d'« offre » ni d'« annonce ». Pars de leur situation (une actualité, un besoin identifié ci-dessous), montre en quoi mon parcours y répond concrètement, propose le ou les postes visés sans les imposer, et termine en demandant un échange plutôt qu'un entretien. L'objet est « Candidature spontanée - <poste visé> ». Si un interlocuteur est identifié, adresse-lui la lettre.` : ''} Elle doit sonner comme si je l'avais écrite moi-même : simple, directe, humaine, à la première personne. Un recruteur doit y entendre quelqu'un, pas lire un résumé de CV.
 - 220 à 320 mots, 4 ou 5 paragraphes courts, phrases courtes, langage courant.
 - Ouverture : pas de formule convenue (« Je me permets… », « Votre offre a retenu toute mon attention », « Fort de… »). Pars d'une chose vécue dans mon parcours qui fait écho au poste, en une ou deux phrases concrètes, puis relie-la à l'offre.
 - Raconte plutôt qu'énumérer : une ou deux situations réelles tirées du CV, avec un détail concret (l'outil, le contexte, ce que j'ai fait, ce que ça a changé pour les équipes). Ne recopie pas le CV et n'aligne pas ses chiffres, ses outils et ses compétences.

@@ -5,7 +5,7 @@ import type { AnyDoc } from '../../types'
 import { AnyDocView } from '../../render/DocumentView'
 import { PAGE_SIZES, type CvTarget } from '../../render/Paginator'
 import { printDocument } from '../../lib/export'
-import { pdfFileName } from '../../lib/filename'
+import { bundleFileName, pdfFileName } from '../../lib/filename'
 import { useDocs } from '../../store/documents'
 
 interface Props {
@@ -103,4 +103,40 @@ export function usePrint(doc: AnyDoc | undefined) {
   }, [printing, doc])
   const portal = printing && doc ? createPortal(<div className="print-portal"><AnyDocView doc={doc} /></div>, document.body) : null
   return { print, printing, portal }
+}
+
+/** Impression de plusieurs documents à la suite : un seul PDF, chaque document sur ses propres pages. */
+export function usePrintMany() {
+  const [docs, setDocs] = useState<AnyDoc[] | null>(null)
+  const print = useCallback((list: AnyDoc[]) => list.length && setDocs(list), [])
+  useEffect(() => {
+    if (!docs) return
+    let cancelled = false
+    const done = () => {
+      setDocs(null)
+      window.removeEventListener('afterprint', done)
+    }
+    window.addEventListener('afterprint', done)
+    ;(async () => {
+      await document.fonts?.ready
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+      await new Promise((r) => setTimeout(r, 300 + docs.length * 60))
+      if (!cancelled) printDocument(bundleFileName(docs, useDocs.getState().offers), docs[0].style.pageFormat)
+    })()
+    return () => {
+      cancelled = true
+      window.removeEventListener('afterprint', done)
+    }
+  }, [docs])
+  const portal = docs
+    ? createPortal(
+        <div className="print-portal">
+          {docs.map((d) => (
+            <AnyDocView key={d.id} doc={d} />
+          ))}
+        </div>,
+        document.body,
+      )
+    : null
+  return { print, printing: !!docs, portal }
 }

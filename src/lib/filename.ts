@@ -66,3 +66,17 @@ export function shortDocName(doc: AnyDoc, offer?: Offer): string | undefined {
   }
   return next && next !== name ? next : undefined
 }
+
+/** Nom du PDF regroupant plusieurs documents (un document par page). */
+export function bundleFileName(docs: AnyDoc[], offers: Record<string, Offer>): string {
+  if (docs.length === 1) return pdfFileName(docs[0], docs[0].offerId ? offers[docs[0].offerId] : undefined)
+  const who = personName(docs[0]?.header.name)
+  const ids = new Set(docs.map((d) => d.offerId ?? ''))
+  const kinds = new Set(docs.map((d) => d.kind))
+  // un CV et une lettre pour la même offre : le dossier de candidature
+  if (ids.size === 1 && docs[0].offerId && kinds.size === 2 && docs.length === 2) {
+    const both = pdfFileName({ ...docs[0], kind: 'resume' } as AnyDoc, offers[docs[0].offerId])
+    return fileSafe(both.replace(/ - (CV|Resume) - /, (_m, t) => (t === 'CV' ? ' - CV et Lettre de motivation - ' : ' - Resume and Cover Letter - ')))
+  }
+  return fileSafe(`${who} - ${docs.length} documents`)
+}

@@ -7,7 +7,7 @@ import { useDocs } from '../store/documents'
 import { TEMPLATES } from '../data/templates'
 import { newLetter, newResume } from '../data/factory'
 import { DocThumb } from '../components/DocThumb'
-import { DocCard } from '../components/dashboard/DocCard'
+import { DocsBrowser } from '../components/dashboard/DocsBrowser'
 import { SitesView } from '../components/dashboard/SitesView'
 import { OffersView } from '../components/dashboard/OffersView'
 import { JobsView } from '../components/dashboard/JobsView'
@@ -336,18 +336,6 @@ export default function Dashboard() {
         <OffersView />
       ) : (
         <>
-      <div className="dash-filter">
-        <Segmented
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: `Tous (${docs.length})` },
-            { value: 'reference', label: `CV de référence (${refs.length})`, title: 'Vos CV modèles par type de poste, à dupliquer pour chaque candidature' },
-            { value: 'resume', label: `CV (${resumes.length})` },
-            { value: 'letter', label: `Lettres (${docs.length - resumes.length})` },
-          ]}
-        />
-      </div>
 
       {slug && shared && hydrated && docs.length > 0 && (
         <>
@@ -380,11 +368,21 @@ export default function Dashboard() {
         </div>
         </>
       ) : (
-        <div className="doc-grid">
-          {shown.map((d) => (
-            <DocCard key={d.id} doc={d} />
-          ))}
-        </div>
+        <DocsBrowser
+          docs={shown}
+          left={
+            <Segmented
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'all', label: `Tous (${docs.length})` },
+                { value: 'reference', label: `CV de référence (${refs.length})`, title: 'Vos CV modèles par type de poste, à dupliquer pour chaque candidature' },
+                { value: 'resume', label: `CV (${resumes.length})` },
+                { value: 'letter', label: `Lettres (${docs.length - resumes.length})` },
+              ]}
+            />
+          }
+        />
       )}
         </>
       )}

@@ -109,8 +109,8 @@ export function SectionEditor({ section, onChange, onAskClaude, offerId, focusIt
                 value={section.options.skillDetails ?? 'paren'}
                 onChange={(v) => setOpt({ skillDetails: v })}
                 options={[
-                  { value: 'paren', label: 'Entre parenthèses' },
-                  { value: 'colon', label: 'Après deux-points' },
+                  { value: 'paren', label: 'Comme saisi' },
+                  { value: 'colon', label: 'Tout après deux-points' },
                   { value: 'sub', label: 'En dessous' },
                 ]}
               />

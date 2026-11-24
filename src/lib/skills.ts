@@ -4,6 +4,8 @@
 export interface SkillParts {
   name: string
   details: string[]
+  /** façon dont les précisions sont écrites */
+  style: 'paren' | 'colon'
 }
 
 /** Profondeur de parenthèses ouvertes à la fin du texte (0 = aucune parenthèse ouverte). */
@@ -44,10 +46,32 @@ export function splitTop(s: string, seps = ',;\n'): string[] {
   return out.map((x) => x.trim()).filter(Boolean)
 }
 
-/** Sépare le nom et les précisions finales entre parenthèses. */
+/** Position du premier « : » (suivi d'une espace) hors parenthèses, ou -1. */
+function topColon(s: string): number {
+  let d = 0
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (c === '(') d++
+    else if (c === ')' && d > 0) d--
+    else if (d === 0 && c === ':' && /\s/.test(s[i + 1] ?? '') && i > 0) return i
+  }
+  return -1
+}
+
+/**
+ * Sépare le nom et ses précisions, écrites de deux façons :
+ * « Microsoft 365 (Teams, Intune) » ou « Support fonctionnel : qualification des anomalies, suivi (ticketing) ».
+ * Une précision peut elle-même avoir les siennes entre parenthèses.
+ */
 export function parseSkill(raw: string): SkillParts {
   const s = raw.trim()
-  if (!s.endsWith(')')) return { name: s, details: [] }
+  const c = topColon(s)
+  if (c > 0) {
+    const name = s.slice(0, c).trim()
+    const details = splitTop(s.slice(c + 1))
+    if (name && details.length) return { name, details, style: 'colon' }
+  }
+  if (!s.endsWith(')')) return { name: s, details: [], style: 'paren' }
   // retrouve la parenthèse ouvrante qui ferme en fin de texte
   let d = 0
   for (let i = s.length - 1; i >= 0; i--) {
@@ -56,18 +80,24 @@ export function parseSkill(raw: string): SkillParts {
       d--
       if (d === 0) {
         const name = s.slice(0, i).trim()
-        if (!name) return { name: s, details: [] }
-        return { name, details: splitTop(s.slice(i + 1, -1)) }
+        if (!name) return { name: s, details: [], style: 'paren' }
+        return { name, details: splitTop(s.slice(i + 1, -1)), style: 'paren' }
       }
     }
   }
-  return { name: s, details: [] }
+  return { name: s, details: [], style: 'paren' }
 }
 
-export const formatSkill = (name: string, details: string[]) => {
+export type NestStyle = 'paren' | 'colon'
+
+export const formatSkill = (name: string, details: string[], style: NestStyle = 'paren') => {
   const d = details.map((x) => x.trim()).filter(Boolean)
-  return d.length ? `${name.trim()} (${d.join(', ')})` : name.trim()
+  if (!d.length) return name.trim()
+  return style === 'colon' ? `${name.trim()} : ${d.join(', ')}` : `${name.trim()} (${d.join(', ')})`
 }
+
+/** Nombre total de compétences imbriquées (précisions des précisions comprises). */
+export const nestedCount = (raw: string): number => parseSkill(raw).details.reduce((n, d) => n + 1 + nestedCount(d), 0)
 
 export type SkillDetailsDisplay = 'paren' | 'colon' | 'sub'
 
@@ -84,18 +114,16 @@ export function skillsInline(tags: string[], mode: SkillDetailsDisplay = 'paren'
   return tags.map((t) => skillText(t, mode)).join(withDetails && mode !== 'paren' ? ' · ' : ', ')
 }
 
-/** Toutes les compétences d'une liste, précisions comprises (pour l'analyse de mots-clés). */
-export const skillTerms = (tags: string[]) => tags.flatMap((t) => {
-  const p = parseSkill(t)
-  return [p.name, ...p.details]
-})
+/** Toutes les compétences d'une liste, précisions imbriquées comprises (pour l'analyse de mots-clés). */
+export const skillTerms = (tags: string[]): string[] =>
+  tags.flatMap((t) => {
+    const p = parseSkill(t)
+    return [p.name, ...skillTerms(p.details)]
+  })
 
-/** « Reporting (Excel - Power BI) » ou « Reporting : Excel - Power BI » → « Reporting (Excel, Power BI) » : anciennes façons d'éviter les virgules. */
+/** « Reporting (Excel - Power BI) » ou « Reporting : Excel - Power BI » → précisions séparées par des virgules : anciennes façons d'éviter les virgules. */
 export function dashesToDetails(raw: string): string {
   const p = parseSkill(raw)
-  // « Gestion économique : commandes - stocks - marge »
-  const colon = !p.details.length && raw.match(/^([^:()]+?)\s+:\s+([^:()]+\s[-–]\s[^:()]+)$/)
-  if (colon) return formatSkill(colon[1], colon[2].split(/\s[-–]\s/))
   if (p.details.length !== 1 || !/\s[-–]\s/.test(p.details[0])) return raw
-  return formatSkill(p.name, p.details[0].split(/\s[-–]\s/))
+  return formatSkill(p.name, p.details[0].split(/\s[-–]\s/), p.style)
 }

@@ -5845,3 +5845,11 @@ button.followup-badge {
 :root[data-theme='dark'] .or-log .log-upd {
   color: rgb(140, 227, 175);
 }
+.tag-preview {
+  display: block;
+  margin-top: 6px;
+  font-style: italic;
+}
+.tag-edit .tag-edit {
+  background: var(--panel);
+}

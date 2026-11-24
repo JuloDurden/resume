@@ -3,8 +3,8 @@ import { ArrowDown, ArrowUp, ImagePlus, Plus, Sparkles, Trash2, X } from 'lucide
 import type { DateValue } from '../../types'
 import { MONTH_OPTIONS } from '../../lib/dates'
 import { Icon, PICKABLE_ICONS } from '../../lib/icons'
-import { TextArea, Toggle, toast } from '../ui'
-import { formatSkill, parseSkill } from '../../lib/skills'
+import { Segmented, TextArea, Toggle, toast } from '../ui'
+import { formatSkill, nestedCount, parseSkill } from '../../lib/skills'
 
 export function DateInput({ value, onChange, disabled }: { value?: DateValue; onChange: (v: DateValue | undefined) => void; disabled?: boolean }) {
   return (
@@ -32,7 +32,7 @@ export function DateInput({ value, onChange, disabled }: { value?: DateValue; on
   )
 }
 
-export function TagsInput({ value, onChange, placeholder, details = false }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string; details?: boolean }) {
+export function TagsInput({ value, onChange, placeholder, details = false, nested = false }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string; details?: boolean; nested?: boolean }) {
   const [text, setText] = useState('')
   const [drag, setDrag] = useState<number | null>(null)
   const [edit, setEditRaw] = useState<number | null>(null)
@@ -64,7 +64,7 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
     <div className="tags-wrap">
       <div className="tags-input">
         {value.map((t, i) => {
-          const p = details ? parseSkill(t) : { name: t, details: [] }
+          const p = details ? parseSkill(t) : { name: t, details: [], style: 'paren' as const }
           return (
             <span
               key={`${t}-${i}`}
@@ -91,7 +91,7 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
                 onClick={() => setEdit(edit === i ? null : i)}
               >
                 {p.name}
-                {p.details.length > 0 && <em className="chip-count">{p.details.length}</em>}
+                {p.details.length > 0 && <em className="chip-count" title={`${nestedCount(t)} précision(s) imbriquée(s)`}>{nestedCount(t)}</em>}
               </button>
               <button
                 type="button"
@@ -134,15 +134,36 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
               value={draft ?? (details ? cur.name : value[edit])}
               onChange={(e) => {
                 setDraft(e.target.value)
-                set(edit, details ? formatSkill(e.target.value, cur.details) : e.target.value.trim())
+                set(edit, details ? formatSkill(e.target.value, cur.details, cur.style) : e.target.value.trim())
               }}
               onKeyDown={(e) => e.key === 'Enter' && setEdit(null)}
             />
           </label>
           {details && (
             <div className="field">
-              <span className="field-label">Précisions (outils, versions, domaines)</span>
-              <TagsInput value={cur.details} onChange={(d) => set(edit, formatSkill(cur.name, d))} placeholder="Une précision, puis Entrée" />
+              <span className="field-label">{nested ? 'Précisions de cette précision (entre parenthèses)' : 'Précisions (outils, tâches, domaines)'}</span>
+              <TagsInput
+                value={cur.details}
+                onChange={(d) => set(edit, formatSkill(cur.name, d, nested ? 'paren' : cur.style))}
+                placeholder="Une précision, puis Entrée"
+                details={!nested}
+                nested
+              />
+              {!nested && <span className="muted small">Cliquez sur une précision pour lui ajouter les siennes, par exemple « suivi de résolution (ticketing) ».</span>}
+            </div>
+          )}
+          {details && !nested && cur.details.length > 0 && (
+            <div className="field">
+              <span className="field-label">Imbrication</span>
+              <Segmented
+                value={cur.style}
+                onChange={(st) => set(edit, formatSkill(cur.name, cur.details, st))}
+                options={[
+                  { value: 'paren', label: 'Entre parenthèses' },
+                  { value: 'colon', label: 'Après deux-points' },
+                ]}
+              />
+              <span className="muted small tag-preview">{value[edit]}</span>
             </div>
           )}
           <button type="button" className="btn sm" onClick={() => setEdit(null)}>

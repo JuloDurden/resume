@@ -97,7 +97,9 @@ export function prettyName(raw: string): string {
       if (/^\(/.test(w) || (bare.length <= 3 && !SMALL.has(bare.toLowerCase())) || /\d/.test(w)) return w
       const low = w.toLowerCase()
       if (i > 0 && SMALL.has(bare.toLowerCase())) return low
-      return low.replace(/(^|[-'’(])(\p{L})/gu, (_m, a: string, b: string) => a + b.toUpperCase())
+      const cap = low.replace(/(^|[-'’(])(\p{L})/gu, (_m, a: string, b: string) => a + b.toUpperCase())
+      // « D'Information » → « d'Information » (sauf en tête)
+      return i > 0 ? cap.replace(/^([DL])(['’])/, (_m, l: string, q: string) => l.toLowerCase() + q) : cap
     })
     .join(' ')
 }

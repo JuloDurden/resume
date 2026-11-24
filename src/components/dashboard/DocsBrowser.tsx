@@ -330,6 +330,8 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
     </div>
   )
 
+  // grille par candidature : des tuiles (CV et lettre côte à côte), plusieurs par ligne ; grille par profil : empilés ou côte à côte au choix
+  const fixed = view === 'grid' && (groupBy === 'offer' || layout === 'side')
   return (
     <div className="docs-browser">
       <div className="docs-tools">
@@ -374,7 +376,7 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
             </>
           )}
         </Menu>
-        {groupBy !== 'none' && view === 'grid' && (
+        {groupBy === 'profile' && view === 'grid' && (
           <Segmented
             value={layout}
             onChange={setLayout}
@@ -395,9 +397,9 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
       </div>
 
       {groups ? (
-        <div className={`doc-groups${view === 'grid' && layout === 'side' ? ' side' : ''}`} style={{ '--col': `${zoom + 50}px` } as React.CSSProperties}>
+        <div className={`doc-groups${fixed ? (groupBy === 'offer' ? ' tiles' : ' side') : ''}`} style={{ '--col': `${zoom + 50}px`, '--tile': `${2 * (zoom + 24) + 50}px` } as React.CSSProperties}>
           {groups.map((g) => {
-            const closed = folded.has(g.id) && !(view === 'grid' && layout === 'side')
+            const closed = folded.has(g.id) && !fixed
             return (
               <section key={g.id} className={`doc-group${closed ? ' closed' : ''}`}>
                 <button className="doc-group-head" onClick={() => setFolded((f) => { const n = new Set(f); if (n.has(g.id)) n.delete(g.id); else n.add(g.id); return n })} aria-expanded={!closed}>
@@ -405,7 +407,7 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
                   <strong title={g.label}>{g.label}</strong>
                   <span className="muted small">{g.sub}</span>
                   <span className="docs-tools-gap" />
-                  {!(view === 'grid' && layout === 'side') && <ChevronDown size={16} className="chev" />}
+                  {!fixed && <ChevronDown size={16} className="chev" />}
                 </button>
                 {!closed && (
                   <div className="doc-group-body">

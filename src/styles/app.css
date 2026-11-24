@@ -6378,3 +6378,18 @@ button.followup-badge {
     flex-wrap: wrap;
   }
 }
+/* grille par candidature : tuiles de la largeur de deux cartes, autant que l'écran en contient */
+.doc-groups.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile, 520px)), 1fr));
+  align-items: start;
+}
+.doc-groups.tiles .doc-group-head {
+  cursor: default;
+}
+.doc-groups.tiles .doc-group-head strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}

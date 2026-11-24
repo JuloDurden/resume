@@ -8,6 +8,9 @@ import { ShowcaseDoc, ShowcasePage } from './pages/Showcase'
 import { Toasts } from './components/ui'
 import { UpdateBanner } from './components/UpdateBanner'
 import { RomeDrawer } from './components/RomeDrawer'
+import { initTheme } from './lib/theme'
+
+initTheme()
 import './styles/app.css'
 import { startAutoSync } from './store/sync'
 

@@ -23,3 +23,11 @@ describe('réponses du recruteur', () => {
     expect(mail.body).toContain('votre message du 23 novembre')
   })
 })
+
+describe('réponse saisie le jour de la relance', () => {
+  it('compte après la relance', () => {
+    const o = { id: 'o', createdAt: day(2026, 11, 1), updatedAt: 0, status: 'applied', statusAt: { applied: day(2026, 11, 4) }, followUpDays: 15, followUps: [new Date(2026, 10, 23, 15).getTime()], updates: [{ id: 'u', at: day(2026, 11, 23), kind: 'reply' as const }] } as Offer
+    expect(nextFollowUp(o)).toBe(startOfDay(day(2026, 12, 8)))
+    expect(followUpEmail(o).subject).toContain('Suivi de ma candidature')
+  })
+})

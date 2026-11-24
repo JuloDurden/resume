@@ -234,7 +234,9 @@ export function RecruiterUpdateModal({ offer, onClose, onInterview }: { offer: O
   const waitUntil = wait === 'date' ? fromInput(waitDate) : w?.days ? at + w.days * 86400000 : undefined
   const fmt = (t: number) => new Date(t).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
   const save = () => {
-    const u = { id: uid(), at, kind, text: text.trim() || undefined, waitUntil }
+    // une réponse se rattache à la dernière relance envoyée avant elle (le jour même compris)
+    const fu = kind === 'reply' ? [...(offer.followUps ?? [])].filter((t) => startOfDay(t) <= startOfDay(at)).sort((a, b) => b - a)[0] : undefined
+    const u = { id: uid(), at: fu ? Math.max(at, fu + 60000) : at, kind, text: text.trim() || undefined, waitUntil, afterFollowUp: fu }
     const status = outcome === 'interview' ? 'interview' : outcome === 'rejected' ? 'rejected' : offer.status === 'todo' ? 'applied' : offer.status
     // après un entretien, le délai annoncé devient la date de retour attendue
     const answerBy = waitUntil && (status === 'interview' || offer.status === 'interview') ? waitUntil : offer.answerBy

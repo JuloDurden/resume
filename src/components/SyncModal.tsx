@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CheckCircle2, CloudOff, ExternalLink, Globe, KeyRound, LogOut, RefreshCw } from 'lucide-react'
+import { Cloud, CheckCircle2, CloudOff, ExternalLink, Globe, KeyRound, LogOut, RefreshCw } from 'lucide-react'
 import { useDocs } from '../store/documents'
 import { useSync } from '../store/sync'
 import { appRepoFromLocation, checkRepo, createRepo, loadConfig, publishShowcase, saveConfig, whoAmI, type SyncConfig } from '../lib/github'
@@ -220,12 +220,21 @@ function ReplaceToken({ cfg, onDone }: { cfg: SyncConfig; onDone: () => void }) 
 }
 
 export function SyncModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Sauvegarde automatique sur GitHub" wide>
+      <SyncPanel />
+    </Modal>
+  )
+}
+
+/** Réglage de la sauvegarde GitHub (connexion, état, token). */
+export function SyncPanel() {
   const { status, message, lastSync, run } = useSync()
   const [, force] = useState(0)
   const [replacing, setReplacing] = useState(false)
   const cfg = loadConfig()
   return (
-    <Modal open={open} onClose={onClose} title="Sauvegarde automatique sur GitHub" wide>
+    <>
       {!cfg ? (
         <Setup onDone={() => force((x) => x + 1)} />
       ) : (
@@ -263,17 +272,18 @@ export function SyncModal({ open, onClose }: { open: boolean; onClose: () => voi
           <ShowcasePublisher cfg={cfg} />
         </div>
       )}
-    </Modal>
+    </>
   )
 }
 
+/** Voyant de sauvegarde : un clic ouvre les réglages. */
 export function SyncButton({ onClick }: { onClick: () => void }) {
-  const status = useSync((s) => s.status)
-  const label = { off: 'Sauvegarde GitHub', idle: 'Synchronisé', syncing: 'Synchronisation...', error: 'Erreur de synchro' }[status]
+  const { status, lastSync, message } = useSync()
+  const label = { off: 'Sauvegarde GitHub désactivée', idle: `Synchronisé ${ago(lastSync)}`, syncing: 'Synchronisation en cours', error: `Erreur de synchronisation : ${message}` }[status]
   return (
-    <button className={`btn sync-btn ${status}`} onClick={onClick} title="Sauvegarde automatique sur GitHub">
-      {status === 'error' || status === 'off' ? <CloudOff size={16} /> : <RefreshCw size={16} className={status === 'syncing' ? 'spin' : ''} />}
-      {label}
+    <button className={`sync-dot ${status}`} onClick={onClick} title={`${label}. Cliquer pour les réglages.`} aria-label={label}>
+      {status === 'error' || status === 'off' ? <CloudOff size={17} /> : status === 'syncing' ? <RefreshCw size={16} className="spin" /> : <Cloud size={17} />}
+      <span>{status === 'idle' ? 'Synchronisé' : status === 'syncing' ? 'Synchro…' : status === 'error' ? 'Erreur' : 'Non sauvegardé'}</span>
     </button>
   )
 }

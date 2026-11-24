@@ -6,6 +6,7 @@ import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, Inter
 import { FEELING, MODE_LABEL, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
 import { announcedBy, followUpsSinceUpdate, nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
+import { MetroTimeline } from './MetroTimeline'
 import { CompanyAnalysisModal, CompanyCard, SpontaneousModal } from './SpontaneousTools'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
@@ -392,6 +393,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
       </div>
 
       {open && offer.spontaneous && <CompanyCard offer={offer} onAnalyse={() => setAnalysing(true)} />}
+      {open && !narrow && <MetroTimeline offer={offer} />}
       {open && (
         <div className="or-open">
           <section>
@@ -404,14 +406,37 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                 </button>
               ))}
             </div>
-            <div className="row-gap">
-              <button className="btn sm" onClick={() => setCvModal(true)} disabled={!resumes.length}>
-                <FilePlus2 size={14} /> CV
-              </button>
-              <button className="btn sm" onClick={createLetter}>
-                <FileSignature size={14} /> Lettre
-              </button>
-            </div>
+            <Menu
+              trigger={(t) => (
+                <button className="btn sm" onClick={t}>
+                  <Plus size={14} /> Document <ChevronDown size={13} />
+                </button>
+              )}
+            >
+              {(close) => (
+                <>
+                  <MenuItem
+                    icon={<FilePlus2 size={14} />}
+                    onClick={() => {
+                      close()
+                      if (resumes.length) setCvModal(true)
+                      else toast.error("Créez d'abord un CV dans l'onglet Documents")
+                    }}
+                  >
+                    CV adapté à cette offre
+                  </MenuItem>
+                  <MenuItem
+                    icon={<FileSignature size={14} />}
+                    onClick={() => {
+                      close()
+                      createLetter()
+                    }}
+                  >
+                    Lettre de motivation
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
           </section>
           <section>
             <h4>Suivi</h4>
@@ -485,25 +510,6 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                 </p>
               </div>
             )}
-            <ul className="or-log">
-              {[
-                { at: offer.createdAt, k: 'add', text: 'Ajoutée' },
-                ...(sent ? [{ at: sent, k: 'sent', text: 'Candidature envoyée' }] : []),
-                ...(offer.followUps ?? []).map((t) => ({ at: t, k: 'fu', text: 'Relance envoyée' })),
-                ...(offer.updates ?? []).map((u) => ({
-                  at: u.at,
-                  k: 'upd',
-                  text: `${u.kind === 'reply' ? 'Réponse à la relance' : 'Message du recruteur'}${u.text ? ` : ${u.text.replace(/[.\s]+$/, '')}` : ''}${u.waitUntil ? ` (retour annoncé le ${new Date(u.waitUntil).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })})` : ''}`,
-                })),
-              ]
-                .sort((a, b) => a.at - b.at)
-                .map((e, i) => (
-                  <li key={i} className={`log-${e.k}`}>
-                    <span className="log-date">{new Date(e.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span> {e.text}
-                  </li>
-                ))}
-            </ul>
-
             {status === 'applied' && (
               <p>
                 {fu ? fu.title.split('.')[0] : 'Pas de relance prévue'}{' '}

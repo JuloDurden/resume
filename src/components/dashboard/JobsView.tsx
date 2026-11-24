@@ -1094,6 +1094,12 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
       return 'compact'
     }
   })
+  // réglage changé depuis la fenêtre Réglages
+  useEffect(() => {
+    const on = (e: Event) => setDensity((e as CustomEvent<'compact' | 'detailed'>).detail)
+    window.addEventListener('resume-density', on)
+    return () => window.removeEventListener('resume-density', on)
+  }, [])
   // carte ouverte (une seule à la fois) : les autres s'atténuent
   const [openId, setOpenId] = useState<string | null>(null)
   const [lowOpen, setLowOpen] = useState(false)

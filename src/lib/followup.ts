@@ -50,7 +50,15 @@ export const followUpsSinceUpdate = (o: Offer) => {
 }
 
 /** Dernière réponse ou nouvelle du recruteur. */
-export const lastUpdate = (o: Offer) => [...(o.updates ?? [])].sort((a, b) => b.at - a.at)[0]
+export const lastUpdate = (o: Offer) =>
+  (o.updates ?? [])
+    .map((u) => {
+      // une réponse vient après la relance à laquelle elle répond, même saisie à une heure antérieure le même jour
+      if (u.kind !== 'reply') return u
+      const fu = u.afterFollowUp ?? [...(o.followUps ?? [])].filter((t) => startOfDay(t) <= startOfDay(u.at)).sort((a, b) => b - a)[0]
+      return fu && fu >= u.at ? { ...u, at: fu + 60000 } : u
+    })
+    .sort((a, b) => b.at - a.at)[0]
 
 /** Retour annoncé par le recruteur et pas encore passé. */
 export const announcedBy = (o: Offer, now = Date.now()) => {

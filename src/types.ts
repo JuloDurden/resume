@@ -248,6 +248,8 @@ export interface RecruiterUpdate {
   text?: string
   /** date de retour annoncée (« étudiée sous 3 semaines ») */
   waitUntil?: number
+  /** relance à laquelle répond ce message */
+  afterFollowUp?: number
 }
 
 export type InterviewMode = 'site' | 'phone' | 'video'

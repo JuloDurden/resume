@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Globe, BellRing, Briefcase, DatabaseBackup, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files, Upload } from 'lucide-react'
+import { ChevronDown, Plus, Settings, Globe, BellRing, Briefcase, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files } from 'lucide-react'
 import type { ResumeDoc } from '../types'
 import { uid } from '../lib/ids'
 import { useDocs } from '../store/documents'
 import { TEMPLATES } from '../data/templates'
 import { newLetter, newResume } from '../data/factory'
-import { download, parseBackup, toJson } from '../lib/export'
 import { DocThumb } from '../components/DocThumb'
 import { DocCard } from '../components/dashboard/DocCard'
 import { SitesView } from '../components/dashboard/SitesView'
@@ -14,13 +13,21 @@ import { OffersView } from '../components/dashboard/OffersView'
 import { JobsView } from '../components/dashboard/JobsView'
 import { useFeed } from '../store/feed'
 import { PdfImportModal } from '../components/PdfImportModal'
-import { SyncButton, SyncModal } from '../components/SyncModal'
+import { SyncButton } from '../components/SyncModal'
+import { SettingsModal, downloadBackup, importBackupFile, type SettingsTab } from '../components/SettingsModal'
 import { SharedIntro, ShowcaseGrid, ShowcaseIntro, useSharedShowcase, useShowcase } from './Showcase'
 import { useSync } from '../store/sync'
-import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput, toast } from '../components/ui'
+import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput } from '../components/ui'
 
 
-function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+type CvSource = 'blank' | 'pdf' | 'json'
+
+/** Création de CV : de zéro (modèle ou CV de référence), depuis un CV PDF lu par Claude, ou depuis une sauvegarde JSON. */
+function NewResumeModal({ open, onClose, onPdf, onJson, initial = 'blank' }: { open: boolean; onClose: () => void; onPdf: () => void; onJson: () => void; initial?: CvSource }) {
+  const [source, setSource] = useState<CvSource>(initial)
+  useEffect(() => {
+    if (open) setSource(initial)
+  }, [open, initial])
   const [tpl, setTpl] = useState('epure')
   const [sample, setSample] = useState(true)
   const [name, setName] = useState('Mon CV')
@@ -35,12 +42,33 @@ function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void 
       open={open}
       onClose={onClose}
       wide
-      title="Nouveau CV"
+      title="Création de CV"
       footer={
         <>
           <button className="btn" onClick={onClose}>
             Annuler
           </button>
+          {source === 'pdf' ? (
+            <button
+              className="btn primary"
+              onClick={() => {
+                onClose()
+                onPdf()
+              }}
+            >
+              <FileUp size={16} /> Continuer avec Claude
+            </button>
+          ) : source === 'json' ? (
+            <button
+              className="btn primary"
+              onClick={() => {
+                onClose()
+                onJson()
+              }}
+            >
+              <FileJson size={16} /> Choisir le fichier JSON
+            </button>
+          ) : (
           <button
             className="btn primary"
             onClick={() => {
@@ -54,10 +82,38 @@ function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void 
           >
             Créer le CV
           </button>
+          )}
         </>
       }
     >
       <div className="form-stack">
+        <Segmented
+          value={source}
+          onChange={setSource}
+          options={[
+            { value: 'blank', label: 'De zéro' },
+            { value: 'pdf', label: 'Depuis un CV PDF (Claude)' },
+            { value: 'json', label: 'Depuis une sauvegarde JSON' },
+          ]}
+        />
+        {source === 'pdf' ? (
+          <div className="source-help">
+            <FileUp size={28} />
+            <div>
+              <strong>Votre CV PDF, remis en forme dans Resume</strong>
+              <p className="muted">Claude lit le PDF et renvoie son contenu. Vous collez sa réponse, le CV est créé, modifiable section par section.</p>
+            </div>
+          </div>
+        ) : source === 'json' ? (
+          <div className="source-help">
+            <FileJson size={28} />
+            <div>
+              <strong>Un fichier exporté depuis Resume</strong>
+              <p className="muted">Un CV exporté en JSON ou une sauvegarde complète : les documents absents sont ajoutés, ceux déjà présents ne sont pas dupliqués.</p>
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="grid-2">
           <Field label="Nom du document">
             <TextInput value={name} onChange={setName} autoFocus />
@@ -108,6 +164,8 @@ function NewResumeModal({ open, onClose }: { open: boolean; onClose: () => void 
             </button>
           ))}
         </div>
+        </>
+        )}
       </div>
     </Modal>
   )
@@ -165,7 +223,6 @@ export default function Dashboard() {
   const docsMap = useDocs((s) => s.docs)
   const hydrated = useDocs((s) => s.hydrated)
   const lastBackup = useDocs((s) => s.lastBackup)
-  const { importDocs, markBackup } = useDocs.getState()
   const [filter, setFilter] = useState<'all' | 'reference' | 'resume' | 'letter'>('all')
   const [view, setView] = useState<'docs' | 'offers' | 'jobs' | 'sites'>(() => {
     const v = localStorage.getItem('resume-dash-view')
@@ -174,7 +231,8 @@ export default function Dashboard() {
   const newJobs = useFeed((s) => (s.feed?.items ?? []).filter((i) => i.firstSeen && new Date(i.firstSeen).getTime() > s.seenAt).length)
   const offersCount = useDocs((s) => Object.keys(s.offers).length)
   useEffect(() => localStorage.setItem('resume-dash-view', view), [view])
-  const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | 'sync' | null>(null)
+  const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | null>(null)
+  const [settings, setSettings] = useState<SettingsTab | null>(null)
   // lien donné à un recruteur (/c/<identifiant>) : la vitrine montre le CV et la lettre de cette candidature
   const { slug } = useParams()
   const vitrine = useShowcase()
@@ -190,20 +248,8 @@ export default function Dashboard() {
   const shown = docs.filter((d) => filter === 'all' || (filter === 'reference' ? d.kind === 'resume' && d.reference : d.kind === filter))
   const needBackup = !syncOn && docs.length > 0 && (!lastBackup || Date.now() - lastBackup > 14 * 86400000)
 
-  const backup = () => {
-    download(`resume-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, toJson(docs, Object.values(useDocs.getState().offers)))
-    markBackup()
-    toast.ok(`${docs.length} document(s) sauvegardé(s)`)
-  }
-  const onImport = async (f: File) => {
-    try {
-      const b = parseBackup(await f.text())
-      const n = importDocs(b.docs, b.offers)
-      toast.ok(n ? `${n} document(s) importé(s)` : 'Ces documents sont déjà présents')
-    } catch (e) {
-      toast.error(`Import impossible : ${e instanceof Error ? e.message : 'fichier invalide'}`)
-    }
-  }
+  const backup = downloadBackup
+  const onImport = importBackupFile
 
   return (
     <div className="dashboard">
@@ -213,47 +259,41 @@ export default function Dashboard() {
           <span>Resume</span>
         </div>
         <div className="dash-actions">
+          <SyncButton onClick={() => setSettings('sync')} />
+          <button className="icon-btn" onClick={() => setSettings('ui')} title="Réglages" aria-label="Réglages">
+            <Settings size={18} />
+          </button>
           <Menu
             align="right"
             trigger={(t) => (
-              <button className="btn" onClick={t}>
-                <Upload size={16} /> Importer
+              <button className="btn primary" onClick={t}>
+                <Plus size={16} /> Nouveau <ChevronDown size={14} />
               </button>
             )}
           >
             {(close) => (
               <>
                 <MenuItem
-                  icon={<FileUp size={15} />}
+                  icon={<FilePlus2 size={15} />}
                   onClick={() => {
                     close()
-                    setModal('pdf')
+                    setModal('resume')
                   }}
                 >
-                  Un CV PDF (avec Claude)
+                  CV…
                 </MenuItem>
                 <MenuItem
-                  icon={<FileJson size={15} />}
+                  icon={<FileSignature size={15} />}
                   onClick={() => {
                     close()
-                    fileRef.current?.click()
+                    setModal('letter')
                   }}
                 >
-                  Une sauvegarde JSON
+                  Lettre de motivation…
                 </MenuItem>
               </>
             )}
           </Menu>
-          <SyncButton onClick={() => setModal('sync')} />
-          <button className="btn" onClick={backup} disabled={!docs.length} title="Télécharger une sauvegarde JSON complète">
-            <DatabaseBackup size={16} /> JSON
-          </button>
-          <button className="btn" onClick={() => setModal('letter')}>
-            <FileSignature size={16} /> Nouvelle lettre
-          </button>
-          <button className="btn primary" onClick={() => setModal('resume')}>
-            <FilePlus2 size={16} /> Nouveau CV
-          </button>
         </div>
         <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0]).finally(() => (e.target.value = ''))} />
       </header>
@@ -261,7 +301,7 @@ export default function Dashboard() {
       {needBackup && (
         <div className="notice info">
           Vos documents sont enregistrés uniquement dans ce navigateur.{' '}
-          <button className="link" onClick={() => setModal('sync')}>
+          <button className="link" onClick={() => setSettings('sync')}>
             Activez la sauvegarde automatique sur GitHub
           </button>{' '}
           ou{' '}
@@ -327,15 +367,12 @@ export default function Dashboard() {
         )}
         <div className="empty-state">
           <h2>{showcase ? 'Votre espace' : 'Bienvenue'}</h2>
-          <p>Créez votre premier CV à partir d'un modèle, importez un CV PDF existant, ou restaurez une sauvegarde.</p>
+          <p>Créez votre premier CV : à partir d'un modèle, d'un CV PDF existant ou d'une sauvegarde.</p>
           <div className="row-gap">
             <button className="btn primary" onClick={() => setModal('resume')}>
               <FilePlus2 size={16} /> Créer un CV
             </button>
-            <button className="btn" onClick={() => setModal('pdf')}>
-              <FileUp size={16} /> Importer un CV PDF
-            </button>
-            <button className="btn" onClick={() => setModal('sync')}>
+            <button className="btn" onClick={() => setSettings('sync')}>
               <RefreshCw size={16} /> Retrouver ma sauvegarde GitHub
             </button>
           </div>
@@ -351,10 +388,10 @@ export default function Dashboard() {
         </>
       )}
 
-      <NewResumeModal open={modal === 'resume'} onClose={() => setModal(null)} />
+      <NewResumeModal open={modal === 'resume'} onClose={() => setModal(null)} onPdf={() => setModal('pdf')} onJson={() => fileRef.current?.click()} />
       {modal === 'letter' && <NewLetterModal open onClose={() => setModal(null)} resumes={resumes} />}
       <PdfImportModal open={modal === 'pdf'} onClose={() => setModal(null)} />
-      <SyncModal open={modal === 'sync'} onClose={() => setModal(null)} />
+      <SettingsModal open={settings !== null} tab={settings ?? 'sync'} onClose={() => setSettings(null)} />
     </div>
   )
 }

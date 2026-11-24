@@ -5362,6 +5362,26 @@ button.followup-badge {
   stroke: #e8e8ea;
 }
 
+:root[data-theme='dark'] .toast,
+:root[data-theme='dark'] .update-banner {
+  background: #26262b;
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.65);
+  border-radius: 999px;
+}
+:root[data-theme='dark'] .toast {
+  padding: 10px 18px;
+}
+:root[data-theme='dark'] .toast.ok::before {
+  color: var(--accent);
+}
+:root[data-theme='dark'] .toast.error {
+  background: #3a1715;
+  border-color: rgba(255, 138, 128, 0.35);
+  color: #ffd2cd;
+}
+
 /* ---------- thème sombre : généré à partir des couleurs claires (teintes translucides, textes éclaircis) ---------- */
 :root[data-theme='dark'] .btn:hover:not(:disabled) {
   border-color: rgba(139, 150, 167, 0.4);

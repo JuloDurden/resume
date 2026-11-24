@@ -1,11 +1,14 @@
-import { useState } from 'react'
-import { Send, AlertTriangle, Building2, CheckCircle2, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
+import { lazy, Suspense, useState } from 'react'
+import { Send, AlertTriangle, Building2, CheckCircle2, Clock, ExternalLink, Globe, Map as MapIcon, MapPinOff, Plus, Search, Trash2 } from 'lucide-react'
 import type { Alert, Company } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
 import { uid } from '../../lib/ids'
 import { searchLinks } from '../../lib/watch'
-import { Field, TextInput, Toggle, toast } from '../ui'
+import { guessBoard } from '../../lib/places'
+import { Field, Segmented, TextInput, Toggle, toast } from '../ui'
+
+const CompanyMap = lazy(() => import('./CompanyMap').then((m) => ({ default: m.CompanyMap })))
 import { CompanyAnalysisModal, SpontaneousModal } from './SpontaneousTools'
 import type { Offer } from '../../types'
 
@@ -26,7 +29,7 @@ function linkLines(alerts: Alert[]) {
 const NONE: Company[] = []
 const ATS_HINT = /lever\.co|greenhouse\.io|smartrecruiters\.com|recruitee\.com|apply\.workable\.com|teamtailor\.com/
 
-function CompanyRow({ c, onChange, onDelete, onApply }: { c: Company; onChange: (p: Partial<Company>) => void; onDelete: () => void; onApply: () => void }) {
+function CompanyRow({ c, onChange, onDelete, onApply, board }: { c: Company; onChange: (p: Partial<Company>) => void; onDelete: () => void; onApply: () => void; board?: boolean }) {
   const st = useFeed((s) => s.feed?.sources?.companies?.[c.id])
   const n = useFeed((s) => (s.feed?.items ?? []).filter((i) => i.id.startsWith(`co-${c.id}-`)).length)
   return (
@@ -54,9 +57,20 @@ function CompanyRow({ c, onChange, onDelete, onApply }: { c: Company; onChange: 
           )}
         </span>
       </div>
-      <button className="btn sm" onClick={onApply} title="Candidature spontanée chez cette entreprise, avec analyse de ses besoins par Claude">
-        <Send size={13} /> Candidature spontanée
-      </button>
+      {board ? (
+        <button className="btn sm ghost" onClick={() => onChange({ board: false })} title="La placer sur la carte des entreprises">
+          <Building2 size={13} /> C'est une entreprise
+        </button>
+      ) : (
+        <>
+          <button className="btn sm ghost" onClick={() => onChange({ board: true })} title="La ranger avec les sites d'emploi">
+            <Globe size={13} /> Site d'emploi
+          </button>
+          <button className="btn sm" onClick={onApply} title="Candidature spontanée chez cette entreprise, avec analyse de ses besoins par Claude">
+            <Send size={13} /> Candidature spontanée
+          </button>
+        </>
+      )}
       <Toggle label="Toutes les offres" checked={!!c.all} onChange={(v) => onChange({ all: v })} />
       <Toggle label="Active" checked={c.active !== false} onChange={(v) => onChange({ active: v })} />
       <button className="icon-btn xs" title="Retirer cette entreprise" onClick={onDelete}>
@@ -67,9 +81,38 @@ function CompanyRow({ c, onChange, onDelete, onApply }: { c: Company; onChange: 
 }
 
 export function SitesView() {
+  const [tab, setTab] = useState<'map' | 'boards'>(() => (localStorage.getItem('resume-sites-tab') === 'boards' ? 'boards' : 'map'))
+  const pick = (t: 'map' | 'boards') => {
+    setTab(t)
+    localStorage.setItem('resume-sites-tab', t)
+  }
+  return (
+    <div className="sites-wrap">
+      <Segmented
+        value={tab}
+        onChange={pick}
+        options={[
+          { value: 'map', label: <><MapIcon size={14} /> Carte des entreprises</> },
+          { value: 'boards', label: <><Globe size={14} /> Sites d'emploi</> },
+        ]}
+      />
+      {tab === 'map' ? (
+        <Suspense fallback={<div className="cmap cmap-loading muted">Chargement de la carte…</div>}>
+          <CompanyMap />
+        </Suspense>
+      ) : (
+        <BoardsView />
+      )}
+    </div>
+  )
+}
+
+function BoardsView() {
   const alerts = useDocs((s) => s.watch.alerts)
   const saved = useDocs((s) => s.watch.companies)
-  const companies = saved ?? NONE
+  const all = saved ?? NONE
+  const companies = all.filter((c) => (c.board ?? guessBoard(c)) && c.state !== 'no')
+  const lost = all.filter((c) => !(c.board ?? guessBoard(c)) && c.noGeo && c.state !== 'no')
   const setCompanies = useDocs((s) => s.setCompanies)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
@@ -85,25 +128,25 @@ export function SitesView() {
       return toast.error('Adresse invalide')
     }
     const n = name.trim() || new URL(u).hostname.replace(/^(www|careers?|jobs|recrutement)\./, '').split('.')[0]
-    setCompanies([...companies, { id: uid().replace(/[^a-zA-Z0-9]/g, ''), name: n.charAt(0).toUpperCase() + n.slice(1), url: u }])
+    setCompanies([...all, { id: uid().replace(/[^a-zA-Z0-9]/g, ''), name: n.charAt(0).toUpperCase() + n.slice(1), url: u, board: true }])
     setName('')
     setUrl('')
-    toast.ok('Entreprise ajoutée : ses offres arriveront au prochain passage de la veille')
+    toast.ok('Site ajouté : ses offres arriveront au prochain passage de la veille')
   }
   return (
     <div className="sites-view">
       <section className="sites-card">
         <h3>
-          <Building2 size={17} /> Pages carrières des entreprises
+          <Globe size={17} /> Sites d'emploi lus par la veille
         </h3>
         <p className="muted small">
-          La veille lit directement les offres publiées par ces entreprises, toutes les 6 heures : les annonces y sont plus fraîches et complètes que sur les agrégateurs. Seules les offres dont l'intitulé correspond à une de vos recherches sont retenues, sauf si vous cochez « Toutes les offres ». Une offre publiée aussi sur LinkedIn ou ailleurs est regroupée, et c'est la version du site de l'entreprise qui est affichée.
+          La veille lit ces sites toutes les 6 heures. Seules les offres dont l'intitulé correspond à une de vos recherches sont retenues, sauf si vous cochez « Toutes les offres ». Les pages carrières des entreprises se gèrent depuis la carte : cliquez sur une entreprise, puis « Suivre ».
         </p>
         <div className="company-add">
-          <Field label="Entreprise">
-            <TextInput value={name} onChange={setName} placeholder="ex. Capgemini" />
+          <Field label="Site">
+            <TextInput value={name} onChange={setName} placeholder="ex. Emploi Territorial" />
           </Field>
-          <Field label="Page carrières (liste des offres)">
+          <Field label="Page de résultats (liste des offres)">
             <TextInput value={url} onChange={setUrl} placeholder="https://..." />
           </Field>
           <button className="btn primary" disabled={!url.trim()} onClick={add}>
@@ -117,16 +160,38 @@ export function SitesView() {
               <CompanyRow
                 key={c.id}
                 c={c}
-                onChange={(p) => setCompanies(companies.map((x) => (x.id === c.id ? { ...x, ...p } : x)))}
+                onChange={(p) => setCompanies(all.map((x) => (x.id === c.id ? { ...x, ...p } : x)))}
                 onDelete={() => {
-                  if (window.confirm(`Retirer ${c.name} ? Ses offres disparaîtront de vos annonces au prochain passage.`)) setCompanies(companies.filter((x) => x.id !== c.id))
+                  if (window.confirm(`Retirer ${c.name} ? Ses offres disparaîtront de vos annonces au prochain passage.`)) setCompanies(all.filter((x) => x.id !== c.id))
                 }}
                 onApply={() => setApplyTo(c)}
+                board
               />
             ))}
           </div>
         ) : (
-          <p className="muted small">Aucune entreprise pour le moment.</p>
+          <p className="muted small">Aucun site pour le moment.</p>
+        )}
+        {lost.length > 0 && (
+          <>
+            <h4 className="small">
+              <MapPinOff size={14} /> Entreprises suivies introuvables sur la carte
+            </h4>
+            <p className="muted small">Leur nom n'a pas été trouvé dans la base des entreprises. Si c'est un site d'emploi, rangez-le ici.</p>
+            <div className="company-list">
+              {lost.map((c) => (
+                <CompanyRow
+                  key={c.id}
+                  c={c}
+                  onChange={(p) => setCompanies(all.map((x) => (x.id === c.id ? { ...x, ...p } : x)))}
+                  onDelete={() => {
+                    if (window.confirm(`Retirer ${c.name} ?`)) setCompanies(all.filter((x) => x.id !== c.id))
+                  }}
+                  onApply={() => setApplyTo(c)}
+                />
+              ))}
+            </div>
+          </>
         )}
         <details className="small">
           <summary>Quelle adresse donner ?</summary>

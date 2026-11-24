@@ -8,6 +8,8 @@ import { useDocs } from '../../store/documents'
 import { findCommunes, type Commune } from '../../lib/watch'
 import { CONTRACT_TYPES, cvSkills, resolveProfile } from '../../lib/match'
 import { resumeToText } from '../../lib/export'
+import { SECTOR_NAMES } from '../../lib/sectors'
+import { suggestSectors } from '../../lib/sectorSeed'
 import { CLAUDE_URL, copyText, extractJson, jobRankPrompt, type ClaudeReviews } from '../../lib/prompts'
 import { Field, Modal, Segmented, Select, TextArea, TextInput, toast } from '../ui'
 
@@ -244,6 +246,8 @@ export function MatchProfileModal({ open, onClose, embedded = false }: { open: b
             onChange={(t) => setTrack(current.id, t)}
             onRemove={() => removeTrack(current.id)}
             onParcours={() => setTab('parcours')}
+            allTracks={tracks}
+            home={draft.home}
           />
         )}
 
@@ -310,7 +314,54 @@ function TrackSummary({ track, pool, links, cvs, onOpen }: { track: MatchTrack; 
   )
 }
 
-function TrackEditor({ track, cvs, cvOptions, pool, links, onChange, onRemove, onParcours }: { track: MatchTrack; cvs: ResumeDoc[]; cvOptions: { value: string; label: string }[]; pool: PoolExperience[]; links?: Record<string, ExperienceLink>; onChange: (t: Partial<MatchTrack>) => void; onRemove: () => void; onParcours: () => void }) {
+/** Secteurs visés d'un profil : utilisés par la carte des entreprises. */
+function SectorPicker({ track, allTracks, home, onChange }: { track: MatchTrack; allTracks: MatchTrack[]; home?: MatchProfile['home']; onChange: (sectors: string[]) => void }) {
+  const [busy, setBusy] = useState(false)
+  const values = track.sectors ?? []
+  const rest = SECTOR_NAMES.filter((s) => !values.includes(s))
+  const suggest = async () => {
+    if (!home) return toast.error("Indiquez d'abord votre domicile dans l'onglet Général")
+    setBusy(true)
+    try {
+      const all = await suggestSectors(allTracks, Object.values(useDocs.getState().offers), home)
+      const add = (all[track.id] ?? []).filter((s) => !values.includes(s))
+      if (!add.length) toast.ok('Aucun secteur de plus dans vos candidatures pour ce profil')
+      else {
+        onChange([...values, ...add])
+        toast.ok(`${add.length} secteur${add.length > 1 ? 's' : ''} ajouté${add.length > 1 ? 's' : ''} d'après vos candidatures`)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Field label="Secteurs visés" hint="Les catégories de la carte des entreprises. Proposés d'après les entreprises de vos candidatures.">
+      <div className="exclude-bar chips-input">
+        {values.map((t) => (
+          <span key={t} className="exclude-chip target">
+            {t}
+            <button onClick={() => onChange(values.filter((x) => x !== t))} title="Retirer">
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        <select className="exclude-input sector-add" value="" onChange={(e) => e.target.value && onChange([...values, e.target.value])}>
+          <option value="">+ Ajouter un secteur</option>
+          {rest.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button className="btn sm ghost" disabled={busy} onClick={suggest} style={{ marginTop: 6 }}>
+        <Sparkles size={13} /> {busy ? 'Recherche des entreprises…' : "Proposer d'après mes candidatures"}
+      </button>
+    </Field>
+  )
+}
+
+function TrackEditor({ track, cvs, cvOptions, pool, links, onChange, onRemove, onParcours, allTracks, home }: { track: MatchTrack; cvs: ResumeDoc[]; cvOptions: { value: string; label: string }[]; pool: PoolExperience[]; links?: Record<string, ExperienceLink>; onChange: (t: Partial<MatchTrack>) => void; onRemove: () => void; onParcours: () => void; allTracks: MatchTrack[]; home?: MatchProfile['home'] }) {
   const skills = cvSkills(cvs.find((d) => d.id === track.cvId))
   const linked = pool.filter((e) => links?.[e.key]?.tracks?.includes(track.id))
   const rome = trackRomeSkills(track.id, links)
@@ -327,6 +378,7 @@ function TrackEditor({ track, cvs, cvOptions, pool, links, onChange, onRemove, o
       <Field label="Métiers visés" hint="Entrée ou virgule pour ajouter. Les équivalents sont reconnus (Product Owner, PO, chef de produit...).">
         <Chips values={track.targets} onChange={(targets) => onChange({ targets })} placeholder="ex. Responsable d'exploitation" />
       </Field>
+      <SectorPicker track={track} allTracks={allTracks} home={home} onChange={(sectors) => onChange({ sectors })} />
       <Field label="CV de référence de ce profil" hint="Ses compétences comptent pour ce profil ; il sert de base au « CV adapté ».">
         <Select value={track.cvId ?? ''} onChange={(v) => onChange({ cvId: v || undefined })} options={cvOptions} />
       </Field>

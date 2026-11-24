@@ -1,5 +1,5 @@
 import { docNameFor } from '../../lib/filename'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MailCheck, Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, RecruiterUpdateModal, ShareModal, followUpLabel } from './OfferTools'
@@ -183,6 +183,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
 
   return (
     <article
+      data-offer={offer.id}
       className={`offer-row${open ? ' open' : ''}${narrow ? ' narrow' : ''}${next.stage === 'now' ? ' hot' : ''}${status === 'rejected' ? ' done' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, .or-open, .co-card, .menu-wrap')) return
@@ -596,6 +597,20 @@ export function OffersView() {
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const [doneOpen, setDoneOpen] = useState(false)
+  // candidature ouverte depuis une autre vue (carte des entreprises)
+  useEffect(() => {
+    const take = () => {
+      const id = sessionStorage.getItem('resume-open-offer')
+      if (!id) return
+      sessionStorage.removeItem('resume-open-offer')
+      setOpenId(id)
+      setDoneOpen(true)
+      setTimeout(() => document.querySelector(`[data-offer="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
+    }
+    take()
+    window.addEventListener('resume-open-offer', take)
+    return () => window.removeEventListener('resume-open-offer', take)
+  }, [])
   // les plus récentes d'abord (date d'envoi, sinon de création)
   const offers = useMemo(() => Object.values(offersMap).sort((a, b) => (b.statusAt?.applied ?? b.createdAt) - (a.statusAt?.applied ?? a.createdAt)), [offersMap])
   const docs = useMemo(() => Object.values(docsMap), [docsMap])

@@ -431,6 +431,22 @@ export interface Company {
   /** toutes les offres, même hors de vos recherches */
   all?: boolean
   active?: boolean
+  /** site d'emploi (agrégateur, jobboard) plutôt qu'une entreprise : pas de place sur la carte */
+  board?: boolean
+  /** « pas intéressé » : masquée de la carte, ignorée par la veille */
+  state?: 'no'
+  /** fiche SIRENE (carte des entreprises) */
+  siren?: string
+  lat?: number
+  lon?: number
+  city?: string
+  address?: string
+  naf?: string
+  /** tranche d'effectif INSEE de l'entreprise */
+  size?: string
+  sector?: string
+  /** recherche de position déjà tentée, sans résultat */
+  noGeo?: boolean
 }
 
 export interface MatchProfile {
@@ -465,6 +481,8 @@ export interface MatchTrack {
   cvId?: string
   /** compétences ajoutées à la main */
   skills?: string[]
+  /** secteurs d'activité visés (référentiel ROME), utilisés par la carte des entreprises */
+  sectors?: string[]
 }
 
 export interface ExperienceLink {

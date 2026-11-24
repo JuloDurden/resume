@@ -231,6 +231,14 @@ export default function Dashboard() {
   const newJobs = useFeed((s) => (s.feed?.items ?? []).filter((i) => i.firstSeen && new Date(i.firstSeen).getTime() > s.seenAt).length)
   const offersCount = useDocs((s) => Object.keys(s.offers).length)
   useEffect(() => localStorage.setItem('resume-dash-view', view), [view])
+  useEffect(() => {
+    const on = (e: Event) => {
+      sessionStorage.setItem('resume-open-offer', String((e as CustomEvent).detail))
+      setView('offers')
+    }
+    window.addEventListener('resume-open-offer', on, true)
+    return () => window.removeEventListener('resume-open-offer', on, true)
+  }, [])
   const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | null>(null)
   const setSettings = openSettings
   // lien donné à un recruteur (/c/<identifiant>) : la vitrine montre le CV et la lettre de cette candidature

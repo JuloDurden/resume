@@ -5384,6 +5384,105 @@ button.followup-badge {
   color: #ffd2cd;
 }
 
+
+/* ---------- carte des entreprises ---------- */
+.sites-wrap { display: flex; flex-direction: column; gap: 12px; }
+.sites-wrap > .segmented { align-self: flex-start; }
+.cmap { position: relative; height: calc(100vh - 260px); min-height: 520px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-2); }
+.cmap-loading { display: grid; place-items: center; }
+.cmap-map { position: absolute; inset: 0; z-index: 0; }
+.cmap .leaflet-container { font: inherit; background: var(--bg-2); }
+.cmap-open { position: absolute; top: 12px; right: 12px; z-index: 500; box-shadow: var(--shadow-lg); background: var(--panel); }
+.cmap-panel { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 340px; z-index: 500; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); overflow: hidden; }
+.cmap-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 12px; flex-wrap: wrap; }
+.cmap-head strong { display: inline-flex; align-items: center; gap: 6px; }
+.cmap-head .spacer { flex: 1; }
+.cmap-add { display: grid; gap: 6px; padding: 0 12px 8px; }
+.cmap-search { display: flex; align-items: center; gap: 6px; margin: 0 12px; padding: 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-3); background: var(--bg-2); }
+.cmap-search input { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; color: var(--ink); min-width: 0; }
+.cmap-base { margin: 6px 12px 0; justify-content: flex-start; }
+.cmap-filters { display: grid; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.cmap-row { display: flex; align-items: center; gap: 8px; }
+.cmap-row input[type='range'] { flex: 1; accent-color: var(--brand-2); }
+.cmap-row .segmented { flex: 1; }
+.cmap-sub { display: flex; align-items: center; gap: 8px; }
+.cmap-sub .link-btn { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; }
+.cmap-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.cmap-chip { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink-3); cursor: pointer; }
+.cmap-chip.on { color: var(--ink); background: var(--brand-soft); border-color: transparent; }
+.cmap-chip i { width: 8px; height: 8px; border-radius: 50%; }
+.cmap-chip span { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.cmap-list { flex: 1; overflow-y: auto; min-height: 0; }
+.cmap-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--line-2); background: transparent; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.cmap-item:hover { background: var(--bg-2); }
+.cmap-item-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.cmap-name { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmap-item-main .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmap-empty { padding: 16px 12px; }
+.cmap-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.cmap-foot > span { display: inline-flex; align-items: center; gap: 6px; }
+.cmap .spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.dot, .cmap-chip i { flex: none; width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.k-offer i, i.dot.k-offer { background: #7f77dd; }
+.k-follow i, i.dot.k-follow { background: #1d9e75; }
+.k-found i, i.dot.k-found { background: #8a8f98; }
+.k-no i, i.dot.k-no { background: transparent; border: 1.5px solid #8a8f98; }
+.cmap-sheet { padding: 12px; overflow-y: auto; display: grid; gap: 10px; align-content: start; }
+.cmap-sheet h3 { margin: 0; font-size: 17px; }
+.cmap-sheet .link-btn { justify-self: start; display: inline-flex; align-items: center; gap: 4px; }
+.cmap-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.cmap-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg-2); color: var(--ink-2); }
+.cmap-badge.k-offer { background: #eeedfe; color: #3c3489; }
+.cmap-badge.k-follow { background: #e1f5ee; color: #085041; }
+.cmap-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; color: var(--ink-2); }
+.cmap-facts li { display: flex; gap: 6px; align-items: flex-start; }
+.cmap-facts svg { flex: none; margin-top: 2px; }
+.cmap-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.cmap-actions .filled { fill: currentColor; }
+.cmap-careers { display: grid; gap: 6px; padding: 10px; border-radius: 8px; background: var(--bg-2); }
+.cmap-careers .row-gap { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cmap-careers .row-gap .input { flex: 1; min-width: 0; }
+.cmap-careers a { display: inline-flex; align-items: center; gap: 4px; }
+.cmap-careers .cr-status { margin: 0; display: flex; align-items: center; gap: 5px; }
+.cmap-offers { display: grid; gap: 2px; }
+.cmap-offers .cmap-item { padding: 6px 4px; }
+.cmap-links { display: flex; gap: 14px; }
+.cmap-links a { display: inline-flex; align-items: center; gap: 3px; }
+/* épingles */
+.pin span { display: block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); background: #8a8f98; transition: transform 0.12s; }
+.pin-offer span { background: #7f77dd; }
+.pin-follow span { background: #1d9e75; }
+.pin-found span { width: 11px; height: 11px; margin: 1.5px; }
+.pin-no span { background: transparent; border-color: #8a8f98; }
+.pin.approx span { border-style: dashed; }
+.pin:hover span, .pin.sel span { transform: scale(1.45); }
+.pin.sel span { box-shadow: 0 0 0 4px rgba(55, 138, 221, 0.35); }
+.pin-home span { display: block; width: 16px; height: 16px; border-radius: 4px; background: #e24b4a; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); transform: rotate(45deg); }
+.pin-cluster { display: grid; place-items: center; }
+.pin-cluster span { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; background: rgba(138, 143, 152, 0.85); color: #fff; font-size: 12px; font-weight: 600; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }
+.cmap .pin-label { display: none; padding: 1px 6px; font-size: 11.5px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+.cmap .pin-label::before { display: none; }
+.cmap .pin-label.hover, .cmap .z12 .pin-label.lbl-pin, .cmap .z14 .pin-label { display: block; }
+.cmap .leaflet-tooltip.pin-label { white-space: nowrap; }
+[data-theme='dark'] .cmap .pin-label { background: #202024; color: #e8e8ea; border-color: #2c2c31; }
+[data-theme='dark'] .pin span, [data-theme='dark'] .pin-home span, [data-theme='dark'] .pin-cluster span { border-color: #0a0a0b; }
+[data-theme='dark'] .cmap-badge.k-offer { background: rgba(127, 119, 221, 0.18); color: #cecbf6; }
+[data-theme='dark'] .cmap-badge.k-follow { background: rgba(29, 158, 117, 0.18); color: #9fe1cb; }
+[data-theme='dark'] .cmap .leaflet-bar a { background: #151517; color: #e8e8ea; border-color: #2c2c31; }
+[data-theme='dark'] .cmap .leaflet-control-attribution { background: rgba(10, 10, 11, 0.7); color: #8a8f98; }
+[data-theme='dark'] .cmap .leaflet-control-attribution a { color: #c8f169; }
+.cmap .link-btn { border: 0; background: transparent; padding: 0; font: inherit; color: var(--brand-2); cursor: pointer; }
+.cmap .link-btn:hover { text-decoration: underline; }
+.sector-add { border: 0; background: transparent; color: var(--ink-3); font: inherit; cursor: pointer; }
+@media (max-width: 760px) {
+  .cmap { height: auto; min-height: 0; display: flex; flex-direction: column; }
+  .cmap-map { position: relative; height: 55vh; }
+  .cmap-panel { position: relative; inset: auto; width: auto; max-height: none; border-radius: 0; border: 0; border-top: 1px solid var(--line); box-shadow: none; }
+  .cmap-list { max-height: 50vh; }
+  .cmap-open { top: 12px; }
+}
+
 /* ---------- thème sombre : généré à partir des couleurs claires (teintes translucides, textes éclaircis) ---------- */
 :root[data-theme='dark'] .btn:hover:not(:disabled) {
   border-color: rgba(139, 150, 167, 0.4);

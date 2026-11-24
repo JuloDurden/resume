@@ -264,7 +264,6 @@ export function CompanyMap() {
   /* ---------- carte ---------- */
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
-  const tiles = useRef<L.TileLayer | null>(null)
   const ring = useRef<L.Circle | null>(null)
   const cluster = useRef<L.MarkerClusterGroup | null>(null)
   const pins = useRef<L.LayerGroup | null>(null)
@@ -276,19 +275,12 @@ export function CompanyMap() {
     const m = L.map(box.current, { zoomControl: false, attributionControl: true }).setView([home.lat, home.lon], 11)
     L.control.zoom({ position: 'bottomleft' }).addTo(m)
     map.current = m
-    const setTiles = () => {
-      const dark = document.documentElement.dataset.theme === 'dark'
-      tiles.current?.remove()
-      tiles.current = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {
-        maxZoom: 19,
-        subdomains: 'abcd',
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · Entreprises : INSEE, data.gouv.fr',
-      }).addTo(m)
-      tiles.current.bringToBack()
-    }
-    setTiles()
-    const obs = new MutationObserver(setTiles)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    // fond OpenStreetMap, adouci (et inversé en thème sombre) par CSS
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      className: 'cmap-tiles',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Entreprises : INSEE, data.gouv.fr',
+    }).addTo(m)
     const zoomClass = () => {
       const z = m.getZoom()
       m.getContainer().classList.toggle('z12', z >= 12)
@@ -322,7 +314,6 @@ export function CompanyMap() {
     const ro = new ResizeObserver(() => m.invalidateSize())
     ro.observe(box.current)
     return () => {
-      obs.disconnect()
       ro.disconnect()
       m.remove()
       map.current = null

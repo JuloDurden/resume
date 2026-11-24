@@ -6086,7 +6086,7 @@ button.followup-badge {
 .doc-preview-big .cv-page {
   box-shadow: var(--shadow);
 }
-.bulk-bar {
+.docs-bulk {
   position: fixed;
   left: 50%;
   bottom: 22px;
@@ -6103,11 +6103,11 @@ button.followup-badge {
   font-size: 13.5px;
   animation: toast-in 0.18s ease-out;
 }
-.bulk-bar > span {
+.docs-bulk > span {
   margin-right: 6px;
   font-weight: 600;
 }
-.bulk-bar button {
+.docs-bulk button {
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: transparent;
   color: inherit;
@@ -6119,18 +6119,18 @@ button.followup-badge {
   border-radius: 999px;
   cursor: pointer;
 }
-.bulk-bar button:hover:not(:disabled) {
+.docs-bulk button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
 }
-.bulk-bar .bulk-x {
+.docs-bulk .docs-bulk-x {
   border: 0;
   padding: 5px 8px;
 }
-:root[data-theme='dark'] .bulk-bar {
+:root[data-theme='dark'] .docs-bulk {
   background: var(--accent);
   color: #0a0a0b;
 }
-:root[data-theme='dark'] .bulk-bar button {
+:root[data-theme='dark'] .docs-bulk button {
   border-color: rgba(10, 10, 11, 0.25);
 }
 :root[data-theme='dark'] .docs-table tr.sel td {

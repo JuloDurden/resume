@@ -267,7 +267,7 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
       )}
 
       {selected.length > 0 && (
-        <div className="bulk-bar" role="toolbar" aria-label="Actions sur la sélection">
+        <div className="docs-bulk" role="toolbar" aria-label="Actions sur la sélection">
           <span>
             {selected.length} sélectionné{selected.length > 1 ? 's' : ''}
           </span>
@@ -280,7 +280,7 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
           <button onClick={() => del(selected)}>
             <Trash2 size={14} /> Supprimer
           </button>
-          <button className="bulk-x" onClick={() => setSel(new Set())} aria-label="Annuler la sélection">
+          <button className="docs-bulk-x" onClick={() => setSel(new Set())} aria-label="Annuler la sélection">
             <X size={15} />
           </button>
         </div>

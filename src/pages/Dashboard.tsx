@@ -376,7 +376,7 @@ export default function Dashboard() {
               onChange={setFilter}
               options={[
                 { value: 'all', label: `Tous (${docs.length})` },
-                { value: 'reference', label: `CV de référence (${refs.length})`, title: 'Vos CV modèles par type de poste, à dupliquer pour chaque candidature' },
+                { value: 'reference', label: `Références (${refs.length})`, title: 'Vos CV modèles par type de poste, à dupliquer pour chaque candidature' },
                 { value: 'resume', label: `CV (${resumes.length})` },
                 { value: 'letter', label: `Lettres (${docs.length - resumes.length})` },
               ]}

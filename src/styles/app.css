@@ -6333,3 +6333,48 @@ button.followup-badge {
   display: inline-flex;
   vertical-align: middle;
 }
+/* groupes côte à côte : une colonne au moins aussi large qu'une carte, défilement horizontal au-delà */
+.doc-groups.side {
+  grid-auto-columns: minmax(var(--col, 260px), 1fr);
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.doc-groups.side .doc-group-head strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.doc-groups.side .doc-group-head .muted {
+  white-space: nowrap;
+}
+.doc-groups.side .doc-grid.zoomable {
+  grid-template-columns: 1fr !important;
+}
+.docs-tools {
+  flex-wrap: nowrap;
+}
+.docs-tools .segmented {
+  flex-shrink: 0;
+}
+.docs-search {
+  width: 210px;
+  min-width: 120px;
+  flex-shrink: 1;
+}
+.docs-zoom input {
+  width: 90px;
+}
+.group-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.group-btn.on {
+  border-color: var(--brand-2);
+  color: var(--brand-2);
+}
+@media (max-width: 1100px) {
+  .docs-tools {
+    flex-wrap: wrap;
+  }
+}

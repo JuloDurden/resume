@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowUp, ChevronDown, Columns3, Copy, Download, Eye, FolderInput, LayoutGrid, List, Rows3, Star, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Layers, ArrowDown, ArrowUp, ChevronDown, Columns3, Copy, Download, Eye, FolderInput, LayoutGrid, List, Rows3, Star, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { NO_TRACK, docTracks } from '../../lib/docGroups'
 import type { AnyDoc } from '../../types'
 import { useDocs } from '../../store/documents'
@@ -343,15 +343,37 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
             <ZoomIn size={15} />
           </label>
         )}
-        <Segmented
-          value={groupBy}
-          onChange={setGroupBy}
-          options={[
-            { value: 'profile', label: 'Par profil', title: 'Grouper par profil de recherche' },
-            { value: 'offer', label: 'Par candidature', title: 'Grouper le CV et la lettre de chaque offre' },
-            { value: 'none', label: 'Sans groupe' },
-          ]}
-        />
+        <Menu
+          align="right"
+          trigger={(t) => (
+            <button className={`btn sm group-btn${groupBy !== 'none' ? ' on' : ''}`} onClick={t} title="Grouper les documents">
+              <Layers size={14} /> {groupBy === 'profile' ? 'Par profil' : groupBy === 'offer' ? 'Par candidature' : 'Grouper'} <ChevronDown size={13} />
+            </button>
+          )}
+        >
+          {(close) => (
+            <>
+              {(
+                [
+                  ['profile', 'Par profil de recherche'],
+                  ['offer', 'Par candidature (CV et lettre de chaque offre)'],
+                  ['none', 'Sans groupe'],
+                ] as const
+              ).map(([v, l]) => (
+                <MenuItem
+                  key={v}
+                  onClick={() => {
+                    close()
+                    setGroupBy(v)
+                  }}
+                >
+                  {groupBy === v ? '✓ ' : ''}
+                  {l}
+                </MenuItem>
+              ))}
+            </>
+          )}
+        </Menu>
         {groupBy !== 'none' && view === 'grid' && (
           <Segmented
             value={layout}
@@ -366,21 +388,21 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
           value={view}
           onChange={setView}
           options={[
-            { value: 'grid', label: <><LayoutGrid size={14} /> Grille</> },
-            { value: 'list', label: <><List size={14} /> Liste</> },
+            { value: 'grid', label: <LayoutGrid size={15} />, title: 'Grille' },
+            { value: 'list', label: <List size={15} />, title: 'Liste' },
           ]}
         />
       </div>
 
       {groups ? (
-        <div className={`doc-groups${view === 'grid' && layout === 'side' ? ' side' : ''}`}>
+        <div className={`doc-groups${view === 'grid' && layout === 'side' ? ' side' : ''}`} style={{ '--col': `${zoom + 50}px` } as React.CSSProperties}>
           {groups.map((g) => {
             const closed = folded.has(g.id) && !(view === 'grid' && layout === 'side')
             return (
               <section key={g.id} className={`doc-group${closed ? ' closed' : ''}`}>
                 <button className="doc-group-head" onClick={() => setFolded((f) => { const n = new Set(f); if (n.has(g.id)) n.delete(g.id); else n.add(g.id); return n })} aria-expanded={!closed}>
                   <span className="dot" style={{ background: g.color }} />
-                  <strong>{g.label}</strong>
+                  <strong title={g.label}>{g.label}</strong>
                   <span className="muted small">{g.sub}</span>
                   <span className="docs-tools-gap" />
                   {!(view === 'grid' && layout === 'side') && <ChevronDown size={16} className="chev" />}

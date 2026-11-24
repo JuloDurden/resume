@@ -156,6 +156,8 @@ export interface JobTarget {
   description?: string
   ignored?: string[]
   extra?: string[]
+  /** mots-clés réaffichés alors qu'ils étaient masqués automatiquement */
+  kept?: string[]
 }
 
 export interface CompanyAnalysis {

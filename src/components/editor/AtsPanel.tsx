@@ -123,9 +123,16 @@ export function AtsPanel({ doc, pages, onLink, onDeep, onImportLink }: Props) {
   const [showText, setShowText] = useState(false)
   const cvText = useMemo(() => resumeToText(doc), [doc])
   const extras = useMemo(() => job.extra ?? [], [job.extra])
+  // mots déjà masqués dans au moins deux autres candidatures : masqués d'office ici
+  const allOffers = useDocs((s) => s.offers)
+  const learned = useMemo(() => {
+    const n = new Map<string, number>()
+    for (const o of Object.values(allOffers)) if (o.id !== offer?.id) for (const k of new Set(o.ignored ?? [])) n.set(k, (n.get(k) ?? 0) + 1)
+    return [...n].filter(([k, c]) => c >= 2 && !(job.kept ?? []).includes(k)).map(([k]) => k)
+  }, [allOffers, offer?.id, job.kept])
   const match = useMemo(
-    () => (job.description?.trim() ? matchKeywords(cvText, job.description, job.ignored ?? [], extras, [job.company ?? '']) : null),
-    [cvText, job.description, job.ignored, extras, job.company],
+    () => (job.description?.trim() ? matchKeywords(cvText, job.description, job.ignored ?? [], extras, { company: job.company, location: offer?.location, learned }) : null),
+    [cvText, job.description, job.ignored, extras, job.company, offer?.location, learned],
   )
   const checks = useMemo(() => runChecks(doc, pages), [doc, pages])
   const atsChecks = checks.filter((c) => c.kind === 'ats')
@@ -192,7 +199,7 @@ export function AtsPanel({ doc, pages, onLink, onDeep, onImportLink }: Props) {
           <p className="muted small">Ajoutez-les là où ils sont exacts (compétences, puces, résumé). Cliquez sur un mot-clé non pertinent pour l'ignorer.</p>
           <div className="kw-list">
             {missing.map((k) => (
-              <button key={k.key} className={`kw ${k.match === 'partial' ? 'partial' : 'missing'}`} onClick={() => toggleIgnore(k.key)} title={k.match === 'partial' ? 'Partiellement présent (une partie des mots). Cliquer pour ignorer.' : 'Absent du CV. Cliquer pour ignorer.'}>
+              <button key={k.key} className={`kw ${k.match === 'partial' ? 'partial' : 'missing'}${k.zone ? ' ctx' : ''}`} onClick={() => toggleIgnore(k.key)} title={`${k.match === 'partial' ? 'Partiellement présent (une partie des mots).' : 'Absent du CV.'}${k.zone ? " Vient de la présentation de l'entreprise : compte peu dans le score." : ''} Cliquer pour ignorer.`}>
                 {k.label}
                 {k.freq > 1 && <em>×{k.freq}</em>}
               </button>
@@ -215,6 +222,16 @@ export function AtsPanel({ doc, pages, onLink, onDeep, onImportLink }: Props) {
               <Plus size={14} />
             </button>
           </div>
+          {match.auto.length > 0 && (
+            <p className="muted small kw-auto">
+              Masqués d'office, car vous les avez masqués dans d'autres candidatures :{' '}
+              {match.auto.map((k) => (
+                <button key={k.key} className="kw ghost" onClick={() => setJob({ kept: [...(job.kept ?? []), k.key] })} title="Réafficher ce mot-clé pour cette candidature">
+                  {k.label}
+                </button>
+              ))}
+            </p>
+          )}
           {ignored.length > 0 && (
             <button className="btn ghost sm self-start" onClick={() => setJob({ ignored: [] })}>
               <RotateCcw size={14} /> Rétablir {ignored.length} mot(s)-clé(s) ignoré(s)

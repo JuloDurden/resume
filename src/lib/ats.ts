@@ -29,6 +29,34 @@ export function stem(t: string): string {
   return t
 }
 
+// Familles de mots : verbe, participe et nom d'action ramenés à une même racine
+// (coordonner / coordination, sécuriser / sécurité, gérer / gestion, conduire / conduite…)
+const FAMILY: [RegExp, string][] = [
+  [/^coordon|^coordin/, 'coordin'],
+  [/^securis/, 'secur'],
+  [/^prestat/, 'prest'],
+  [/^(gere|gerer|geree|geres|gerant|gestionnair|gestion)$/, 'gest'],
+  [/^(conduir|conduit|conduis)/, 'condu'],
+  [/^(suivr|suivi)/, 'suivi'],
+  [/^(resoudr|resolu|resolv)/, 'resol'],
+  [/^planific/, 'planifi'],
+  [/^mainten/, 'mainten'],
+  [/^analy/, 'analys'],
+  [/^(encadr)/, 'encadr'],
+]
+export const canon = (st: string) => {
+  for (const [re, c] of FAMILY) if (re.test(st)) return c
+  return st
+}
+
+// Synonymes reconnus comme « forme proche » (crédit partiel)
+const SYNONYMS: string[][] = [
+  ['encadr', 'manag'],
+  ['support', 'assist'],
+  ['satisfact', 'experient'],
+]
+const synOf = (st: string) => SYNONYMS.find((g) => g.includes(st)) ?? []
+
 export function tokenize(text: string): Tok[] {
   const out: Tok[] = []
   const re = /[\p{L}\p{N}][\p{L}\p{N}+#./'’-]*|[.!?;:\n•]|[(),/|«»"]/gu
@@ -51,7 +79,7 @@ export function tokenize(text: string): Tok[] {
     if (el) raw = el[1]
     if (!raw) continue
     const norm = strip(raw)
-    out.push({ raw, norm, stem: stem(norm), sentenceStart, afterBreak })
+    out.push({ raw, norm, stem: canon(stem(norm)), sentenceStart, afterBreak })
     sentenceStart = false
     afterBreak = false
   }
@@ -59,6 +87,89 @@ export function tokenize(text: string): Tok[] {
 }
 
 const isStop = (t: Tok) => STOPWORDS.has(t.norm) || /^\d+$/.test(t.norm)
+
+// Mots fréquents dans les annonces mais sans valeur pour un CV : rémunération, avantages, contrat,
+// formules d'accroche, valeurs de l'entreprise…
+const NOISE_WORDS = `salaire salaires remuneration brut bruts brute net annuel annuelle mensuel mensuelle euro euros eur k€ prime primes variable rtt mutuelle prevoyance ticket tickets restaurant cse forfait mobilite teletravail avantage avantages interessement participation epargne cheques cadeaux
+contrat cdi cdd interim alternance stage temps plein partiel heure heures semaine semaines jour jours mois an ans annee annees horaire horaires date demarrage debut embauche immediat immediate duree hebdomadaire
+postuler candidater rejoindre rejoignez aventure opportunite carriere evolution evolutions perspective perspectives
+vrai vraie vrais vie main mains quelque quelques toujours souvent prise pris aimez aimer adorez concret concrete concrets concretes description publiee publie publies proposer proposons apporter apportez trouver preuve cours disposition national nationale nationaux objectifs engage engagee engages engagees diversite inclusion handicap egalite durable durables seminaire seminaires croissance marque marques salon salons valeurs ambiance convivial conviviale bienveillance bienveillant bienveillante passion passionne passionnee dynamique top unique belle beau grande grand leader numero acteur acteurs reference implante implantee implantes situe situee rattache rattachee dedie dediee sein cadre environnement contexte quotidien
+organisme organismes filiale filiales siege agence agences ville region regional regionale regionaux departement local locale locaux
+publiee annonce annonces reference ref offre sas sasu sarl janvier fevrier mars avril mai juin juillet aout septembre octobre novembre decembre prendre mettre faire permettre comprendre apprendre grace`
+  .split(/\s+/)
+  .map((w) => canon(stem(w)))
+const NOISE = new Set(NOISE_WORDS)
+// Régions et grandes villes : le lieu est dans l'offre, pas une compétence
+const PLACES = new Set(
+  `france occitanie languedoc roussillon midi pyrenees herault gard aude lozere aveyron tarn garonne gers ariege bouches rhone provence alpes cote azur nouvelle aquitaine auvergne ile idf bretagne normandie hauts grand est centre loire bourgogne franche comte corse montpellier toulouse nimes perpignan beziers sete narbonne carcassonne ales lunel castelnau lattes perols mauguio marseille lyon paris bordeaux nantes lille nice rennes strasbourg grenoble garosud sud nord ouest est`
+    .split(/\s+/)
+    .map((w) => canon(stem(w))),
+)
+const GENERIC_CO = new Set(['technolog', 'servic', 'group', 'solution', 'conseil', 'consult', 'system', 'franc', 'international', 'industri', 'societ', 'entrepris', 'sas', 'sa', 'sarl', 'et'])
+
+/** Zone de l'annonce : le poste (missions, profil), l'entreprise (présentation), les conditions (salaire, avantages). */
+type Zone = 'job' | 'company' | 'perks'
+const ZONE_WEIGHT: Record<Zone, number> = { job: 1, company: 0.35, perks: 0 }
+const HEAD_COMPANY = /^(qui sommes[- ]nous|l'?entreprise|notre (societe|groupe|entreprise|client|structure|histoire)|a propos|about|presentation|le groupe|votre (futur )?employeur|nous sommes|le contexte|contexte)\b/
+const HEAD_PERKS = /^(avantages|nous (vous )?offrons|ce que nous (vous )?(offrons|proposons)|remuneration|salaire|conditions|pourquoi nous rejoindre|package|informations? complementaires?|processus de recrutement|deroulement|modalites|infos? pratiques)\b/
+const HEAD_JOB = /^(vos? missions?|missions?|le poste|description du poste|descriptif|responsabilites|activites|votre profil|profil|competences|vous etes|vous avez|qualifications|prerequis|requis|savoir|ce que vous ferez|votre role|role)\b/
+const META_LINE = /^(salaire|remuneration|duree du travail|horaires?|type de contrat|contrat|lieu( de travail)?|avantages?|deplacements?|experience|formation|qualification|secteur d'activite|taille|statut|date|publie|reference|nature d'offre|travail en|langues?|permis)\s*:/
+
+/** Découpe l'annonce en zones grâce à ses intertitres. */
+function zonesOf(text: string): { text: string; zone: Zone }[] {
+  const out: { text: string; zone: Zone }[] = []
+  let zone: Zone = 'job'
+  for (const line of text.split(/\n/)) {
+    const l = strip(line.replace(/[*#_•·-]+/g, ' ').trim())
+    if (l.length && l.length <= 60) {
+      if (HEAD_COMPANY.test(l)) zone = 'company'
+      else if (HEAD_PERKS.test(l)) zone = 'perks'
+      else if (HEAD_JOB.test(l)) zone = 'job'
+    }
+    out.push({ text: line, zone: META_LINE.test(l) ? 'perks' : zone })
+  }
+  return out
+}
+
+export interface KeywordContext {
+  company?: string
+  location?: string
+}
+
+/** Mots propres à l'entreprise (nom, sigle) et au lieu, qu'aucun CV ne peut contenir. */
+function contextNoise(ctx: KeywordContext = {}) {
+  const co = tokenize(ctx.company ?? '').map((t) => t.stem).filter((s) => s.length > 1 && !GENERIC_CO.has(s))
+  const words = (ctx.company ?? '').split(/[\s-]+/).filter((w) => /^\p{Lu}/u.test(w) && w.length > 1)
+  const acronym = strip(words.map((w) => w[0]).join(''))
+  const loc = tokenize(ctx.location ?? '').map((t) => t.stem)
+  return (t: Tok) => {
+    const flat = t.norm.replace(/[^a-z0-9]/g, '')
+    return co.includes(t.stem) || (acronym.length >= 3 && flat === acronym) || loc.includes(t.stem) || PLACES.has(t.stem)
+  }
+}
+
+/** Mot sans intérêt pour un CV : bruit d'annonce, montant, horaire, code ROME, nom de l'entreprise ou lieu. */
+const isNumericNoise = (t: Tok) =>
+  /^\d/.test(t.norm) || // 45k, 35h/semaine, 32000.0, 1h
+  /^[a-n]\d{4}$/.test(t.norm) || // codes ROME
+  /^bac\+?\d?$/.test(t.norm) ||
+  /^[hf]\/[hf](\/\w+)?$/.test(t.norm) || // H/F/NB
+  (t.norm.includes('/') && t.norm.split('/').every((p) => !p || STOPWORDS.has(p) || NOISE.has(canon(stem(p))) || /^\d/.test(p))) // bruts/an
+
+// Adjectifs trop généraux pour être un mot-clé seul (ils restent dans les expressions : « formation professionnelle »)
+const WEAK_UNI = new Set(
+  `professionnel professionnelle interne internes externe externes nouveau nouvelle nouveaux general generale global globale different differents divers diverses principal principale adapte adaptee important importante autonome rigoureux rigoureuse`
+    .split(/\s+/)
+    .map((w) => canon(stem(w))),
+)
+
+/** Formes d'action à afficher en nom (encadrez → encadrement). */
+const ACTION_LABEL: Record<string, string> = Object.fromEntries(
+  `accompagnement administration amélioration analyse animation automatisation cadrage conception conduite coordination déploiement développement encadrement évaluation formation gestion intégration management migration négociation optimisation organisation pilotage planification recrutement rédaction sécurité suivi supervision maintenance résolution prestation`
+    .split(/\s+/)
+    .map((w) => [canon(stem(strip(w))), w]),
+)
+const isConjugated = (raw: string) => /(?:é|ée|és|ées|ez|er|ons|ent|ant)$/i.test(raw)
 const isTechnical = (t: Tok) =>
   /[+#]|\d/.test(t.raw) ||
   (!t.sentenceStart && /^[A-Z][A-Za-z]*[A-Z]/.test(t.raw)) || // PowerBI, ServiceNow
@@ -76,29 +187,42 @@ export interface Keyword {
   stems: string[]
   freq: number
   weight: number
+  /** vient seulement de la présentation de l'entreprise */
+  zone?: 'company'
 }
 
 const CONNECTORS = new Set(['de', 'des', 'du', 'd', 'la', 'le', 'les', 'l', 'et', 'en', 'of', 'and', 'the', 'a', 'au', 'aux', 'pour', 'sur'])
 const GRAM_LINKS = new Set(['de', 'des', 'du', 'd', 'la', 'le', 'l', 'of', 'the'])
 
 /** Extrait les mots-clés pertinents d'une offre d'emploi. */
-export function extractKeywords(jobText: string, max = 40): Keyword[] {
-  const toks = tokenize(jobText)
-  const uni = new Map<string, { freq: number; tech: boolean; forms: Map<string, number> }>()
+export function extractKeywords(jobText: string, max = 40, ctx: KeywordContext = {}): Keyword[] {
+  const ctxNoise = contextNoise(ctx)
+  const noisy = (t: Tok) => isStop(t) || NOISE.has(t.stem) || isNumericNoise(t) || ctxNoise(t)
+  // jetons avec le poids de leur zone ; les conditions (salaire, avantages) sont ignorées
+  const toks: (Tok & { zw: number })[] = []
+  for (const z of zonesOf(jobText)) {
+    if (!ZONE_WEIGHT[z.zone]) continue
+    const ts = tokenize(z.text)
+    if (ts.length) ts[0].afterBreak = ts[0].sentenceStart = true
+    for (const t of ts) toks.push({ ...t, zw: ZONE_WEIGHT[z.zone] })
+  }
+  const uni = new Map<string, { freq: number; w: number; jobW: number; tech: boolean; forms: Map<string, number> }>()
   for (const t of toks) {
-    if (isStop(t) || t.norm.length < 2) continue
+    if (noisy(t) || t.norm.length < 2) continue
     if (t.norm.length < 3 && !isTechnical(t)) continue
-    const e = uni.get(t.stem) ?? { freq: 0, tech: false, forms: new Map() }
+    const e = uni.get(t.stem) ?? { freq: 0, w: 0, jobW: 0, tech: false, forms: new Map() }
     e.freq++
+    e.w += t.zw
+    if (t.zw === 1) e.jobW++
     e.tech ||= isTechnical(t)
     e.forms.set(t.raw, (e.forms.get(t.raw) ?? 0) + 1)
     uni.set(t.stem, e)
   }
 
   // n-grammes : mots de contenu consécutifs, avec connecteurs autorisés au milieu
-  const grams = new Map<string, { freq: number; label: string; stems: string[]; tech: boolean }>()
+  const grams = new Map<string, { freq: number; w: number; label: string; stems: string[]; tech: boolean }>()
   for (let i = 0; i < toks.length; i++) {
-    if (isStop(toks[i]) || toks[i].norm.length < 2) continue
+    if (noisy(toks[i]) || toks[i].norm.length < 2) continue
     const stems = [toks[i].stem]
     const raws = [toks[i].raw]
     let tech = isTechnical(toks[i]) || (!toks[i].sentenceStart && /^[A-Z]/.test(toks[i].raw))
@@ -110,13 +234,14 @@ export function extractKeywords(jobText: string, max = 40): Keyword[] {
         raws.push(t.raw)
         continue
       }
-      if (isStop(t) || t.norm.length < 2) break
+      if (noisy(t) || t.norm.length < 2) break
       stems.push(t.stem)
       raws.push(t.raw)
       tech = tech && /^[A-Z0-9]/.test(t.raw)
       const key = stems.join(' ')
-      const e = grams.get(key) ?? { freq: 0, label: raws.join(' '), stems: [...stems], tech }
+      const e = grams.get(key) ?? { freq: 0, w: 0, label: raws.join(' '), stems: [...stems], tech }
       e.freq++
+      e.w += toks[i].zw
       grams.set(key, e)
     }
   }
@@ -124,14 +249,22 @@ export function extractKeywords(jobText: string, max = 40): Keyword[] {
   const out: Keyword[] = []
   for (const [s, e] of uni) {
     const known = KNOWN.has(s)
-    if (e.freq < 2 && !e.tech && !known) continue
-    const label = [...e.forms.entries()].sort((a, b) => b[1] - a[1])[0][0]
-    out.push({ key: s, label, stems: [s], freq: e.freq, weight: e.freq * (e.tech ? 2 : 1) * (known ? 1.6 : 1) })
+    if (WEAK_UNI.has(s)) continue
+    // présent uniquement dans la présentation de l'entreprise et peu répété : contexte, pas compétence
+    if (!e.jobW && !known && !e.tech && e.w < 1) continue
+    if (e.w < 2 && !e.tech && !known) continue
+    let label = [...e.forms.entries()].sort((a, b) => b[1] - a[1])[0][0]
+    // verbe ou participe isolé (« encadrez », « publiée ») : gardé seulement s'il désigne une action, affiché en nom
+    if (!e.tech && isConjugated(label)) {
+      if (!ACTION_LABEL[s]) continue
+      label = ACTION_LABEL[s]
+    }
+    out.push({ key: s, label, stems: [s], freq: e.freq, weight: e.w * (e.tech ? 2 : 1) * (known ? 1.6 : 1), zone: e.jobW ? undefined : 'company' })
   }
   for (const [k, e] of grams) {
     const known = e.stems.every((s) => KNOWN.has(s))
-    if (e.freq < 2 && !e.tech && !known) continue
-    out.push({ key: k, label: e.label, stems: e.stems, freq: e.freq, weight: e.freq * 1.8 * (e.tech ? 1.5 : 1) * (known ? 1.3 : 1) })
+    if (e.w < 2 && !e.tech && !known) continue
+    out.push({ key: k, label: e.label, stems: e.stems, freq: e.freq, weight: e.w * 1.8 * (e.tech ? 1.5 : 1) * (known ? 1.3 : 1) })
   }
   // un mot isolé n'apparaissant que dans une expression retenue fait doublon
   const kept = out
@@ -167,6 +300,8 @@ export interface KeywordResult extends Keyword {
 }
 
 export interface MatchResult {
+  /** masqués automatiquement (déjà masqués dans d'autres candidatures) */
+  auto: Keyword[]
   keywords: KeywordResult[]
   score: number
   matched: number
@@ -178,15 +313,22 @@ const close = (a: string, b: string) => a === b || (a.length >= 5 && b.length >=
 function matchOne(hay: string[], set: Set<string>, k: Keyword): { inCv: number; match: MatchKind; credit: number } {
   const exact = countMatches(hay, k.stems)
   if (exact) return { inCv: exact, match: 'full', credit: 1 }
-  const present = k.stems.filter((s) => set.has(s) || hay.some((h) => close(h, s)))
+  const present = k.stems.filter((s) => set.has(s) || synOf(s).some((x) => set.has(x)) || hay.some((h) => close(h, s)))
   if (present.length === k.stems.length) return { inCv: 1, match: 'near', credit: 0.8 }
   if (k.stems.length > 1 && present.length / k.stems.length >= 0.5) return { inCv: 0, match: 'partial', credit: 0.4 }
   return { inCv: 0, match: 'none', credit: 0 }
 }
 
-export function matchKeywords(cvText: string, jobText: string, ignored: string[] = [], extra: string[] = [], exclude: string[] = []): MatchResult {
-  const excluded = new Set(exclude.flatMap((e) => cvStems(e)))
-  const kws = extractKeywords(jobText).filter((k) => !k.stems.every((st) => excluded.has(st)))
+export interface MatchOptions extends KeywordContext {
+  /** mots masqués dans d'autres candidatures : masqués d'office ici */
+  learned?: string[]
+}
+
+export function matchKeywords(cvText: string, jobText: string, ignored: string[] = [], extra: string[] = [], opts: MatchOptions = {}): MatchResult {
+  const learned = new Set(opts.learned ?? [])
+  const all = extractKeywords(jobText, 40, opts)
+  const kws = all.filter((k) => !learned.has(k.key))
+  const auto = all.filter((k) => learned.has(k.key) && !ignored.includes(k.key))
   for (const e of extra) {
     const stems = cvStems(e)
     if (!stems.length) continue
@@ -199,6 +341,7 @@ export function matchKeywords(cvText: string, jobText: string, ignored: string[]
   const total = list.reduce((a, k) => a + k.weight, 0)
   const got = list.reduce((a, k) => a + k.weight * k.credit, 0)
   return {
+    auto,
     keywords: list,
     score: total ? Math.round((got / total) * 100) : 0,
     matched: list.filter((k) => k.match === 'full' || k.match === 'near').length,
@@ -222,6 +365,9 @@ export interface Check {
 const ATS_CHECKS = new Set(['contact', 'title', 'title-match', 'exp', 'exp-dates', 'exp-company', 'education', 'skills', 'headings', 'columns', 'format', 'photo'])
 
 const bulletsOf = (items: SectionItem[]) => items.flatMap((i) => (i.bullets ?? []).filter((b) => b.trim()))
+
+/** Puce au format « Thème : détails » (« Organisation du travail : plannings, absences… »). */
+export const isThemed = (b: string) => /^[^:]{3,45}\s:\s*\S/.test(stripInline(b).trim())
 
 export function startsWithAction(b: string): boolean {
   const words = strip(stripInline(b).trim()).split(/\s+/)
@@ -260,19 +406,39 @@ export function runChecks(doc: ResumeDoc, pages: number): Check[] {
     const noCompany = exp.filter((i) => !i.subtitle?.trim())
     add('exp-dates', 'Dates des expériences', noDates.length ? 'warn' : 'ok', noDates.length ? `${noDates.length} poste(s) sans date de début : les ATS calculent l'ancienneté avec ces dates.` : 'Toutes les expériences sont datées.')
     if (noCompany.length) add('exp-company', 'Entreprises', 'warn', `${noCompany.length} poste(s) sans nom d'entreprise.`)
-    const bad = exp.filter((i) => {
-      const n = (i.bullets ?? []).filter((b) => b.trim()).length
-      return n < 2 || n > 7
-    })
-    add('exp-bullets', 'Puces par poste', bad.length ? 'warn' : 'ok', bad.length ? `Visez 3 à 6 puces par poste (${bad.map((i) => i.title || 'sans titre').slice(0, 3).join(', ')}).` : 'Nombre de puces équilibré.')
+    // les recruteurs lisent surtout les 3 postes les plus récents ; les anciens peuvent tenir en une ligne
+    const nb = (i: SectionItem) => (i.bullets ?? []).filter((b) => b.trim()).length + (i.description?.trim() && !(i.bullets ?? []).some((b) => b.trim()) ? 1 : 0)
+    // postes récents : en cours ou terminés depuis moins de 10 ans (3 au plus) ; sans dates, les deux premiers
+    const year = new Date().getFullYear()
+    const dated = exp.filter((i) => i.current || (i.end?.year ?? i.start?.year))
+    const recent = (dated.length ? exp.filter((i) => i.current || year - (i.end?.year ?? i.start?.year ?? 0) <= 10) : exp.slice(0, 2)).slice(0, 3)
+    const thin = recent.filter((i) => nb(i) < 2)
+    const heavy = exp.filter((i) => nb(i) > 7)
+    const names = (l: SectionItem[]) => l.map((i) => i.title || 'sans titre').slice(0, 3).join(', ')
+    add(
+      'exp-bullets',
+      'Puces par poste',
+      thin.length || heavy.length ? 'warn' : 'ok',
+      thin.length
+        ? `Développez vos postes récents en 3 à 6 puces (${names(thin)}).`
+        : heavy.length
+          ? `Plus de 7 puces : gardez les plus fortes (${names(heavy)}).`
+          : `Postes récents détaillés${exp.length > 3 ? ', postes plus anciens résumés : c\'est l\'équilibre attendu' : ''}.`,
+    )
   }
 
   const bullets = bulletsOf(secs.flatMap((s) => (['experience', 'projects', 'volunteering', 'custom'].includes(s.type) ? s.items : [])))
   if (bullets.length) {
     const quant = bullets.filter((b) => /\d/.test(b)).length / bullets.length
-    add('quant', 'Résultats chiffrés', quant >= 0.3 ? 'ok' : quant >= 0.15 ? 'warn' : 'error', `${Math.round(quant * 100)} % des puces contiennent un chiffre (objectif : 30 % et plus).`)
-    const verbs = bullets.filter(startsWithAction).length / bullets.length
-    add('verbs', 'Verbes d\'action', verbs >= 0.5 ? 'ok' : 'warn', `${Math.round(verbs * 100)} % des puces commencent par un verbe ou un nom d'action (piloté, pilotage, déploiement...).`)
+    add('quant', 'Résultats chiffrés', quant >= 0.25 ? 'ok' : 'warn', `${Math.round(quant * 100)} % des puces contiennent un chiffre (taille d'équipe, volume, délai, gain). Visez au moins une puce chiffrée sur quatre.`)
+    const themed = bullets.filter(isThemed).length
+    const action = bullets.filter((b) => startsWithAction(b) || isThemed(b)).length / bullets.length
+    add(
+      'verbs',
+      'Puces orientées action',
+      action >= 0.6 ? 'ok' : 'warn',
+      `${Math.round(action * 100)} % des puces commencent par une action (pilotage, déploiement, coordination…)${themed ? ` ou par un thème suivi de deux-points (${themed} puce${themed > 1 ? 's' : ''})` : ''}.${action < 0.6 ? ' Les autres décrivent un contexte plutôt qu\'une réalisation.' : ''}`,
+    )
     const long = bullets.filter((b) => stripInline(b).length > 220).length
     if (long) add('long-bullets', 'Puces trop longues', 'warn', `${long} puce(s) dépassent 2 lignes : allez à l'essentiel.`)
   }

@@ -32,11 +32,30 @@ const addDays = (t: number, n: number) => {
  */
 export function nextFollowUp(o: Offer): number | undefined {
   if (o.status !== 'applied' || o.noFollowUp) return undefined
-  const sent = o.followUps ?? []
+  // une réponse du recruteur relance le compteur : on repart de son message (ou du délai qu'il annonce)
+  const upd = lastUpdate(o)
+  const sent = (o.followUps ?? []).filter((t) => !upd || t > upd.at)
   if (sent.length >= MAX_FOLLOW_UPS) return undefined
-  if (!sent.length && o.followUpDate) return startOfDay(o.followUpDate)
-  const from = sent.length ? Math.max(...sent) : appliedAt(o)
+  // date choisie à la main (après la dernière réponse), sinon lendemain du délai annoncé
+  if (!sent.length && o.followUpDate && (!upd || o.followUpDate >= startOfDay(upd.at))) return startOfDay(o.followUpDate)
+  if (!sent.length && upd?.waitUntil) return addDays(upd.waitUntil, 1)
+  const from = sent.length ? Math.max(...sent) : upd ? upd.at : appliedAt(o)
   return from ? addDays(from, followUpDays(o)) : undefined
+}
+
+/** Relances envoyées depuis la dernière réponse du recruteur. */
+export const followUpsSinceUpdate = (o: Offer) => {
+  const u = lastUpdate(o)
+  return (o.followUps ?? []).filter((t) => !u || t > u.at)
+}
+
+/** Dernière réponse ou nouvelle du recruteur. */
+export const lastUpdate = (o: Offer) => [...(o.updates ?? [])].sort((a, b) => b.at - a.at)[0]
+
+/** Retour annoncé par le recruteur et pas encore passé. */
+export const announcedBy = (o: Offer, now = Date.now()) => {
+  const u = lastUpdate(o)
+  return u?.waitUntil && startOfDay(u.waitUntil) >= startOfDay(now) ? u.waitUntil : undefined
 }
 
 export const isDue = (o: Offer, now = Date.now()) => {
@@ -47,7 +66,8 @@ export const isDue = (o: Offer, now = Date.now()) => {
 const frDate = (t?: number) => (t ? new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '')
 
 export function followUpEmail(o: Offer, cv?: ResumeDoc): { subject: string; body: string } {
-  const first = !(o.followUps?.length)
+  const upd = lastUpdate(o)
+  const first = !(o.followUps ?? []).some((t) => !upd || t > upd.at)
   const raw = cv?.header.name || ''
   // nom saisi en capitales : « JULIEN CLAVEL » devient « Julien Clavel »
   const name = raw === raw.toUpperCase() ? raw.toLowerCase().replace(/(^|[\s-])\p{L}/gu, (m) => m.toUpperCase()) : raw
@@ -68,6 +88,20 @@ Je me permets de revenir vers vous suite à notre entretien du ${frDate(met.at)}
 Notre échange a renforcé mon intérêt pour ce poste et pour ${o.company || 'votre équipe'}. Auriez-vous des nouvelles sur la suite du processus ?
 
 Je reste disponible si vous avez besoin d'éléments complémentaires.
+
+Bien cordialement,
+${name}`,
+    }
+  }
+  // relance après une réponse : on rappelle leur message et le délai qu'ils avaient donné
+  if (upd && o.status === 'applied') {
+    return {
+      subject: `Suivi de ma candidature ${poste}${o.company ? ` chez ${o.company}` : ''}`,
+      body: `${hello}
+
+Je me permets de revenir vers vous suite à votre message du ${frDate(upd.at)}${upd.waitUntil ? `, qui annonçait un retour vers le ${frDate(upd.waitUntil)}` : ''}, au sujet de ma candidature ${poste}.
+
+Je reste très intéressé par ce poste. Avez-vous pu avancer dans le processus de recrutement ? Je suis disponible pour un échange si cela peut vous être utile.
 
 Bien cordialement,
 ${name}`,

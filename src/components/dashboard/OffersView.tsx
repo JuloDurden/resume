@@ -1,10 +1,10 @@
 import { docNameFor } from '../../lib/filename'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
-import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, ShareModal, followUpLabel } from './OfferTools'
+import { MailCheck, Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, RecruiterUpdateModal, ShareModal, followUpLabel } from './OfferTools'
 import { FEELING, MODE_LABEL, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
-import { nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
+import { announcedBy, followUpsSinceUpdate, nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import { CompanyAnalysisModal, CompanyCard, SpontaneousModal } from './SpontaneousTools'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
@@ -107,7 +107,9 @@ function nextStep(o: Offer, docs: AnyDoc[]): Next {
   const fu = followUpLabel(o)
   if (fu?.due) return { text: fu.label === 'Seconde relance' ? 'Seconde relance à faire' : "Relancer aujourd'hui", tone: 'hot', stage: 'now', act: 'followup' }
   const n = nextFollowUp(o)
-  if (n) return { text: `${o.followUps?.length ? 'Seconde relance' : 'Relance'} le ${frDay(n)}`, tone: '', stage: 'wait', act: 'planner' }
+  const promised = announcedBy(o)
+  if (promised) return { text: `Retour annoncé le ${frDay(promised)}`, tone: 'ok', stage: 'wait', act: 'planner', title: n ? `Sans nouvelles, relance proposée le ${frDay(n)}` : undefined }
+  if (n) return { text: `${followUpsSinceUpdate(o).length ? 'Seconde relance' : 'Relance'} le ${frDay(n)}`, tone: '', stage: 'wait', act: 'planner' }
   return { text: o.noFollowUp ? 'Sans relance' : 'En attente', tone: 'muted', stage: 'wait', act: 'planner' }
 }
 
@@ -143,6 +145,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
   const [prep, setPrep] = useState(false)
   const [ivPlan, setIvPlan] = useState<false | true | 'add'>(false)
   const [analysing, setAnalysing] = useState(false)
+  const [replying, setReplying] = useState(false)
   const [reportFor, setReportFor] = useState<string | null>(null)
   const minPay = useDocs((s) => s.watch.profile?.salary?.min)
   const pay = offerSalary(offer)
@@ -291,6 +294,17 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
               >
                 {offer.share ? 'Dossier pour le recruteur (en ligne)' : 'Dossier pour le recruteur…'}
               </MenuItem>
+              {status !== 'todo' && status !== 'rejected' && (
+                <MenuItem
+                  icon={<MailCheck size={14} />}
+                  onClick={() => {
+                    close()
+                    setReplying(true)
+                  }}
+                >
+                  Noter une réponse du recruteur…
+                </MenuItem>
+              )}
               {offer.spontaneous && (
                 <MenuItem
                   icon={<Sparkles size={14} />}
@@ -471,11 +485,25 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                 </p>
               </div>
             )}
-            <p>
-              Ajoutée le {new Date(offer.createdAt).toLocaleDateString('fr-FR')}
-              {sent ? `, envoyée le ${new Date(sent).toLocaleDateString('fr-FR')}` : ''}
-              {offer.followUps?.length ? `, relancée le ${offer.followUps.map((t) => new Date(t).toLocaleDateString('fr-FR')).join(' et le ')}` : ''}
-            </p>
+            <ul className="or-log">
+              {[
+                { at: offer.createdAt, k: 'add', text: 'Ajoutée' },
+                ...(sent ? [{ at: sent, k: 'sent', text: 'Candidature envoyée' }] : []),
+                ...(offer.followUps ?? []).map((t) => ({ at: t, k: 'fu', text: 'Relance envoyée' })),
+                ...(offer.updates ?? []).map((u) => ({
+                  at: u.at,
+                  k: 'upd',
+                  text: `${u.kind === 'reply' ? 'Réponse à la relance' : 'Message du recruteur'}${u.text ? ` : ${u.text.replace(/[.\s]+$/, '')}` : ''}${u.waitUntil ? ` (retour annoncé le ${new Date(u.waitUntil).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })})` : ''}`,
+                })),
+              ]
+                .sort((a, b) => a.at - b.at)
+                .map((e, i) => (
+                  <li key={i} className={`log-${e.k}`}>
+                    <span className="log-date">{new Date(e.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span> {e.text}
+                  </li>
+                ))}
+            </ul>
+
             {status === 'applied' && (
               <p>
                 {fu ? fu.title.split('.')[0] : 'Pas de relance prévue'}{' '}
@@ -514,6 +542,11 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
                   <BellRing size={13} /> Relancer
                 </button>
               )}
+              {status !== 'todo' && status !== 'rejected' && (
+                <button className="btn sm" onClick={() => setReplying(true)}>
+                  <MailCheck size={13} /> Noter une réponse
+                </button>
+              )}
               <button className="btn sm" onClick={() => setShare(true)}>
                 <Globe size={13} /> Dossier recruteur
               </button>
@@ -529,6 +562,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
       {planner && <FollowUpPlanner offer={offer} onClose={() => setPlanner(false)} />}
       {share && <ShareModal offer={offer} onClose={() => setShare(false)} />}
       {prep && <InterviewModal offer={offer} onClose={() => setPrep(false)} />}
+      {replying && <RecruiterUpdateModal offer={offer} onClose={() => setReplying(false)} onInterview={() => setIvPlan(true)} />}
       {analysing && <CompanyAnalysisModal offer={offer} onClose={() => setAnalysing(false)} />}
       {ivPlan && <InterviewPlanner offer={offer} addNext={ivPlan === 'add'} onClose={() => setIvPlan(false)} />}
       {reportFor && <InterviewReport offer={offer} slotId={reportFor} onClose={() => setReportFor(null)} onNext={() => setIvPlan('add')} />}

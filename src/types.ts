@@ -234,6 +234,20 @@ export interface Offer extends JobTarget {
   interviews?: InterviewSlot[]
   /** date de retour annoncée après le dernier entretien */
   answerBy?: number
+  /** réponses et nouvelles du recruteur (après une relance ou spontanément) */
+  updates?: RecruiterUpdate[]
+}
+
+export interface RecruiterUpdate {
+  id: string
+  /** jour de réception */
+  at: number
+  /** réponse à ma relance, ou message reçu sans relance */
+  kind: 'reply' | 'news'
+  /** ce qu'ils disent, en substance */
+  text?: string
+  /** date de retour annoncée (« étudiée sous 3 semaines ») */
+  waitUntil?: number
 }
 
 export type InterviewMode = 'site' | 'phone' | 'video'

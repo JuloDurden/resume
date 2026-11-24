@@ -4,7 +4,7 @@ import type { InterviewFeeling, InterviewMode, InterviewPrep, InterviewSlot, Off
 import { FEELING, MODE_LABEL, datedInterviews, downloadIcs, fmtIn, fmtLong, printPrep, slotWhere } from '../../lib/interviews'
 import { uid } from '../../lib/ids'
 import { useDocs } from '../../store/documents'
-import { FOLLOW_UP_CHOICES, appliedAt, followUpDays, followUpEmail, nextFollowUp, startOfDay } from '../../lib/followup'
+import { FOLLOW_UP_CHOICES, appliedAt, followUpDays, followUpEmail, nextFollowUp, startOfDay, followUpsSinceUpdate, lastUpdate } from '../../lib/followup'
 import { resumeToText } from '../../lib/export'
 import { CLAUDE_URL, copyText, extractJson, interviewPrepPrompt } from '../../lib/prompts'
 import { Field, Modal, Segmented, Select, TextArea, TextInput, Toggle, toast } from '../ui'
@@ -34,7 +34,7 @@ export function FollowUpModal({ offer, onClose }: { offer: Offer; onClose: () =>
   const withEmail = (offer.contacts ?? []).filter((c) => c.email)
   const [to, setTo] = useState(withEmail[0]?.email ?? '')
   const copy = async (t: string, msg: string) => toast[(await copyText(t)) ? 'ok' : 'error'](msg)
-  const n = (offer.followUps?.length ?? 0) + 1
+  const n = followUpsSinceUpdate(offer).length + 1
 
   const done = () => {
     let contacts = offer.contacts ?? []
@@ -121,7 +121,7 @@ export function followUpLabel(o: Offer): { due: boolean; label: string; title: s
   if (!n) return undefined
   const days = Math.round((n - startOfDay(Date.now())) / 86400000)
   const when = `Relance prévue le ${new Date(n).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`
-  if (days <= 0) return { due: true, label: (o.followUps?.length ?? 0) ? 'Seconde relance' : 'À relancer', title: `${when}. Cliquez pour préparer l'email.` }
+  if (days <= 0) return { due: true, label: followUpsSinceUpdate(o).length ? 'Seconde relance' : 'À relancer', title: `${when}. Cliquez pour préparer l'email.` }
   return { due: false, label: days === 1 ? 'Relance demain' : days <= 21 ? `Relance dans ${days} j` : `Relance le ${new Date(n).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`, title: `${when}. Cliquez pour changer le délai ou la date.` }
 }
 
@@ -141,7 +141,7 @@ export function FollowUpPlanner({ offer, onClose }: { offer: Offer; onClose: () 
   const profile = useDocs((s) => s.watch.profile)
   const setProfile = useDocs((s) => s.setProfile)
   const [applied, setApplied] = useState(toInput(appliedAt(offer) ?? Date.now()))
-  const [mode, setMode] = useState<number | 'date'>(offer.followUpDate && !offer.followUps?.length ? 'date' : followUpDays(offer))
+  const [mode, setMode] = useState<number | 'date'>(offer.followUpDate && !followUpsSinceUpdate(offer).length ? 'date' : followUpDays(offer))
   const [date, setDate] = useState(toInput(offer.followUpDate))
   const [asDefault, setAsDefault] = useState(false)
   const draft: Offer = { ...offer, statusAt: { ...offer.statusAt, applied: fromInput(applied) }, followUpDays: mode === 'date' ? offer.followUpDays : mode, followUpDate: mode === 'date' ? fromInput(date) : undefined }
@@ -172,11 +172,11 @@ export function FollowUpPlanner({ offer, onClose }: { offer: Offer; onClose: () 
         <Field label="Jour de la candidature" hint="Le délai se compte en jours à partir de ce jour, quelle que soit l'heure d'envoi.">
           <input className="input" type="date" value={applied} max={toInput(Date.now())} onChange={(e) => setApplied(e.target.value)} />
         </Field>
-        <Field label={offer.followUps?.length ? 'Délai avant la seconde relance' : 'Relancer'}>
+        <Field label={followUpsSinceUpdate(offer).length ? 'Délai avant la seconde relance' : 'Relancer'}>
           <Segmented
             value={mode}
             onChange={setMode}
-            options={[...FOLLOW_UP_CHOICES.map((d) => ({ value: d as number | 'date', label: `${d} jours` })), ...(offer.followUps?.length ? [] : [{ value: 'date' as const, label: 'Date précise', title: "Quand l'employeur indique la fin de sa période de recrutement" }])]}
+            options={[...FOLLOW_UP_CHOICES.map((d) => ({ value: d as number | 'date', label: `${d} jours` })), ...(followUpsSinceUpdate(offer).length ? [] : [{ value: 'date' as const, label: 'Date précise', title: "Quand l'employeur indique la fin de sa période de recrutement" }])]}
           />
         </Field>
         {mode === 'date' ? (
@@ -192,7 +192,111 @@ export function FollowUpPlanner({ offer, onClose }: { offer: Offer; onClose: () 
         {next && (
           <p className="muted small">
             Relance prévue le <strong>{new Date(next).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>
-            {(offer.followUps?.length ?? 0) === 0 ? `, puis une seconde relance ${mode === 'date' ? followUpDays(offer) : mode} jours plus tard si besoin.` : '.'}
+            {followUpsSinceUpdate(offer).length === 0 ? `, puis une seconde relance ${mode === 'date' ? followUpDays(offer) : mode} jours plus tard si besoin.` : '.'}
+          </p>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+/* ---------- Réponses du recruteur ---------- */
+
+const WAITS: { value: string; label: string; days?: number }[] = [
+  { value: 'none', label: 'Aucun délai' },
+  { value: '7', label: '1 semaine', days: 7 },
+  { value: '14', label: '2 semaines', days: 14 },
+  { value: '21', label: '3 semaines', days: 21 },
+  { value: '30', label: '1 mois', days: 30 },
+  { value: 'date', label: 'Date précise' },
+]
+const OUTCOMES = [
+  { value: 'pending', label: 'Toujours en lice' },
+  { value: 'interview', label: 'Entretien proposé' },
+  { value: 'rejected', label: 'Refus' },
+] as const
+const PHRASES = ['Candidature toujours à l\'étude', 'Processus plus long que prévu', 'Candidature transmise au manager', 'Réponse après les entretiens en cours']
+
+/** Noter une réponse à une relance, ou des nouvelles reçues sans relance. */
+export function RecruiterUpdateModal({ offer, onClose, onInterview }: { offer: Offer; onClose: () => void; onInterview?: () => void }) {
+  const saveOffer = useDocs((s) => s.saveOffer)
+  const last = lastUpdate(offer)
+  // une relance sans réponse depuis : c'est probablement sa réponse
+  const relanced = (offer.followUps ?? []).some((t) => !last || t > last.at)
+  const [kind, setKind] = useState<'reply' | 'news'>(relanced ? 'reply' : 'news')
+  const [day, setDay] = useState(toInput(Date.now()))
+  const [text, setText] = useState('')
+  const [wait, setWait] = useState('none')
+  const [waitDate, setWaitDate] = useState('')
+  const [outcome, setOutcome] = useState<(typeof OUTCOMES)[number]['value']>('pending')
+  const at = fromInput(day) ?? Date.now()
+  const w = WAITS.find((x) => x.value === wait)
+  const waitUntil = wait === 'date' ? fromInput(waitDate) : w?.days ? at + w.days * 86400000 : undefined
+  const fmt = (t: number) => new Date(t).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+  const save = () => {
+    const u = { id: uid(), at, kind, text: text.trim() || undefined, waitUntil }
+    const status = outcome === 'interview' ? 'interview' : outcome === 'rejected' ? 'rejected' : offer.status === 'todo' ? 'applied' : offer.status
+    // après un entretien, le délai annoncé devient la date de retour attendue
+    const answerBy = waitUntil && (status === 'interview' || offer.status === 'interview') ? waitUntil : offer.answerBy
+    saveOffer({ ...offer, status, answerBy, followUpDate: undefined, updates: [...(offer.updates ?? []), u] })
+    toast.ok(outcome === 'rejected' ? 'Réponse notée, candidature passée en refusée' : waitUntil ? `Réponse notée : retour annoncé le ${fmt(waitUntil)}` : 'Réponse notée')
+    onClose()
+    if (outcome === 'interview') onInterview?.()
+  }
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Réponse de ${offer.company || 'l\'employeur'}`}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Annuler
+          </button>
+          <button className="btn primary" onClick={save}>
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      <div className="form-stack">
+        <Segmented
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'reply', label: 'Réponse à ma relance' },
+            { value: 'news', label: 'Message reçu sans relance' },
+          ]}
+        />
+        <div className="grid-2">
+          <Field label="Reçu le">
+            <input className="input" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+          </Field>
+          <Field label="Résultat">
+            <Segmented value={outcome} onChange={setOutcome} options={OUTCOMES.map((o) => ({ value: o.value, label: o.label }))} />
+          </Field>
+        </div>
+        <Field label="En substance">
+          <TextArea value={text} minRows={2} onChange={setText} placeholder="Ce que dit le message, en une ou deux phrases" />
+          <div className="post-sugg">
+            {PHRASES.map((p) => (
+              <button key={p} type="button" className="sugg-chip" onClick={() => setText((t) => (t.trim() ? `${t.trim()} ${p.toLowerCase()}.` : `${p}.`))}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </Field>
+        {outcome !== 'rejected' && (
+          <Field label="Délai de réponse annoncé" hint="Compté à partir du jour du message.">
+            <Segmented value={wait} onChange={setWait} options={WAITS.map((x) => ({ value: x.value, label: x.label }))} />
+            {wait === 'date' && <input className="input" type="date" value={waitDate} onChange={(e) => setWaitDate(e.target.value)} style={{ maxWidth: 200, marginTop: 8 }} />}
+          </Field>
+        )}
+        {outcome === 'pending' && (
+          <p className="notice small">
+            {waitUntil
+              ? `Retour annoncé le ${fmt(waitUntil)}. Sans nouvelles, une relance vous sera proposée le lendemain.`
+              : `Sans délai annoncé, la prochaine relance est proposée ${followUpDays(offer)} jours après ce message.`}
           </p>
         )}
       </div>

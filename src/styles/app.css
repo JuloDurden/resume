@@ -5109,46 +5109,6 @@ button.followup-badge {
   cursor: default;
 }
 
-/* ---------- thème sombre (réglages) : l'aperçu du CV reste une page blanche ---------- */
-:root[data-theme='dark'] {
-  --bg: #0f1419;
-  --bg-2: #1b222b;
-  --panel: #161c23;
-  --ink: #e4e8ee;
-  --ink-2: #b3bcc8;
-  --ink-3: #8792a1;
-  --line: #2b3440;
-  --line-2: #222a34;
-  --brand: #3f6ea8;
-  --brand-2: #6ea6e6;
-  --brand-soft: #1c2a3c;
-  --claude: #e0896a;
-  --claude-soft: #352219;
-  --ok: #4ade80;
-  --warn: #f0a63a;
-  --error: #f07167;
-  --info: #6ea6e6;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
-  color-scheme: dark;
-}
-:root[data-theme='dark'] .input,
-:root[data-theme='dark'] input,
-:root[data-theme='dark'] select,
-:root[data-theme='dark'] textarea {
-  background: var(--bg-2);
-  color: var(--ink);
-  border-color: var(--line);
-}
-:root[data-theme='dark'] .notice,
-:root[data-theme='dark'] .notice.info {
-  background: var(--brand-soft);
-  color: var(--ink);
-}
-:root[data-theme='dark'] img[src$='favicon.svg'] {
-  filter: brightness(1.4);
-}
-
 /* ---------- en-tête : voyant de sauvegarde, réglages ---------- */
 .sync-dot {
   display: inline-flex;
@@ -5207,9 +5167,6 @@ button.followup-badge {
   color: var(--brand);
   font-weight: 600;
 }
-:root[data-theme='dark'] .settings-nav button.on {
-  color: var(--brand-2);
-}
 .set-row {
   display: flex;
   align-items: center;
@@ -5249,4 +5206,622 @@ button.followup-badge {
     border-bottom: 1px solid var(--line);
     padding: 0 0 8px;
   }
+}
+
+/* ---------- thème sombre : noir neutre, cartes gris anthracite, un accent vert anis ---------- */
+:root[data-theme='dark'] {
+  --bg: #0a0a0b;
+  --bg-2: #202024;
+  --panel: #151517;
+  --ink: #f1f1f2;
+  --ink-2: #a7a7ae;
+  --ink-3: #6f6f77;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.045);
+  --accent: #c8f169;
+  --brand: #c8f169;
+  --brand-2: #c8f169;
+  --brand-soft: rgba(200, 241, 105, 0.1);
+  --claude: #f0a27e;
+  --claude-soft: rgba(240, 162, 126, 0.12);
+  --ok: #7ee0a1;
+  --warn: #f5c066;
+  --error: #ff8a80;
+  --info: #8ab8ff;
+  --radius: 10px;
+  --shadow: none;
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+:root[data-theme='dark'] body {
+  background: var(--bg);
+}
+/* cartes : surface anthracite, sans ombre, filet très discret, grands rayons */
+:root[data-theme='dark'] .doc-card,
+:root[data-theme='dark'] .offer-row,
+:root[data-theme='dark'] .job-card,
+:root[data-theme='dark'] .company-row,
+:root[data-theme='dark'] .style-group,
+:root[data-theme='dark'] .modal,
+:root[data-theme='dark'] .oc-counter {
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: none;
+}
+:root[data-theme='dark'] .doc-card,
+:root[data-theme='dark'] .offer-row,
+:root[data-theme='dark'] .job-card,
+:root[data-theme='dark'] .modal {
+  border-radius: 16px;
+}
+:root[data-theme='dark'] .offer-row.open,
+:root[data-theme='dark'] .job-card.open {
+  border-color: rgba(200, 241, 105, 0.35);
+  box-shadow: 0 0 0 1px rgba(200, 241, 105, 0.12), 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+/* boutons : principal en pastille claire, secondaires en gris */
+:root[data-theme='dark'] .btn {
+  background: var(--bg-2);
+  border-color: transparent;
+  color: var(--ink);
+  border-radius: 999px;
+}
+:root[data-theme='dark'] .btn:hover:not(:disabled) {
+  background: #2a2a2f;
+}
+:root[data-theme='dark'] .btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0a0b;
+  font-weight: 600;
+}
+:root[data-theme='dark'] .btn.primary:hover:not(:disabled) {
+  background: #d6f78a;
+}
+:root[data-theme='dark'] .btn.ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+:root[data-theme='dark'] .icon-btn {
+  color: var(--ink-2);
+  border-radius: 999px;
+}
+:root[data-theme='dark'] .icon-btn:hover {
+  background: var(--bg-2);
+  color: var(--ink);
+}
+/* onglets, segments, navigation : pastille d'accent */
+:root[data-theme='dark'] .segmented {
+  background: var(--bg-2);
+  border-color: transparent;
+  border-radius: 999px;
+}
+:root[data-theme='dark'] .segmented button {
+  border-radius: 999px;
+  color: var(--ink-2);
+}
+:root[data-theme='dark'] .segmented button.on,
+:root[data-theme='dark'] .segmented button[aria-pressed='true'] {
+  background: var(--ink);
+  color: #0a0a0b;
+  box-shadow: none;
+}
+:root[data-theme='dark'] .dash-tabs {
+  border-color: var(--line);
+}
+:root[data-theme='dark'] .dash-tabs button {
+  color: var(--ink-2);
+}
+:root[data-theme='dark'] .dash-tabs button.on {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+:root[data-theme='dark'] .dash-tabs em {
+  background: var(--bg-2);
+  color: var(--ink-2);
+}
+:root[data-theme='dark'] .settings-nav button.on {
+  background: var(--accent);
+  color: #0a0a0b;
+}
+:root[data-theme='dark'] .chip,
+:root[data-theme='dark'] .kw {
+  background: var(--bg-2);
+  border-color: transparent;
+  color: var(--ink);
+}
+/* champs */
+:root[data-theme='dark'] .input,
+:root[data-theme='dark'] input:not([type='checkbox']):not([type='radio']):not([type='range']),
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] textarea,
+:root[data-theme='dark'] .tags-input {
+  background: #0f0f11;
+  color: var(--ink);
+  border-color: var(--line);
+  border-radius: 10px;
+}
+:root[data-theme='dark'] .notice,
+:root[data-theme='dark'] .notice.info {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+:root[data-theme='dark'] a,
+:root[data-theme='dark'] .link {
+  color: var(--accent);
+}
+:root[data-theme='dark'] .metro svg path[stroke='#2f6fb3'],
+:root[data-theme='dark'] .metro svg circle[fill='#2f6fb3'] {
+  stroke: #e8e8ea;
+}
+:root[data-theme='dark'] .metro svg circle[fill='#2f6fb3'] {
+  fill: #e8e8ea;
+}
+:root[data-theme='dark'] .metro svg circle[stroke='#2f6fb3'] {
+  stroke: #e8e8ea;
+}
+
+/* ---------- thème sombre : généré à partir des couleurs claires (teintes translucides, textes éclaircis) ---------- */
+:root[data-theme='dark'] .btn:hover:not(:disabled) {
+  border-color: rgba(139, 150, 167, 0.4);
+}
+:root[data-theme='dark'] .btn.claude:not(.ghost) {
+  border-color: rgba(214, 128, 92, 0.4);
+}
+:root[data-theme='dark'] .toggle-track {
+  background: rgba(121, 137, 160, 0.16);
+}
+:root[data-theme='dark'] .notice.info {
+  color: rgb(146, 181, 221);
+}
+:root[data-theme='dark'] .notice.warn {
+  background: rgba(226, 163, 54, 0.16);
+  color: rgb(241, 193, 126);
+}
+:root[data-theme='dark'] .doc-thumb {
+  background: rgba(119, 137, 162, 0.16);
+}
+:root[data-theme='dark'] .kind-badge.letter {
+  background: rgba(99, 182, 117, 0.16);
+  color: rgb(144, 223, 172);
+}
+:root[data-theme='dark'] .preview-scroll {
+  background: rgba(121, 138, 159, 0.16);
+}
+:root[data-theme='dark'] .sec-card.open {
+  border-color: rgba(116, 149, 190, 0.4);
+}
+:root[data-theme='dark'] .item-card.open {
+  border-color: rgba(116, 149, 190, 0.4);
+}
+:root[data-theme='dark'] .template-card:hover {
+  border-color: rgba(116, 149, 190, 0.4);
+}
+:root[data-theme='dark'] .kw.missing {
+  border-color: rgba(216, 106, 90, 0.4);
+  background: rgba(226, 79, 54, 0.16);
+  color: rgb(231, 146, 136);
+}
+:root[data-theme='dark'] .kw.found {
+  border-color: rgba(113, 193, 140, 0.4);
+  background: rgba(83, 198, 117, 0.16);
+  color: rgb(139, 228, 180);
+}
+:root[data-theme='dark'] /* ---------- Claude ---------- */
+.claude-intro {
+  color: rgb(223, 165, 145);
+}
+:root[data-theme='dark'] .action-card:hover {
+  border-color: rgba(208, 130, 98, 0.4);
+  background: rgba(226, 119, 54, 0.16);
+}
+:root[data-theme='dark'] .steps-track::before {
+  background: rgba(119, 137, 161, 0.16);
+}
+:root[data-theme='dark'] .steps-dot {
+  border: 2px solid rgba(137, 151, 169, 0.4);
+}
+:root[data-theme='dark'] .picto:hover {
+  border-color: rgba(126, 150, 180, 0.4);
+}
+:root[data-theme='dark'] .art-page {
+  border: 1px solid rgba(135, 151, 171, 0.4);
+}
+:root[data-theme='dark'] .art-col {
+  background: rgba(115, 138, 166, 0.16);
+}
+:root[data-theme='dark'] .art-heading::after {
+  background: rgba(115, 138, 166, 0.16);
+}
+:root[data-theme='dark'] .ah-rule b {
+  border-bottom: 1px solid rgba(139, 151, 167, 0.4);
+}
+:root[data-theme='dark'] .art-header {
+  border: 1px solid rgba(135, 151, 171, 0.4);
+}
+:root[data-theme='dark'] .offers li:hover {
+  border-color: rgba(116, 149, 190, 0.4);
+}
+:root[data-theme='dark'] .offer-status.st-interview {
+  background: rgba(226, 163, 54, 0.16);
+  color: rgb(241, 193, 126);
+}
+:root[data-theme='dark'] .offer-status.st-rejected {
+  background: rgba(226, 72, 54, 0.16);
+  color: rgb(228, 148, 139);
+}
+:root[data-theme='dark'] .offer-status.st-offer {
+  background: rgba(88, 192, 123, 0.16);
+  color: rgb(139, 228, 180);
+}
+:root[data-theme='dark'] .kw.partial {
+  border-color: rgba(224, 172, 82, 0.4);
+  background: rgba(226, 163, 54, 0.16);
+  color: rgb(241, 198, 126);
+}
+:root[data-theme='dark'] .signature-input img, :root[data-theme='dark'] .signature-empty {
+  background: rgba(124, 135, 157, 0.16);
+}
+:root[data-theme='dark'] .company-badge {
+  background: rgba(226, 153, 54, 0.16);
+  color: rgb(241, 185, 126);
+}
+:root[data-theme='dark'] .status-select.st-interview {
+  background: rgba(226, 163, 54, 0.16);
+  color: rgb(241, 193, 126);
+}
+:root[data-theme='dark'] .status-select.st-rejected {
+  background: rgba(226, 72, 54, 0.16);
+  color: rgb(228, 148, 139);
+}
+:root[data-theme='dark'] .status-select.st-offer {
+  background: rgba(88, 192, 123, 0.16);
+  color: rgb(139, 228, 180);
+}
+:root[data-theme='dark'] .sync-btn.error {
+  border-color: rgba(216, 106, 90, 0.4);
+}
+:root[data-theme='dark'] .sync-status {
+  background: rgba(83, 198, 117, 0.16);
+  color: rgb(139, 228, 180);
+}
+:root[data-theme='dark'] .sync-status.error {
+  background: rgba(226, 72, 54, 0.16);
+  color: rgb(228, 148, 139);
+}
+:root[data-theme='dark'] .rome-refine button {
+  border: 1px dashed rgba(126, 150, 180, 0.4);
+}
+:root[data-theme='dark'] .icon-btn.fav {
+  color: rgb(241, 207, 126);
+}
+:root[data-theme='dark'] .applied-badge {
+  background: rgba(83, 198, 117, 0.16);
+}
+:root[data-theme='dark'] .watch-status.ok {
+  background: rgba(83, 198, 117, 0.16);
+  color: rgb(139, 228, 180);
+}
+:root[data-theme='dark'] .watch-status.error {
+  background: rgba(226, 72, 54, 0.16);
+  color: rgb(228, 148, 139);
+}
+:root[data-theme='dark'] .jc-until {
+  color: rgb(241, 176, 126);
+}
+:root[data-theme='dark'] .exclude-chip {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(233, 134, 134);
+}
+:root[data-theme='dark'] .btn.danger {
+  color: rgb(236, 131, 131);
+}
+:root[data-theme='dark'] .btn.danger:not(.ghost) {
+  border-color: rgba(221, 85, 85, 0.4);
+}
+:root[data-theme='dark'] .btn.danger:hover {
+  background: rgba(226, 54, 54, 0.16);
+}
+:root[data-theme='dark'] .match-badge.high {
+  background: rgba(54, 226, 113, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .match-badge.mid {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .match-chips .ok {
+  background: rgba(88, 192, 123, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .match-chips .mid {
+  background: rgba(226, 171, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .match-chips .no {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(233, 134, 134);
+}
+:root[data-theme='dark'] .review-box {
+  border: 1px solid rgba(214, 128, 92, 0.4);
+}
+:root[data-theme='dark'] .followup-badge.due {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .followup-badge.prep.ready {
+  background: rgba(54, 226, 113, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .offer-col {
+  background: rgba(119, 133, 162, 0.16);
+}
+:root[data-theme='dark'] .match-out {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(233, 134, 134);
+}
+:root[data-theme='dark'] .sal-cmp.low {
+  color: rgb(241, 176, 126);
+}
+:root[data-theme='dark'] .sal-cmp.high {
+  color: rgb(132, 235, 171);
+}
+:root[data-theme='dark'] .jc-flags {
+  color: rgb(241, 176, 126);
+}
+:root[data-theme='dark'] .jc-flags.lvl2 {
+  color: rgb(236, 131, 131);
+}
+:root[data-theme='dark'] .flags {
+  border: 1px solid rgba(224, 155, 82, 0.4);
+  background: rgba(226, 146, 54, 0.16);
+}
+:root[data-theme='dark'] .flags strong {
+  color: rgb(241, 176, 126);
+}
+:root[data-theme='dark'] .flags li.lvl2 b {
+  color: rgb(236, 131, 131);
+}
+:root[data-theme='dark'] .ref-badge {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .doc-card.reference {
+  border-color: rgba(224, 183, 82, 0.4);
+}
+:root[data-theme='dark'] .jc-degraded {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .match-capped {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .link-suggest {
+  background: rgba(226, 178, 54, 0.16);
+}
+:root[data-theme='dark'] .match-chips .track {
+  background: rgba(69, 91, 211, 0.16);
+  color: rgb(149, 145, 223);
+}
+:root[data-theme='dark'] .track-card:hover {
+  border-color: rgba(110, 121, 196, 0.4);
+  background: rgba(54, 89, 226, 0.16);
+}
+:root[data-theme='dark'] .track-toggle.on {
+  background: rgba(69, 91, 211, 0.16);
+  border-color: rgba(110, 121, 196, 0.4);
+  color: rgb(149, 145, 223);
+}
+:root[data-theme='dark'] .rome-pill.key {
+  border-color: rgba(110, 121, 196, 0.4);
+}
+:root[data-theme='dark'] .veille-status {
+  background: rgba(69, 91, 211, 0.16);
+  color: rgb(149, 145, 223);
+}
+:root[data-theme='dark'] .veille-status.ok {
+  background: rgba(88, 192, 123, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .veille-status.error {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(233, 134, 134);
+}
+:root[data-theme='dark'] .job-card:hover {
+  border-color: rgba(125, 148, 181, 0.4);
+}
+:root[data-theme='dark'] .zone-more:hover {
+  border-color: rgba(125, 148, 181, 0.4);
+}
+:root[data-theme='dark'] .jc-gauge {
+  background: rgba(125, 135, 155, 0.16);
+}
+:root[data-theme='dark'] .jc-score.high .jc-score-n {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .jc-score.mid .jc-score-n {
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .jc-score.capped .jc-gauge {
+  background: rgba(125, 135, 155, 0.16);
+}
+:root[data-theme='dark'] .jc-delta.up {
+  background: rgba(54, 226, 113, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .jc-delta.down {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(234, 134, 134);
+}
+:root[data-theme='dark'] /* carte dont la note vient d'être recalculée */
+.job-card.flash {
+  border-color: rgba(114, 192, 138, 0.4);
+}
+:root[data-theme='dark'] .pay.below {
+  color: rgb(234, 134, 134);
+  background: rgba(226, 54, 54, 0.16);
+}
+:root[data-theme='dark'] .pay.ok {
+  color: rgb(138, 229, 173);
+  background: rgba(54, 226, 113, 0.16);
+}
+:root[data-theme='dark'] .oc-counter.c-now strong {
+  color: rgb(241, 176, 126);
+}
+:root[data-theme='dark'] .oc-counter.c-wait strong {
+  color: rgb(138, 162, 229);
+}
+:root[data-theme='dark'] .oc-counter.c-interview strong {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .oc-counter:hover {
+  border-color: rgba(125, 148, 181, 0.4);
+}
+:root[data-theme='dark'] .oc-counter.c-now.on {
+  border-color: rgba(224, 160, 82, 0.4);
+  background: rgba(226, 163, 54, 0.16);
+}
+:root[data-theme='dark'] .offer-row.hot {
+  border-color: rgba(224, 160, 82, 0.4);
+}
+:root[data-theme='dark'] .offer-row:hover {
+  border-color: rgba(125, 148, 181, 0.4);
+}
+:root[data-theme='dark'] .or-next.hot {
+  color: rgb(241, 176, 126);
+}
+:root[data-theme='dark'] .or-next.ok {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .or-doc {
+  color: rgb(138, 162, 229);
+}
+:root[data-theme='dark'] .or-doc.letter {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .or-doc:hover {
+  border-color: rgba(125, 148, 181, 0.4);
+}
+:root[data-theme='dark'] .or-web {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .or-ats.good {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .or-ats.mid {
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .or-open .ok-text {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .feel.f-great {
+  color: rgb(132, 235, 171);
+}
+:root[data-theme='dark'] .feel.f-good {
+  color: rgb(191, 240, 128);
+}
+:root[data-theme='dark'] .feel.f-mixed {
+  color: rgb(241, 176, 126);
+}
+:root[data-theme='dark'] .feel.f-bad {
+  color: rgb(236, 131, 131);
+}
+:root[data-theme='dark'] .feel.on.f-great {
+  background: rgba(54, 226, 125, 0.16);
+}
+:root[data-theme='dark'] .feel.on.f-good {
+  background: rgba(162, 221, 60, 0.16);
+}
+:root[data-theme='dark'] .feel.on.f-mixed {
+  background: rgba(226, 163, 54, 0.16);
+}
+:root[data-theme='dark'] .feel.on.f-bad {
+  background: rgba(226, 54, 54, 0.16);
+}
+:root[data-theme='dark'] .feel-chip.f-great {
+  background: rgba(54, 226, 113, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .feel-chip.f-good {
+  background: rgba(170, 226, 54, 0.16);
+  color: rgb(190, 233, 134);
+}
+:root[data-theme='dark'] .feel-chip.f-mixed {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .feel-chip.f-bad {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(234, 134, 134);
+}
+:root[data-theme='dark'] .items .item-card.open {
+  border-color: rgba(125, 148, 181, 0.4);
+}
+:root[data-theme='dark'] /* ---------- candidatures spontanées ---------- */
+.spont-badge {
+  background: rgba(114, 61, 220, 0.16);
+  color: rgb(170, 152, 215);
+}
+:root[data-theme='dark'] .co-fit-inline.ok {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .co-fit-inline.mid {
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .co-fit-inline.low {
+  color: rgb(234, 134, 134);
+}
+:root[data-theme='dark'] .co-fit.ok {
+  background: rgba(54, 226, 113, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .co-fit.mid {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .co-fit.low {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(234, 134, 134);
+}
+:root[data-theme='dark'] .co-verdict.ok {
+  background: rgba(54, 226, 113, 0.16);
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .co-verdict.mid {
+  background: rgba(226, 192, 54, 0.16);
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .co-verdict.low {
+  background: rgba(226, 54, 54, 0.16);
+  color: rgb(234, 134, 134);
+}
+:root[data-theme='dark'] .co-fitlist li.ok::before {
+  color: rgb(129, 238, 169);
+}
+:root[data-theme='dark'] .co-fitlist li.gap::before {
+  color: rgb(241, 188, 126);
+}
+:root[data-theme='dark'] .sugg-chip {
+  border: 1px dashed rgba(132, 100, 206, 0.4);
+  color: rgb(167, 151, 217);
+}
+:root[data-theme='dark'] .sugg-chip:hover {
+  background: rgba(110, 62, 219, 0.16);
+}
+:root[data-theme='dark'] .sugg-chip em.ok {
+  color: rgb(138, 229, 173);
+}
+:root[data-theme='dark'] .sugg-chip em.mid {
+  color: rgb(241, 170, 126);
+}
+:root[data-theme='dark'] .sugg-chip em.low {
+  color: rgb(234, 134, 134);
+}
+:root[data-theme='dark'] .error-text {
+  color: rgb(236, 131, 131);
+}
+:root[data-theme='dark'] .or-log .log-upd {
+  color: rgb(140, 227, 175);
 }

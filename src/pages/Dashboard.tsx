@@ -14,7 +14,7 @@ import { JobsView } from '../components/dashboard/JobsView'
 import { useFeed } from '../store/feed'
 import { PdfImportModal } from '../components/PdfImportModal'
 import { SyncButton } from '../components/SyncModal'
-import { SettingsModal, downloadBackup, importBackupFile, type SettingsTab } from '../components/SettingsModal'
+import { SettingsModal, ThemeToggle, downloadBackup, importBackupFile, type SettingsTab } from '../components/SettingsModal'
 import { SharedIntro, ShowcaseGrid, ShowcaseIntro, useSharedShowcase, useShowcase } from './Showcase'
 import { useSync } from '../store/sync'
 import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput } from '../components/ui'
@@ -260,6 +260,7 @@ export default function Dashboard() {
         </div>
         <div className="dash-actions">
           <SyncButton onClick={() => setSettings('sync')} />
+          <ThemeToggle />
           <button className="icon-btn" onClick={() => setSettings('ui')} title="Réglages" aria-label="Réglages">
             <Settings size={18} />
           </button>

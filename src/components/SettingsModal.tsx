@@ -153,3 +153,22 @@ export function SettingsModal({ open, onClose, tab: initial = 'sync' }: { open: 
     </Modal>
   )
 }
+
+/** Bascule clair / sombre de l'en-tête (le choix « Système » reste dans les réglages). */
+export function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark')
+  const label = dark ? 'Passer en thème clair' : 'Passer en thème sombre'
+  return (
+    <button
+      className="icon-btn"
+      title={label}
+      aria-label={label}
+      onClick={() => {
+        setTheme(dark ? 'light' : 'dark')
+        setDark(!dark)
+      }}
+    >
+      {dark ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  )
+}

@@ -4,7 +4,7 @@ import type { DateValue } from '../../types'
 import { MONTH_OPTIONS } from '../../lib/dates'
 import { Icon, PICKABLE_ICONS } from '../../lib/icons'
 import { TextArea, Toggle, toast } from '../ui'
-import { formatSkill, hasTopSeparator, openDepth, parseSkill, splitTop } from '../../lib/skills'
+import { formatSkill, parseSkill } from '../../lib/skills'
 
 export function DateInput({ value, onChange, disabled }: { value?: DateValue; onChange: (v: DateValue | undefined) => void; disabled?: boolean }) {
   return (
@@ -44,13 +44,14 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
   }
   // les virgules entre parenthèses ne créent pas de nouvelle étiquette
   const add = (raw: string) => {
-    const parts = splitTop(raw)
+    // seule la touche Entrée (ou un saut de ligne collé) sépare les compétences : les virgules font partie du texte
+    const parts = raw.split(/\n+/).map((x) => x.trim()).filter(Boolean)
     if (!parts.length) return
     onChange([...value, ...parts.filter((p) => !value.includes(p))])
     setText('')
   }
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || (e.key === ',' && openDepth(text) === 0)) {
+    if (e.key === 'Enter') {
       e.preventDefault()
       add(text)
     } else if (e.key === 'Backspace' && !text && value.length) {
@@ -110,14 +111,13 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
           placeholder={value.length ? '' : placeholder ?? 'Tapez puis Entrée'}
           onChange={(e) => {
             const v = e.target.value
-            if (hasTopSeparator(v)) add(v)
-            else setText(v)
+            setText(v)
           }}
           onKeyDown={onKey}
           onBlur={() => text.trim() && add(text)}
           onPaste={(e) => {
             const t = e.clipboardData.getData('text')
-            if (hasTopSeparator(t)) {
+            if (/\n/.test(t.trim())) {
               e.preventDefault()
               add(text + t)
             }
@@ -142,7 +142,7 @@ export function TagsInput({ value, onChange, placeholder, details = false }: { v
           {details && (
             <div className="field">
               <span className="field-label">Précisions (outils, versions, domaines)</span>
-              <TagsInput value={cur.details} onChange={(d) => set(edit, formatSkill(cur.name, d))} placeholder="Teams, SharePoint… puis Entrée" />
+              <TagsInput value={cur.details} onChange={(d) => set(edit, formatSkill(cur.name, d))} placeholder="Une précision, puis Entrée" />
             </div>
           )}
           <button type="button" className="btn sm" onClick={() => setEdit(null)}>

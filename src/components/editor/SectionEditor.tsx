@@ -263,7 +263,7 @@ function ItemFields({ section, item, onChange, onAskClaude, offerId }: { section
         </Field>
       )}
       {f.includes('tags') && (
-        <Field label={L.tags} hint={section.type === 'skills' ? 'Entrée ou virgule pour ajouter, glisser pour réordonner. Cliquez sur une compétence pour la modifier ou lui ajouter des précisions (ex. Microsoft 365 : Teams, Intune) ; les virgules entre parenthèses sont conservées.' : 'Entrée ou virgule pour ajouter, glisser pour réordonner, clic pour modifier.'}>
+        <Field label={L.tags} hint={section.type === 'skills' ? 'Entrée pour ajouter (les virgules restent dans le texte), glisser pour réordonner. Cliquez sur une compétence pour la modifier ou lui ajouter des précisions. Une liste collée avec une compétence par ligne est découpée automatiquement.' : 'Entrée pour ajouter, glisser pour réordonner, clic pour modifier.'}>
           <TagsInput value={item.tags ?? []} onChange={(v) => onChange({ tags: v })} details={section.type === 'skills'} />
         </Field>
       )}

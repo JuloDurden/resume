@@ -1,4 +1,8 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Lock, Plus, Trash2 } from 'lucide-react'
+import { useDocs } from '../../store/documents'
+import { identityValue } from '../../lib/identity'
+import { openSettings } from '../SettingsModal'
+import { Toggle } from '../ui'
 import type { ContactLink, Header } from '../../types'
 import { uid } from '../../lib/ids'
 import { fromRows, moveContact, moveRow, toRows } from '../../lib/contactRows'
@@ -16,13 +20,24 @@ const KINDS: { value: ContactLink['kind']; label: string }[] = [
   { value: 'info', label: 'Information (sans lien)' },
 ]
 
+/** Valeur venant des Réglages : affichée, modifiable seulement là-bas. */
+function Locked({ value, title }: { value: string; title?: string }) {
+  return (
+    <button type="button" className="locked-value" onClick={() => openSettings('identity')} title={title ?? 'Modifiable dans Réglages > Identité'}>
+      <Lock size={12} /> <span>{value}</span>
+    </button>
+  )
+}
+
 export function HeaderForm({ header, onChange, showPhoto = true }: { header: Header; onChange: (h: Header) => void; showPhoto?: boolean }) {
+  const identity = useDocs((s) => s.watch.identity)
   const setContact = (id: string, patch: Partial<ContactLink>) => onChange({ ...header, contacts: header.contacts.map((c) => (c.id === id ? { ...c, ...patch } : c)) })
   const setContacts = (contacts: ContactLink[]) => onChange({ ...header, contacts })
   const rows = toRows(header.contacts)
   const addTo = (ri: number) => {
     const r = rows.map((x) => [...x])
-    const c: ContactLink = { id: uid(), kind: ri > 0 && ri >= rows.length ? 'website' : 'info', value: '' }
+    const kind: ContactLink['kind'] = ri > 0 && ri >= rows.length ? 'website' : 'info'
+    const c: ContactLink = { id: uid(), kind, value: identityValue(identity, kind) ?? '' }
     if (ri >= r.length) r.push([c])
     else r[ri].push(c)
     setContacts(fromRows(r))
@@ -31,7 +46,7 @@ export function HeaderForm({ header, onChange, showPhoto = true }: { header: Hea
     <div className="form-stack">
       <div className="grid-2">
         <Field label="Nom complet">
-          <TextInput value={header.name} onChange={(v) => onChange({ ...header, name: v })} />
+          {identity?.name ? <Locked value={identity.name} /> : <TextInput value={header.name} onChange={(v) => onChange({ ...header, name: v })} />}
         </Field>
         <Field label="Titre / poste visé">
           <TextInput value={header.title} onChange={(v) => onChange({ ...header, title: v })} />
@@ -39,7 +54,14 @@ export function HeaderForm({ header, onChange, showPhoto = true }: { header: Hea
       </div>
       {showPhoto && (
         <Field label="Photo">
-          <PhotoInput value={header.photo} onChange={(v) => onChange({ ...header, photo: v })} />
+          {identity?.photo ? (
+            <div className="photo-toggle">
+              <img src={identity.photo} alt="" />
+              <Toggle checked={!!header.photo} onChange={(on) => onChange({ ...header, photo: on ? identity.photo : undefined })} label="Afficher la photo sur ce document" />
+            </div>
+          ) : (
+            <PhotoInput value={header.photo} onChange={(v) => onChange({ ...header, photo: v })} />
+          )}
         </Field>
       )}
       <div className="field">
@@ -64,8 +86,12 @@ export function HeaderForm({ header, onChange, showPhoto = true }: { header: Hea
                 const last = ri === rows.length - 1 && ci === row.length - 1 && row.length === 1
                 return (
                   <div className="contact-row" key={c.id}>
-                    <Select value={c.kind} onChange={(v) => setContact(c.id, { kind: v })} options={KINDS} />
-                    <TextInput value={c.value} onChange={(v) => setContact(c.id, { value: v })} placeholder="Valeur" />
+                    <Select value={c.kind} onChange={(v) => setContact(c.id, { kind: v, value: identityValue(identity, v) ?? c.value })} options={KINDS} />
+                    {identityValue(identity, c.kind) ? (
+                      <Locked value={identityValue(identity, c.kind)!} />
+                    ) : (
+                      <TextInput value={c.value} onChange={(v) => setContact(c.id, { value: v })} placeholder={identity ? 'Valeur (ou à renseigner dans Réglages > Identité)' : 'Valeur'} />
+                    )}
                     <div className="row-actions">
                       <button className="icon-btn xs" onClick={() => setContacts(moveContact(header.contacts, c.id, -1))} disabled={first} title={ci === 0 ? 'Passer à la ligne précédente' : 'Monter'}>
                         <ArrowUp size={13} />

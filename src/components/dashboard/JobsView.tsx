@@ -12,7 +12,8 @@ import { JOB_STATUS } from '../../lib/jobs'
 import { benchFor, compareSalary, fmtK, fmtSalary, salaryBenchmarks, salaryOf, type Salary, type SalaryBench } from '../../lib/salary'
 import { redFlags, type RedFlag } from '../../lib/redflags'
 import { applyLearning, titleSimilarity, locationOf, regionOf, REGIONS, prefFor, bestReference, learnFromMarks, geocode, matchBest, resolveProfile, scoreClass, type MatchResult } from '../../lib/match'
-import { ClaudeRankModal, MatchProfileModal } from './MatchTools'
+import { ClaudeRankModal } from './MatchTools'
+import { openSettings } from '../SettingsModal'
 import { AddJobModal } from './AddJobModal'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -1105,7 +1106,6 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
   const [lowOpen, setLowOpen] = useState(false)
   // candidature envoyée hors de Resume : enregistrée avec sa date et son statut
   const [extFor, setExtFor] = useState<FeedItem | null>(null)
-  const [profileOpen, setProfileOpen] = useState(false)
   const [claudeOpen, setClaudeOpen] = useState(false)
   const [geoTick, setGeoTick] = useState(0)
   const docsMap = useDocs((s) => s.docs)
@@ -1399,7 +1399,7 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
           <button className="btn" onClick={() => setAddOpen(true)} title="Ajouter une annonce trouvée ailleurs, depuis son lien">
             <Plus size={16} /> Ajouter une annonce
           </button>
-          <button className="btn" onClick={() => setProfileOpen(true)} title="CV de référence, métiers visés, diplôme, domicile">
+          <button className="btn" onClick={() => openSettings('profile')} title="Ouvre le profil de recherche dans les Réglages : CV de référence, métiers visés, diplôme, domicile">
             <Target size={16} /> Mon profil
           </button>
           <button className="btn" onClick={() => setSettings(true)}>
@@ -1617,7 +1617,6 @@ export function JobsView({ onShowOffers }: { onShowOffers: () => void }) {
         }}
       />
       <BannedModal open={bannedOpen} onClose={() => setBannedOpen(false)} terms={terms} onChange={setExcludes} all={all} />
-      <MatchProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ClaudeRankModal open={claudeOpen} onClose={() => setClaudeOpen(false)} items={[...filtered].sort((a, b) => (matches[b.id]?.score ?? 0) - (matches[a.id]?.score ?? 0)).map((i) => ({ ...i, score: matches[i.id]?.score }))} />
     </>
   )

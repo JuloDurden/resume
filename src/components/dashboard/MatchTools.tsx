@@ -132,7 +132,7 @@ const LEVELS: { value: 'junior' | 'any' | 'senior'; label: string; title: string
 ]
 
 /** Réglages du profil utilisé pour l'indice de correspondance : général, profils de recherche, parcours. */
-export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function MatchProfileModal({ open, onClose, embedded = false }: { open: boolean; onClose: () => void; embedded?: boolean }) {
   const docsMap = useDocs((s) => s.docs)
   const setProfile = useDocs((s) => s.setProfile)
   const cvs = useMemo(() => Object.values(docsMap).filter((d): d is ResumeDoc => d.kind === 'resume').sort((a, b) => b.updatedAt - a.updatedAt), [docsMap])
@@ -171,27 +171,11 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
     if (!ts.length) return toast.error('Indiquez au moins un métier visé dans un profil')
     setProfile({ ...draft, tracks: ts, targets: [...new Set(ts.flatMap((t) => t.targets))] })
     toast.ok('Profil enregistré : les indices sont recalculés')
-    onClose()
+    if (!embedded) onClose()
   }
   const cvOptions = [...cvs].sort((a, b) => Number(!!b.reference) - Number(!!a.reference)).map((d) => ({ value: d.id, label: d.reference ? `${d.name} (référence)` : d.name }))
   const current = tracks.find((t) => t.id === tab)
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      wide
-      title="Mon profil de recherche"
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            Annuler
-          </button>
-          <button className="btn primary" onClick={save}>
-            Enregistrer
-          </button>
-        </>
-      }
-    >
+  const body = (
       <div className="form-stack">
         <div className="profile-tabs">
           <Segmented
@@ -275,6 +259,36 @@ export function MatchProfileModal({ open, onClose }: { open: boolean; onClose: (
           </>
         )}
       </div>
+  )
+  if (embedded)
+    return (
+      <div className="form-stack">
+        {body}
+        <div className="set-foot">
+          <button className="btn primary" onClick={save}>
+            Enregistrer le profil
+          </button>
+        </div>
+      </div>
+    )
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      wide
+      title="Mon profil de recherche"
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Annuler
+          </button>
+          <button className="btn primary" onClick={save}>
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      {body}
     </Modal>
   )
 }

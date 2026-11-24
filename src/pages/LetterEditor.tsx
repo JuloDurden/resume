@@ -17,7 +17,7 @@ import { LetterLayoutPanel } from '../components/editor/LetterLayoutPanel'
 import { TemplatesPanel } from '../components/editor/TemplatesPanel'
 import { ClaudeIntro } from '../components/editor/ClaudePanel'
 import { Preview, usePrint } from '../components/editor/Preview'
-import { Field, Select, TextArea, TextInput, toast } from '../components/ui'
+import { Field, Select, TextArea, TextInput, Toggle, toast } from '../components/ui'
 
 const TABS: Tab[] = [
   { id: 'content', label: 'Contenu', icon: <PenLine size={18} /> },
@@ -40,6 +40,7 @@ function Card({ id, title, open, setOpen, children }: { id: string; title: strin
 
 function LetterContent({ doc, update, active, setActive }: { doc: LetterDoc; update: (fn: (d: LetterDoc) => LetterDoc) => void; active: string | null; setActive: (v: string | null) => void }) {
   const all = useDocs((s) => s.docs)
+  const identity = useDocs((s) => s.watch.identity)
   const resumes = useMemo(() => Object.values(all).filter((d): d is ResumeDoc => d.kind === 'resume'), [all])
   const set = (p: Partial<LetterDoc>) => update((d) => ({ ...d, ...p }))
   const linked = resumes.find((r) => r.id === doc.linkedResumeId)
@@ -121,7 +122,14 @@ function LetterContent({ doc, update, active, setActive }: { doc: LetterDoc; upd
             <TextInput value={doc.signature} onChange={(v) => set({ signature: v })} />
           </Field>
           <Field label="Signature manuscrite">
-            <SignatureInput value={doc.signatureImage} onChange={(v) => set({ signatureImage: v })} />
+            {identity?.signature ? (
+              <div className="photo-toggle">
+                <img src={identity.signature} alt="Signature" className="sig" />
+                <Toggle checked={!!doc.signatureImage} onChange={(on) => set({ signatureImage: on ? identity.signature : undefined })} label="Signer cette lettre" />
+              </div>
+            ) : (
+              <SignatureInput value={doc.signatureImage} onChange={(v) => set({ signatureImage: v })} />
+            )}
           </Field>
         </div>
       </Card>

@@ -1,16 +1,23 @@
 // Réglages : sauvegarde GitHub, données, relances, interface.
 import { useRef, useState } from 'react'
-import { BellRing, Cloud, Database, Download, Monitor, Moon, Palette, Sun, Upload } from 'lucide-react'
+import { BellRing, Cloud, Database, Download, Monitor, Moon, Palette, Sun, Target, Upload, UserRound } from 'lucide-react'
+import { useEffect } from 'react'
+import type { Identity } from '../types'
+import { identityFromDocs } from '../lib/identity'
+import { MatchProfileModal } from './dashboard/MatchTools'
+import { PhotoInput, SignatureInput } from './editor/fields'
 import { useDocs } from '../store/documents'
 import { download, parseBackup, toJson } from '../lib/export'
 import { FOLLOW_UP_CHOICES } from '../lib/followup'
 import { setTheme, themeChoice, type ThemeChoice } from '../lib/theme'
 import { SyncPanel } from './SyncModal'
-import { Field, Modal, Segmented, toast } from './ui'
+import { Field, Modal, Segmented, TextInput, toast } from './ui'
 
-export type SettingsTab = 'sync' | 'data' | 'followup' | 'ui'
+export type SettingsTab = 'identity' | 'profile' | 'sync' | 'data' | 'followup' | 'ui'
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'identity', label: 'Identité', icon: <UserRound size={16} /> },
+  { id: 'profile', label: 'Profil de recherche', icon: <Target size={16} /> },
   { id: 'sync', label: 'Sauvegarde GitHub', icon: <Cloud size={16} /> },
   { id: 'data', label: 'Données', icon: <Database size={16} /> },
   { id: 'followup', label: 'Relances', icon: <BellRing size={16} /> },
@@ -148,7 +155,9 @@ export function SettingsModal({ open, onClose, tab: initial = 'sync' }: { open: 
             </button>
           ))}
         </nav>
-        <div className="settings-body">{tab === 'sync' ? <SyncPanel /> : tab === 'data' ? <DataPanel /> : tab === 'followup' ? <FollowUpPanel /> : <UiPanel />}</div>
+        <div className="settings-body">
+          {tab === 'identity' ? <IdentityPanel /> : tab === 'profile' ? <MatchProfileModal open embedded onClose={onClose} /> : tab === 'sync' ? <SyncPanel /> : tab === 'data' ? <DataPanel /> : tab === 'followup' ? <FollowUpPanel /> : <UiPanel />}
+        </div>
       </div>
     </Modal>
   )
@@ -171,4 +180,72 @@ export function ThemeToggle() {
       {dark ? <Sun size={18} /> : <Moon size={18} />}
     </button>
   )
+}
+
+/** Identité : saisie une fois, reportée dans l'en-tête de tous les CV et lettres. */
+function IdentityPanel() {
+  const saved = useDocs((s) => s.watch.identity)
+  const docs = useDocs((s) => s.docs)
+  const setIdentity = useDocs((s) => s.setIdentity)
+  const [v, setV] = useState<Identity>(() => saved ?? identityFromDocs(Object.values(useDocs.getState().docs)))
+  const set = (p: Partial<Identity>) => setV((x) => ({ ...x, ...p }))
+  const n = Object.keys(docs).length
+  const dirty = JSON.stringify(v) !== JSON.stringify(saved ?? null)
+  const save = () => {
+    const clean = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === 'string' ? x.trim() || undefined : x])) as Identity
+    setIdentity(clean)
+    toast.ok(`Identité enregistrée et reportée dans ${n} document(s)`)
+  }
+  const f = (k: keyof Identity, label: string, ph = '') => (
+    <Field label={label}>
+      <TextInput value={(v[k] as string) ?? ''} onChange={(x) => set({ [k]: x })} placeholder={ph} />
+    </Field>
+  )
+  return (
+    <div className="form-stack">
+      <p className="muted small">
+        Saisies une seule fois, ces informations remplissent l'en-tête de tous vos CV et lettres. La place de chaque élément (ligne, ordre, photo affichée ou non) et le titre visé se règlent dans chaque document.
+        {!saved && ' Pré-rempli depuis votre CV le plus récent : vérifiez puis enregistrez.'}
+      </p>
+      <div className="grid-2">
+        {f('name', 'Nom et prénom', 'Julien CLAVEL')}
+        {f('email', 'Email')}
+        {f('phone', 'Téléphone')}
+        {f('location', 'Localisation', 'Montpellier et ses alentours')}
+        {f('info', 'Information (sans lien)', 'Permis B, véhiculé')}
+        {f('linkedin', 'LinkedIn', 'linkedin.com/in/…')}
+        {f('github', 'GitHub', 'github.com/…')}
+        {f('website', 'Site web', 'https://…')}
+        {f('other', 'Autre lien', 'https://…')}
+        {f('otherLabel', 'Texte affiché pour l\'autre lien', 'Portfolio')}
+      </div>
+      <div className="grid-2">
+        <Field label="Photo">
+          <PhotoInput value={v.photo} onChange={(x) => set({ photo: x })} />
+        </Field>
+        <Field label="Signature (lettres)">
+          <SignatureInput value={v.signature} onChange={(x) => set({ signature: x })} />
+        </Field>
+      </div>
+      <div className="set-foot">
+        <button className="btn primary" onClick={save} disabled={!dirty && !!saved}>
+          Enregistrer et mettre à jour les {n} documents
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Ouvre les réglages depuis n'importe quel écran. */
+export const openSettings = (tab: SettingsTab = 'ui') => window.dispatchEvent(new CustomEvent('resume-open-settings', { detail: tab }))
+
+/** Fenêtre des réglages, montée une seule fois pour toute l'application. */
+export function SettingsHost() {
+  const [tab, setTab] = useState<SettingsTab | null>(null)
+  useEffect(() => {
+    const on = (e: Event) => setTab((e as CustomEvent<SettingsTab>).detail)
+    window.addEventListener('resume-open-settings', on)
+    return () => window.removeEventListener('resume-open-settings', on)
+  }, [])
+  return <SettingsModal open={tab !== null} tab={tab ?? 'ui'} onClose={() => setTab(null)} />
 }

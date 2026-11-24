@@ -2,18 +2,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Copy, Download, Eye, LayoutGrid, List, Star, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, Columns3, Copy, Download, Eye, FolderInput, LayoutGrid, List, Rows3, Star, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { NO_TRACK, docTracks } from '../../lib/docGroups'
 import type { AnyDoc } from '../../types'
 import { useDocs } from '../../store/documents'
 import { DocThumb } from '../DocThumb'
 import { OfferLogo } from '../editor/AtsPanel'
 import { usePrintMany } from '../editor/Preview'
 import { AnyDocView } from '../../render/DocumentView'
-import { Modal, Segmented, confirmAction, toast } from '../ui'
+import { Menu, MenuItem, Modal, Segmented, confirmAction, toast } from '../ui'
 import { DocCard, openPath } from './DocCard'
 
 type View = 'list' | 'grid'
 type SortKey = 'name' | 'kind' | 'offer' | 'date'
+type GroupBy = 'profile' | 'offer' | 'none'
+const TRACK_COLORS = ['#378add', '#ba7517', '#7f77dd', '#1d9e75', '#d4537e']
 
 const read = <T,>(k: string, d: T): T => {
   try {
@@ -75,6 +78,14 @@ function HoverPreview({ doc, rect }: { doc: AnyDoc; rect: DOMRect }) {
 export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.ReactNode }) {
   const navigate = useNavigate()
   const offers = useDocs((s) => s.offers)
+  const watch = useDocs((s) => s.watch)
+  const allDocs = useDocs((s) => s.docs)
+  const tracks = useMemo(() => watch.profile?.tracks ?? [], [watch.profile])
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => read('resume-docs-group', 'none'))
+  const [layout, setLayout] = useState<'stack' | 'side'>(() => read('resume-docs-layout', 'stack'))
+  const [folded, setFolded] = useState<Set<string>>(() => new Set(read<string[]>('resume-docs-folded', [])))
+  // profils calculés sur tous les documents (une lettre suit le CV auquel elle est liée)
+  const trackMap = useMemo(() => (groupBy === 'profile' ? docTracks(Object.values(allDocs), offers, watch) : new Map<string, string[]>()), [groupBy, allDocs, offers, watch])
   const { remove, duplicate, update } = useDocs.getState()
   const [view, setView] = useState<View>(() => read('resume-docs-view', 'list'))
   const [zoom, setZoom] = useState<number>(() => read('resume-docs-zoom', 170))
@@ -89,6 +100,9 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
   useEffect(() => write('resume-docs-view', view), [view])
   useEffect(() => write('resume-docs-zoom', zoom), [zoom])
   useEffect(() => write('resume-docs-sort', sort), [sort])
+  useEffect(() => write('resume-docs-group', groupBy), [groupBy])
+  useEffect(() => write('resume-docs-layout', layout), [layout])
+  useEffect(() => write('resume-docs-folded', [...folded]), [folded])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -106,6 +120,35 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
   }, [docs, offers, q, sort])
   // la sélection ne garde que les documents encore affichés
   const selected = rows.filter((r) => sel.has(r.d.id)).map((r) => r.d)
+
+  type Row = (typeof rows)[number]
+  const groups = useMemo(() => {
+    if (groupBy === 'none') return null
+    const out: { id: string; label: string; sub: string; color: string; rows: Row[]; refs: Row[] }[] = []
+    if (groupBy === 'profile') {
+      const sections = [...tracks.map((t, i) => ({ id: t.id, label: t.name, color: TRACK_COLORS[i % TRACK_COLORS.length] })), { id: NO_TRACK, label: 'Sans profil', color: '#9ca3af' }]
+      for (const sec of sections) {
+        const mine = rows.filter((r) => {
+          const ts = trackMap.get(r.d.id) ?? []
+          return sec.id === NO_TRACK ? !ts.length : ts.includes(sec.id)
+        })
+        const refs = mine.filter((r) => r.d.kind === 'resume' && r.d.reference)
+        // en liste, les CV de référence sont épinglés au-dessus ; en grille, ils passent en tête
+        const body = view === 'list' ? mine.filter((r) => !refs.includes(r)) : [...refs, ...mine.filter((r) => !refs.includes(r))]
+        if (!mine.length && sec.id === NO_TRACK) continue
+        out.push({ ...sec, rows: body, refs, sub: `${refs.length ? `${refs.length} référence${refs.length > 1 ? 's' : ''} · ` : ''}${mine.length} document${mine.length > 1 ? 's' : ''}` })
+      }
+    } else {
+      const ids = [...new Set(rows.map((r) => r.d.offerId ?? ''))]
+      const order = ids.sort((a, b) => (!a ? 1 : !b ? -1 : (offers[b]?.createdAt ?? 0) - (offers[a]?.createdAt ?? 0)))
+      for (const id of order) {
+        const o = id ? offers[id] : undefined
+        const mine = rows.filter((r) => (r.d.offerId ?? '') === id)
+        out.push({ id: `o:${id}`, label: o ? [o.company, o.title].filter(Boolean).join(' · ') : 'Sans candidature', color: o ? '#1d9e75' : '#9ca3af', rows: mine, refs: [], sub: `${mine.length} document${mine.length > 1 ? 's' : ''}` })
+      }
+    }
+    return out
+  }, [groupBy, rows, tracks, trackMap, offers, view])
 
   const toggle = (id: string, shift = false) => {
     setSel((s) => {
@@ -144,7 +187,148 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
       </button>
     </th>
   )
-  const allOn = rows.length > 0 && rows.every((r) => sel.has(r.d.id))
+
+  const allOf = (rs: typeof rows) => rs.length > 0 && rs.every((r) => sel.has(r.d.id))
+  const hoverIn = (d: AnyDoc, el: HTMLElement) => {
+    if (!matchMedia('(hover: hover)').matches) return
+    window.clearTimeout(hoverTimer.current)
+    hoverTimer.current = window.setTimeout(() => setHover({ doc: d, rect: el.getBoundingClientRect() }), 400)
+  }
+  const hoverOut = () => {
+    window.clearTimeout(hoverTimer.current)
+    setHover(null)
+  }
+  const classify = (d: AnyDoc, trackId: string | undefined) => {
+    update(d.id, (x) => ({ ...x, trackId }) as AnyDoc)
+    toast.ok(trackId === undefined ? 'Rangement automatique' : trackId ? `Classé dans ${tracks.find((t) => t.id === trackId)?.name}` : 'Classé sans profil')
+  }
+  const ClassifyMenu = ({ d }: { d: AnyDoc }) =>
+    tracks.length ? (
+      <Menu
+        align="right"
+        trigger={(t) => (
+          <button className="icon-btn" onClick={t} title="Classer dans un profil" aria-label={`Classer ${d.name}`}>
+            <FolderInput size={15} />
+          </button>
+        )}
+      >
+        {(close) => (
+          <>
+            {tracks.map((t) => (
+              <MenuItem key={t.id} onClick={() => { close(); classify(d, t.id) }}>
+                {d.trackId === t.id ? '✓ ' : ''}
+                {t.name}
+              </MenuItem>
+            ))}
+            <MenuItem onClick={() => { close(); classify(d, NO_TRACK) }}>{d.trackId === NO_TRACK ? '✓ ' : ''}Sans profil</MenuItem>
+            <MenuItem onClick={() => { close(); classify(d, undefined) }}>{d.trackId === undefined ? '✓ ' : ''}Automatique</MenuItem>
+          </>
+        )}
+      </Menu>
+    ) : null
+  const listOf = (rs: typeof rows) => (
+        <div className="docs-table-wrap">
+      <table className="docs-table">
+        <thead>
+          <tr>
+            <th className="c-check">
+              <input type="checkbox" checked={allOf(rs)} onChange={() => setSel((s) => { const n = new Set(s); const on = allOf(rs); rs.forEach((r) => (on ? n.delete(r.d.id) : n.add(r.d.id))); return n })} aria-label="Tout sélectionner" />
+            </th>
+            <th className="c-ref" />
+            <SortHead k="name">Nom</SortHead>
+            <SortHead k="kind">Type</SortHead>
+            <SortHead k="offer">Offre rattachée</SortHead>
+            <SortHead k="date">Modifié</SortHead>
+            <th className="c-act" />
+          </tr>
+        </thead>
+        <tbody>
+          {rs.map(({ d, o }) => {
+            const ref = d.kind === 'resume' && !!d.reference
+            return (
+              <tr key={d.id} className={sel.has(d.id) ? 'sel' : undefined}>
+                <td className="c-check">
+                  <input type="checkbox" checked={sel.has(d.id)} onChange={() => {}} onClick={(e) => toggle(d.id, e.shiftKey)} aria-label={`Sélectionner ${d.name}`} />
+                </td>
+                <td className="c-ref">
+                  {d.kind === 'resume' && (
+                    <button className={`ref-star${ref ? ' on' : ''}`} onClick={() => update(d.id, (x) => ({ ...x, reference: !ref }) as AnyDoc)} title={ref ? 'CV de référence (cliquer pour retirer)' : 'Marquer comme CV de référence'} aria-pressed={ref}>
+                      <Star size={15} />
+                    </button>
+                  )}
+                </td>
+                <td className="c-name">
+                  <button className="link-row" onClick={() => navigate(openPath(d))} title="Ouvrir dans l'éditeur">
+                    {d.name}
+                  </button>
+                </td>
+                <td>
+                  <span className={`kind-badge ${d.kind}`}>{d.kind === 'resume' ? 'CV' : 'Lettre'}</span>
+                </td>
+                <td className="c-offer">
+                  {o ? (
+                    <span title={[o.company, o.title].filter(Boolean).join(' · ')}>
+                      <OfferLogo offer={o} size={16} /> <strong>{o.company}</strong>{o.title ? ` · ${o.title}` : ''}
+                    </span>
+                  ) : (
+                    <span className="muted">Aucune</span>
+                  )}
+                </td>
+                <td className="c-date">{fmt(d.updatedAt)}</td>
+                <td className="c-act">
+                  <button className="icon-btn" onClick={() => setPreview(d)} title="Aperçu" aria-label={`Aperçu de ${d.name}`}>
+                    <Eye size={15} />
+                  </button>
+                  <button className="icon-btn" onClick={() => dup([d])} title="Dupliquer" aria-label={`Dupliquer ${d.name}`}>
+                    <Copy size={15} />
+                  </button>
+                  <ClassifyMenu d={d} />
+                  <button className="icon-btn" onClick={() => pdf([d])} title="Télécharger en PDF" aria-label={`Télécharger ${d.name}`} disabled={printing}>
+                    <Download size={15} />
+                  </button>
+                  <button className="icon-btn danger" onClick={() => del([d])} title="Supprimer" aria-label={`Supprimer ${d.name}`}>
+                    <Trash2 size={15} />
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {!rs.length && <p className="muted docs-none">Aucun document ne correspond.</p>}
+    </div>
+  )
+  const gridOf = (rs: typeof rows) => (
+        <div className="doc-grid zoomable" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${zoom + 24}px, 1fr))` }}>
+      {rs.map(({ d }) => (
+        <div
+          key={d.id}
+          className={`doc-cell${sel.has(d.id) ? ' sel' : ''}${sel.size ? ' selecting' : ''}`}
+          onMouseEnter={(e) => {
+            if (!matchMedia('(hover: hover)').matches) return
+            const el = (e.currentTarget.querySelector('.doc-thumb') as HTMLElement) ?? e.currentTarget
+            window.clearTimeout(hoverTimer.current)
+            hoverTimer.current = window.setTimeout(() => setHover({ doc: d, rect: el.getBoundingClientRect() }), 400)
+          }}
+          onMouseLeave={() => {
+            window.clearTimeout(hoverTimer.current)
+            setHover(null)
+          }}
+        >
+          <input type="checkbox" className="cell-check" checked={sel.has(d.id)} onChange={() => {}} onClick={(e) => toggle(d.id, e.shiftKey)} aria-label={`Sélectionner ${d.name}`} />
+          <button className="cell-eye" onClick={() => setPreview(d)} title="Aperçu" aria-label={`Aperçu de ${d.name}`}>
+            <Eye size={14} />
+          </button>
+          {groupBy === 'profile' && (
+            <span className="cell-classify">
+              <ClassifyMenu d={d} />
+            </span>
+          )}
+          <DocCard doc={d} width={zoom} compact={zoom < 170} />
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <div className="docs-browser">
@@ -160,6 +344,25 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
           </label>
         )}
         <Segmented
+          value={groupBy}
+          onChange={setGroupBy}
+          options={[
+            { value: 'profile', label: 'Par profil', title: 'Grouper par profil de recherche' },
+            { value: 'offer', label: 'Par candidature', title: 'Grouper le CV et la lettre de chaque offre' },
+            { value: 'none', label: 'Sans groupe' },
+          ]}
+        />
+        {groupBy !== 'none' && view === 'grid' && (
+          <Segmented
+            value={layout}
+            onChange={setLayout}
+            options={[
+              { value: 'stack', label: <Rows3 size={14} />, title: 'Groupes empilés (repliables)' },
+              { value: 'side', label: <Columns3 size={14} />, title: 'Groupes côte à côte' },
+            ]}
+          />
+        )}
+        <Segmented
           value={view}
           onChange={setView}
           options={[
@@ -169,101 +372,47 @@ export function DocsBrowser({ docs, left }: { docs: AnyDoc[]; left?: React.React
         />
       </div>
 
-      {view === 'list' ? (
-        <div className="docs-table-wrap">
-          <table className="docs-table">
-            <thead>
-              <tr>
-                <th className="c-check">
-                  <input type="checkbox" checked={allOn} onChange={() => setSel(allOn ? new Set() : new Set(rows.map((r) => r.d.id)))} aria-label="Tout sélectionner" />
-                </th>
-                <th className="c-ref" />
-                <SortHead k="name">Nom</SortHead>
-                <SortHead k="kind">Type</SortHead>
-                <SortHead k="offer">Offre rattachée</SortHead>
-                <SortHead k="date">Modifié</SortHead>
-                <th className="c-act" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ d, o }) => {
-                const ref = d.kind === 'resume' && !!d.reference
-                return (
-                  <tr key={d.id} className={sel.has(d.id) ? 'sel' : undefined}>
-                    <td className="c-check">
-                      <input type="checkbox" checked={sel.has(d.id)} onChange={() => {}} onClick={(e) => toggle(d.id, e.shiftKey)} aria-label={`Sélectionner ${d.name}`} />
-                    </td>
-                    <td className="c-ref">
-                      {d.kind === 'resume' && (
-                        <button className={`ref-star${ref ? ' on' : ''}`} onClick={() => update(d.id, (x) => ({ ...x, reference: !ref }) as AnyDoc)} title={ref ? 'CV de référence (cliquer pour retirer)' : 'Marquer comme CV de référence'} aria-pressed={ref}>
-                          <Star size={15} />
-                        </button>
-                      )}
-                    </td>
-                    <td className="c-name">
-                      <button className="link-row" onClick={() => navigate(openPath(d))} title="Ouvrir dans l'éditeur">
-                        {d.name}
-                      </button>
-                    </td>
-                    <td>
-                      <span className={`kind-badge ${d.kind}`}>{d.kind === 'resume' ? 'CV' : 'Lettre'}</span>
-                    </td>
-                    <td className="c-offer">
-                      {o ? (
-                        <span title={[o.company, o.title].filter(Boolean).join(' · ')}>
-                          <OfferLogo offer={o} size={16} /> <strong>{o.company}</strong>{o.title ? ` · ${o.title}` : ''}
-                        </span>
-                      ) : (
-                        <span className="muted">Aucune</span>
-                      )}
-                    </td>
-                    <td className="c-date">{fmt(d.updatedAt)}</td>
-                    <td className="c-act">
-                      <button className="icon-btn" onClick={() => setPreview(d)} title="Aperçu" aria-label={`Aperçu de ${d.name}`}>
-                        <Eye size={15} />
-                      </button>
-                      <button className="icon-btn" onClick={() => dup([d])} title="Dupliquer" aria-label={`Dupliquer ${d.name}`}>
-                        <Copy size={15} />
-                      </button>
-                      <button className="icon-btn" onClick={() => pdf([d])} title="Télécharger en PDF" aria-label={`Télécharger ${d.name}`} disabled={printing}>
-                        <Download size={15} />
-                      </button>
-                      <button className="icon-btn danger" onClick={() => del([d])} title="Supprimer" aria-label={`Supprimer ${d.name}`}>
-                        <Trash2 size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {!rows.length && <p className="muted docs-none">Aucun document ne correspond.</p>}
+      {groups ? (
+        <div className={`doc-groups${view === 'grid' && layout === 'side' ? ' side' : ''}`}>
+          {groups.map((g) => {
+            const closed = folded.has(g.id) && !(view === 'grid' && layout === 'side')
+            return (
+              <section key={g.id} className={`doc-group${closed ? ' closed' : ''}`}>
+                <button className="doc-group-head" onClick={() => setFolded((f) => { const n = new Set(f); if (n.has(g.id)) n.delete(g.id); else n.add(g.id); return n })} aria-expanded={!closed}>
+                  <span className="dot" style={{ background: g.color }} />
+                  <strong>{g.label}</strong>
+                  <span className="muted small">{g.sub}</span>
+                  <span className="docs-tools-gap" />
+                  {!(view === 'grid' && layout === 'side') && <ChevronDown size={16} className="chev" />}
+                </button>
+                {!closed && (
+                  <div className="doc-group-body">
+                    {g.refs.length > 0 && view === 'list' && (
+                      <div className="ref-strip">
+                        {g.refs.map(({ d }) => (
+                          <button key={d.id} className="ref-mini" onClick={() => navigate(openPath(d))} onMouseEnter={(e) => hoverIn(d, e.currentTarget)} onMouseLeave={hoverOut} title="Ouvrir ce CV de référence">
+                            <DocThumb doc={d} width={34} />
+                            <span>
+                              <em>
+                                <Star size={11} /> Référence
+                              </em>
+                              {d.name}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {g.rows.length ? (view === 'list' ? listOf(g.rows) : gridOf(g.rows)) : <p className="muted small docs-none">Aucun document.</p>}
+                  </div>
+                )}
+              </section>
+            )
+          })}
         </div>
+      ) : view === 'list' ? (
+        listOf(rows)
       ) : (
-        <div className="doc-grid zoomable" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${zoom + 24}px, 1fr))` }}>
-          {rows.map(({ d }) => (
-            <div
-              key={d.id}
-              className={`doc-cell${sel.has(d.id) ? ' sel' : ''}${sel.size ? ' selecting' : ''}`}
-              onMouseEnter={(e) => {
-                if (!matchMedia('(hover: hover)').matches) return
-                const el = (e.currentTarget.querySelector('.doc-thumb') as HTMLElement) ?? e.currentTarget
-                window.clearTimeout(hoverTimer.current)
-                hoverTimer.current = window.setTimeout(() => setHover({ doc: d, rect: el.getBoundingClientRect() }), 400)
-              }}
-              onMouseLeave={() => {
-                window.clearTimeout(hoverTimer.current)
-                setHover(null)
-              }}
-            >
-              <input type="checkbox" className="cell-check" checked={sel.has(d.id)} onChange={() => {}} onClick={(e) => toggle(d.id, e.shiftKey)} aria-label={`Sélectionner ${d.name}`} />
-              <button className="cell-eye" onClick={() => setPreview(d)} title="Aperçu" aria-label={`Aperçu de ${d.name}`}>
-                <Eye size={14} />
-              </button>
-              <DocCard doc={d} width={zoom} compact={zoom < 170} />
-            </div>
-          ))}
-        </div>
+        gridOf(rows)
       )}
 
       {selected.length > 0 && (

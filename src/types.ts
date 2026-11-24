@@ -75,6 +75,25 @@ export interface ContactLink {
   row?: number
 }
 
+/** Coordonnées saisies une seule fois dans les Réglages et reportées dans tous les en-têtes. */
+export interface Identity {
+  name?: string
+  photo?: string
+  email?: string
+  phone?: string
+  location?: string
+  /** information sans lien (« Permis B, véhiculé ») */
+  info?: string
+  github?: string
+  linkedin?: string
+  website?: string
+  /** autre lien et son texte affiché */
+  other?: string
+  otherLabel?: string
+  /** signature manuscrite des lettres (PNG transparent) */
+  signature?: string
+}
+
 export interface Header {
   name: string
   title: string
@@ -288,6 +307,8 @@ export interface ResumeDoc {
   id: string
   kind: 'resume'
   name: string
+  /** profil de recherche choisi à la main pour ranger le document ('' : sans profil) */
+  trackId?: string
   /** nom du PDF imposé (sinon calculé : Prénom NOM - CV - Poste - Entreprise) */
   fileName?: string
   /** CV de référence : modèle personnel d'un type de poste, à dupliquer pour chaque candidature */
@@ -332,6 +353,8 @@ export interface LetterDoc {
   id: string
   kind: 'letter'
   name: string
+  /** profil de recherche choisi à la main pour ranger le document ('' : sans profil) */
+  trackId?: string
   /** nom du PDF imposé (sinon calculé : Prénom NOM - Lettre de motivation - Poste - Entreprise) */
   fileName?: string
   createdAt: number
@@ -382,6 +405,9 @@ export interface WatchState {
   /** profil utilisé pour l'indice de correspondance */
   profile?: MatchProfile
   profileAt?: number
+  /** identité commune à tous les CV et lettres (Réglages) */
+  identity?: Identity
+  identityAt?: number
   /** pages carrières d'entreprises lues par la veille */
   companies?: Company[]
   companiesAt?: number

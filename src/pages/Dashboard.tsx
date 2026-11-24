@@ -14,7 +14,7 @@ import { JobsView } from '../components/dashboard/JobsView'
 import { useFeed } from '../store/feed'
 import { PdfImportModal } from '../components/PdfImportModal'
 import { SyncButton } from '../components/SyncModal'
-import { SettingsModal, ThemeToggle, downloadBackup, importBackupFile, type SettingsTab } from '../components/SettingsModal'
+import { ThemeToggle, downloadBackup, importBackupFile, openSettings } from '../components/SettingsModal'
 import { SharedIntro, ShowcaseGrid, ShowcaseIntro, useSharedShowcase, useShowcase } from './Showcase'
 import { useSync } from '../store/sync'
 import { Field, Menu, MenuItem, Modal, Segmented, Select, TextInput } from '../components/ui'
@@ -232,7 +232,7 @@ export default function Dashboard() {
   const offersCount = useDocs((s) => Object.keys(s.offers).length)
   useEffect(() => localStorage.setItem('resume-dash-view', view), [view])
   const [modal, setModal] = useState<'resume' | 'letter' | 'pdf' | null>(null)
-  const [settings, setSettings] = useState<SettingsTab | null>(null)
+  const setSettings = openSettings
   // lien donné à un recruteur (/c/<identifiant>) : la vitrine montre le CV et la lettre de cette candidature
   const { slug } = useParams()
   const vitrine = useShowcase()
@@ -390,7 +390,6 @@ export default function Dashboard() {
       <NewResumeModal open={modal === 'resume'} onClose={() => setModal(null)} onPdf={() => setModal('pdf')} onJson={() => fileRef.current?.click()} />
       {modal === 'letter' && <NewLetterModal open onClose={() => setModal(null)} resumes={resumes} />}
       <PdfImportModal open={modal === 'pdf'} onClose={() => setModal(null)} />
-      <SettingsModal open={settings !== null} tab={settings ?? 'sync'} onClose={() => setSettings(null)} />
     </div>
   )
 }

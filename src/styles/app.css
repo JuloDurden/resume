@@ -6156,3 +6156,180 @@ button.followup-badge {
 .doc-grid.zoomable .doc-card.compact .doc-meta {
   padding: 8px 10px;
 }
+
+/* ---------- identité (valeurs gérées dans les Réglages) ---------- */
+.locked-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.locked-value span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.locked-value svg {
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+.locked-value:hover {
+  border-style: solid;
+  border-color: var(--brand-2);
+}
+.photo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.photo-toggle img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.photo-toggle img.sig {
+  width: 120px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: #fff;
+}
+.set-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- documents groupés (profil, candidature) ---------- */
+.doc-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.doc-groups.side {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: start;
+}
+.doc-group {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.doc-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: var(--bg-2);
+  padding: 10px 14px;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.doc-group-head .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.doc-group-head .chev {
+  transition: transform 0.15s;
+  color: var(--ink-3);
+}
+.doc-group.closed .doc-group-head .chev {
+  transform: rotate(-90deg);
+}
+.doc-group-body {
+  padding: 12px;
+}
+.doc-group-body .docs-table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+.doc-groups.side .doc-group-head {
+  cursor: default;
+}
+.ref-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line-2);
+}
+.ref-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  border: 1px solid rgba(224, 161, 0, 0.45);
+  border-radius: 10px;
+  background: var(--panel);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.ref-mini:hover {
+  border-color: #e0a100;
+}
+.ref-mini span {
+  display: flex;
+  flex-direction: column;
+}
+.ref-mini em {
+  font-style: normal;
+  font-size: 11px;
+  color: #b07d00;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.doc-cell .cell-classify {
+  position: absolute;
+  top: 8px;
+  right: 42px;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.doc-cell .cell-classify .icon-btn {
+  background: rgba(17, 24, 39, 0.75);
+  color: #fff;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+}
+.doc-cell:hover .cell-classify,
+.doc-cell:focus-within .cell-classify {
+  opacity: 1;
+}
+:root[data-theme='dark'] .ref-mini em {
+  color: #f5c066;
+}
+.docs-table .c-act {
+  width: 190px;
+}
+.docs-table .c-act > * {
+  display: inline-flex;
+  vertical-align: middle;
+}

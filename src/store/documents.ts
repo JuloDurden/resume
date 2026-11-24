@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { del, get, set } from 'idb-keyval'
-import type { Alert, AnyDoc, Company, FeedItem, JobReview, MarkState, MatchProfile, Offer, WatchState } from '../types'
+import type { Alert, AnyDoc, Company, FeedItem, Identity, JobReview, MarkState, MatchProfile, Offer, WatchState } from '../types'
+import { applyIdentity } from '../lib/identity'
 import { uid } from '../lib/ids'
 import { migrate, shortenDocNames } from '../lib/migrate'
 import { EMPTY_WATCH, differs, mergeData, type DataSet } from '../lib/merge'
@@ -46,6 +47,8 @@ export interface DocsState {
   markMany: (ids: string[], s: MarkState, titles?: Record<string, string>) => void
   setExcludes: (terms: string[]) => void
   setProfile: (p: MatchProfile) => void
+  /** enregistre l'identité et la reporte dans tous les documents */
+  setIdentity: (i: Identity) => void
   addReviews: (r: Record<string, JobReview>) => void
   addManual: (i: FeedItem) => void
   setCompanies: (c: Company[]) => void
@@ -67,7 +70,8 @@ export const useDocs = create<DocsState>()(
       deleted: {},
       hydrated: false,
       history: {},
-      add: (doc) => setState((s) => ({ docs: { ...s.docs, [doc.id]: doc } })),
+      // un nouveau document reçoit l'identité des Réglages (nom, photo, coordonnées, signature)
+      add: (doc) => setState((s) => ({ docs: { ...s.docs, [doc.id]: applyIdentity(doc, s.watch.identity, true) } })),
       update: (id, fn, opts) =>
         setState((s) => {
           const cur = s.docs[id]
@@ -160,6 +164,16 @@ export const useDocs = create<DocsState>()(
           const marks = { ...s.watch.marks }
           for (const id of ids) marks[id] = { s: st, at, ...(titles?.[id] ? { t: titles[id] } : {}) }
           return { watch: { ...s.watch, marks } }
+        }),
+      setIdentity: (identity) =>
+        setState((s) => {
+          const now = Date.now()
+          const docs = { ...s.docs }
+          for (const [id, d] of Object.entries(s.docs)) {
+            const n = applyIdentity(d, identity)
+            if (n !== d) docs[id] = { ...n, updatedAt: now }
+          }
+          return { docs, watch: { ...s.watch, identity, identityAt: now } }
         }),
       setProfile: (profile) => setState((s) => ({ watch: { ...s.watch, profile, profileAt: Date.now() } })),
       setCompanies: (companies) => setState((s) => ({ watch: { ...s.watch, companies, companiesAt: Date.now() } })),

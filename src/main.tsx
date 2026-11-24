@@ -8,6 +8,7 @@ import { ShowcaseDoc, ShowcasePage } from './pages/Showcase'
 import { Toasts } from './components/ui'
 import { UpdateBanner } from './components/UpdateBanner'
 import { RomeDrawer } from './components/RomeDrawer'
+import { SettingsHost } from './components/SettingsModal'
 import { initTheme } from './lib/theme'
 
 initTheme()
@@ -33,5 +34,6 @@ createRoot(document.getElementById('root')!).render(
     <Toasts />
     <UpdateBanner />
     <RomeDrawer />
+    <SettingsHost />
   </StrictMode>,
 )

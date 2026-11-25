@@ -5402,14 +5402,29 @@ button.followup-badge {
 [data-theme='dark'] .cmap-tiles { filter: invert(1) hue-rotate(180deg) grayscale(0.5) brightness(0.85) contrast(0.9); }
 .cmap-open { position: absolute; top: 12px; right: 12px; z-index: 500; box-shadow: var(--shadow-lg); background: var(--panel); }
 .cmap-panel { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 340px; z-index: 500; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); overflow: hidden; }
-.cmap-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 12px; flex-wrap: wrap; }
+.cmap-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 12px; white-space: nowrap; }
+.cmap-count { overflow: hidden; text-overflow: ellipsis; }
 .cmap-head strong { display: inline-flex; align-items: center; gap: 6px; }
 .cmap-head .spacer { flex: 1; }
 .cmap-add { display: grid; gap: 6px; padding: 0 12px 8px; }
-.cmap-search { display: flex; align-items: center; gap: 6px; margin: 0 12px; padding: 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-3); background: var(--bg-2); }
+.cmap-searchrow { display: flex; gap: 6px; margin: 0 12px; }
+.cmap-filter-btn { position: relative; flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); color: var(--ink-2); cursor: pointer; }
+.cmap-filter-btn:hover, .cmap-filter-btn.on { border-color: var(--brand-2); color: var(--brand-2); }
+.cmap-badge-n { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--brand-2); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; }
+.cmap-summary { display: flex; align-items: center; gap: 4px; margin: 6px 12px 8px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink-3); cursor: pointer; text-align: left; }
+.cmap-summary:hover span { color: var(--ink); text-decoration: underline; }
+.cmap-summary span { margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmap-summary .dot { width: 8px; height: 8px; }
+.cmap-lbl { flex: none; width: 58px; }
+.cmap-row.top { align-items: flex-start; }
+.cmap-row.top .cmap-lbl { padding-top: 3px; }
+.cmap-row.end { justify-content: flex-end; }
+.cmap-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-3); background: var(--bg-2); }
 .cmap-search input { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; color: var(--ink); min-width: 0; }
 .cmap-base { margin: 6px 12px 0; justify-content: flex-start; }
-.cmap-filters { display: grid; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.cmap-filters { display: grid; gap: 10px; padding: 10px 12px; margin-top: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg-2); overflow-y: auto; max-height: 72%; flex: none; }
+.cmap-filters .cmap-chip { text-align: left; }
+.cmap-list { border-top: 1px solid var(--line); }
 .cmap-row { display: flex; align-items: center; gap: 8px; }
 .cmap-row input[type='range'] { flex: 1; accent-color: var(--brand-2); }
 .cmap-row .segmented { flex: 1; }

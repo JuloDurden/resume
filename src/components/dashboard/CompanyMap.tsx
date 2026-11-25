@@ -23,6 +23,7 @@ import {
   Search,
   Send,
   Settings2,
+  SlidersHorizontal,
   Star,
   Undo2,
 } from 'lucide-react'
@@ -111,6 +112,7 @@ export function CompanyMap() {
   const [minSize, setMinSize] = useLocal('resume-map-size', 11)
   const [kinds, setKinds] = useLocal<Kind[]>('resume-map-kinds', ['offer', 'follow', 'found'])
   const [panel, setPanel] = useLocal('resume-map-panel', true)
+  const [showFilters, setShowFilters] = useLocal('resume-map-filters-open', false)
   const [pages, setPages] = useState(2)
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Map<string, Place & { sector: string }>>(new Map())
@@ -124,6 +126,16 @@ export function CompanyMap() {
   const [applyTo, setApplyTo] = useState<{ name: string; careers?: string } | null>(null)
   const [analyse, setAnalyse] = useState<Offer | null>(null)
   const active = sectors.filter((s) => !off.includes(s))
+  const defRadius = Math.min(profile?.maxKm ?? 30, MAX_RADIUS)
+  const DEF_KINDS: Kind[] = ['offer', 'follow', 'found']
+  // filtres modifiés par rapport aux réglages par défaut
+  const changed = [radius !== defRadius, kinds.length !== DEF_KINDS.length || DEF_KINDS.some((k) => !kinds.includes(k)), off.some((s) => sectors.includes(s)), minSize !== 11].filter(Boolean).length
+  const resetFilters = () => {
+    setRadius(defRadius)
+    setKinds(DEF_KINDS)
+    setOff([])
+    setMinSize(11)
+  }
 
   /* ---------- secteurs proposés au premier passage, d'après les candidatures ---------- */
   const [seeding, setSeeding] = useState(false)
@@ -440,7 +452,7 @@ export function CompanyMap() {
                 <strong>
                   <Building2 size={15} /> Entreprises
                 </strong>
-                <span className="muted small">{inView.length} dans la zone visible</span>
+                <span className="muted small cmap-count">{inView.length} visibles</span>
                 <span className="spacer" />
                 <button className="icon-btn xs" title="Ajouter une entreprise" onClick={() => setAdding((v) => !v)}>
                   <Plus size={15} />
@@ -450,50 +462,80 @@ export function CompanyMap() {
                 </button>
               </div>
               {adding && <AddCompany onDone={() => setAdding(false)} />}
-              <div className="cmap-search">
-                <Search size={14} />
-                <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchBase()} placeholder="Rechercher une entreprise, une ville" />
+              <div className="cmap-searchrow">
+                <div className="cmap-search">
+                  <Search size={14} />
+                  <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchBase()} placeholder="Entreprise, ville…" />
+                </div>
+                <button className={`cmap-filter-btn${showFilters ? ' on' : ''}`} onClick={() => setShowFilters(!showFilters)} title={showFilters ? 'Masquer les filtres' : 'Afficher les filtres'}>
+                  <SlidersHorizontal size={15} />
+                  {changed > 0 && <span className="cmap-badge-n">{changed}</span>}
+                </button>
               </div>
               {needle.length >= 2 && (
                 <button className="btn sm ghost cmap-base" onClick={searchBase}>
                   <Search size={13} /> Chercher « {q.trim()} » dans la base des entreprises
                 </button>
               )}
-              <div className="cmap-filters">
-                <div className="cmap-row">
-                  <span className="muted small">Rayon</span>
-                  <input type="range" min={5} max={MAX_RADIUS} step={5} value={radius} onChange={(e) => setRadius(Number(e.target.value))} />
-                  <strong className="small">{radius} km</strong>
-                </div>
-                <div className="cmap-chips">
-                  {KINDS.map((k) => (
-                    <button key={k} className={`cmap-chip k-${k}${kinds.includes(k) ? ' on' : ''}`} onClick={() => toggleKind(k)}>
-                      <i /> {KIND_LABEL[k]} <span>{count(k)}</span>
-                    </button>
+              {!showFilters ? (
+                <button className="cmap-summary small" onClick={() => setShowFilters(true)} title="Modifier les filtres">
+                  {KINDS.filter((k) => kinds.includes(k)).map((k) => (
+                    <i key={k} className={`dot k-${k}`} title={KIND_LABEL[k]} />
                   ))}
-                </div>
-                <div className="cmap-sub muted small">
-                  Secteurs
-                  <button className="link-btn" onClick={() => openSettings('profile')} title="Choisir les secteurs dans chaque profil de recherche">
-                    <Settings2 size={12} /> modifier
-                  </button>
-                </div>
-                {sectors.length ? (
-                  <div className="cmap-chips">
-                    {sectors.map((s) => (
-                      <button key={s} className={`cmap-chip${off.includes(s) ? '' : ' on'}`} onClick={() => setOff(off.includes(s) ? off.filter((x) => x !== s) : [...off, s])}>
-                        {s}
-                      </button>
-                    ))}
+                  <span>
+                    {radius} km · {sectors.length ? `${active.length === sectors.length ? '' : `${active.length}/`}${sectors.length} secteur${sectors.length > 1 ? 's' : ''}` : 'aucun secteur'} · {minSize ? `${FOLLOW_SIZE.find((o) => o.value === minSize)?.label.replace('+', '')} sal. et +` : 'toutes tailles'}
+                  </span>
+                </button>
+              ) : (
+                <div className="cmap-filters">
+                  <div className="cmap-row">
+                    <span className="muted small cmap-lbl">Rayon</span>
+                    <input type="range" min={5} max={MAX_RADIUS} step={5} value={radius} onChange={(e) => setRadius(Number(e.target.value))} />
+                    <strong className="small">{radius} km</strong>
                   </div>
-                ) : (
-                  <p className="small muted">{seeding ? 'Recherche des secteurs de vos candidatures…' : 'Aucun secteur choisi : ajoutez-en dans Réglages, Profil.'}</p>
-                )}
-                <div className="cmap-row">
-                  <span className="muted small">Taille</span>
-                  <Segmented value={minSize} onChange={setMinSize} options={FOLLOW_SIZE} />
+                  <div className="cmap-row top">
+                    <span className="muted small cmap-lbl">Statut</span>
+                    <div className="cmap-chips">
+                      {KINDS.map((k) => (
+                        <button key={k} className={`cmap-chip k-${k}${kinds.includes(k) ? ' on' : ''}`} onClick={() => toggleKind(k)}>
+                          <i /> {KIND_LABEL[k]} <span>{count(k)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="cmap-row top">
+                    <span className="muted small cmap-lbl">Secteurs</span>
+                    {sectors.length ? (
+                      <div className="cmap-chips">
+                        {sectors.map((s) => (
+                          <button key={s} className={`cmap-chip${off.includes(s) ? '' : ' on'}`} onClick={() => setOff(off.includes(s) ? off.filter((x) => x !== s) : [...off, s])}>
+                            {s}
+                          </button>
+                        ))}
+                        <button className="cmap-chip" onClick={() => openSettings('profile')} title="Choisir les secteurs dans chaque profil de recherche">
+                          <Settings2 size={12} /> Modifier
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="small muted">{seeding ? 'Recherche des secteurs de vos candidatures…' : 'Aucun secteur choisi : ajoutez-en dans Réglages, Profil.'}</p>
+                    )}
+                  </div>
+                  <div className="cmap-row">
+                    <span className="muted small cmap-lbl">Taille</span>
+                    <Segmented value={minSize} onChange={setMinSize} options={FOLLOW_SIZE} />
+                  </div>
+                  <div className="cmap-row end">
+                    {changed > 0 && (
+                      <button className="btn sm ghost" onClick={resetFilters}>
+                        <Undo2 size={13} /> Réinitialiser
+                      </button>
+                    )}
+                    <button className="btn sm" onClick={() => setShowFilters(false)}>
+                      Voir la liste
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="cmap-list">
                 {inView.slice(0, 200).map((it) => (
                   <button key={it.key} className="cmap-item" onClick={() => setSelected(it.key)} onMouseEnter={() => hover(it.key, true)} onMouseLeave={() => hover(it.key, false)}>

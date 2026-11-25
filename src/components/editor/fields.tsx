@@ -38,9 +38,12 @@ export function TagsInput({ value, onChange, placeholder, details = false, neste
   const [edit, setEditRaw] = useState<number | null>(null)
   // texte du nom en cours de saisie : gardé tel quel (espaces compris) tant qu'on édite
   const [draft, setDraft] = useState<string | null>(null)
+  // phrase de plusieurs compétences (« a, b et c ») : figé à l'ouverture, pour ne pas changer de formulaire en cours de frappe
+  const [listMode, setListMode] = useState(false)
   const setEdit = (i: number | null) => {
     setEditRaw(i)
     setDraft(null)
+    setListMode(i !== null && details && parseSkill(value[i] ?? '').style === 'list')
   }
   // les virgules entre parenthèses ne créent pas de nouvelle étiquette
   const add = (raw: string) => {
@@ -87,11 +90,15 @@ export function TagsInput({ value, onChange, placeholder, details = false, neste
               <button
                 type="button"
                 className="chip-label"
-                title={details ? (p.details.length ? `${t}\nCliquer pour modifier ou ajuster les précisions` : 'Cliquer pour modifier ou ajouter des précisions') : 'Cliquer pour modifier'}
+                title={details ? (p.style === 'list' ? `${t}\n${p.details.length} compétences dans cette phrase : cliquer pour les modifier` : p.details.length ? `${t}\nCliquer pour modifier ou ajuster les précisions` : 'Cliquer pour modifier ou ajouter des précisions') : 'Cliquer pour modifier'}
                 onClick={() => setEdit(edit === i ? null : i)}
               >
-                {p.name}
-                {p.details.length > 0 && <em className="chip-count" title={`${nestedCount(t)} précision(s) imbriquée(s)`}>{nestedCount(t)}</em>}
+                {p.style === 'list' ? t : p.name}
+                {p.details.length > 0 && (
+                  <em className={`chip-count${p.style === 'list' ? ' list' : ''}`} title={p.style === 'list' ? `${nestedCount(t)} compétences` : `${nestedCount(t)} précision(s) imbriquée(s)`}>
+                    {nestedCount(t)}
+                  </em>
+                )}
               </button>
               <button
                 type="button"
@@ -124,7 +131,48 @@ export function TagsInput({ value, onChange, placeholder, details = false, neste
           }}
         />
       </div>
-      {edit !== null && cur && (
+      {edit !== null && cur && listMode && (
+        <div className="tag-edit">
+          <label className="field">
+            <span className="field-label">Phrase</span>
+            <input
+              className="input"
+              autoFocus
+              value={draft ?? value[edit]}
+              onChange={(e) => {
+                setDraft(e.target.value)
+                set(edit, e.target.value.trim())
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && setEdit(null)}
+            />
+          </label>
+          <div className="field">
+            <span className="field-label">Compétences de la phrase</span>
+            <TagsInput
+              value={cur.details}
+              onChange={(d) => {
+                setDraft(null)
+                set(edit, formatSkill('', d, 'list', cur.and))
+              }}
+              placeholder="Une compétence, puis Entrée"
+              details
+              nested
+            />
+            <span className="muted small">Chaque compétence compte à part pour l'analyse ATS. Cliquez sur l'une d'elles pour lui ajouter des précisions entre parenthèses.</span>
+          </div>
+          <div className="field">
+            <Toggle label="Dernière compétence après « et »" checked={!!cur.and} onChange={(v) => {
+              setDraft(null)
+              set(edit, formatSkill('', cur.details, 'list', v))
+            }} />
+            <span className="muted small tag-preview">{value[edit]}</span>
+          </div>
+          <button type="button" className="btn sm" onClick={() => setEdit(null)}>
+            OK
+          </button>
+        </div>
+      )}
+      {edit !== null && cur && !listMode && (
         <div className="tag-edit">
           <label className="field">
             <span className="field-label">{details ? 'Compétence' : 'Texte'}</span>
@@ -134,7 +182,7 @@ export function TagsInput({ value, onChange, placeholder, details = false, neste
               value={draft ?? (details ? cur.name : value[edit])}
               onChange={(e) => {
                 setDraft(e.target.value)
-                set(edit, details ? formatSkill(e.target.value, cur.details, cur.style) : e.target.value.trim())
+                set(edit, details ? formatSkill(e.target.value, cur.details, cur.style === 'list' ? 'paren' : cur.style, cur.and) : e.target.value.trim())
               }}
               onKeyDown={(e) => e.key === 'Enter' && setEdit(null)}
             />
@@ -144,7 +192,7 @@ export function TagsInput({ value, onChange, placeholder, details = false, neste
               <span className="field-label">{nested ? 'Précisions de cette précision (entre parenthèses)' : 'Précisions (outils, tâches, domaines)'}</span>
               <TagsInput
                 value={cur.details}
-                onChange={(d) => set(edit, formatSkill(cur.name, d, nested ? 'paren' : cur.style))}
+                onChange={(d) => set(edit, formatSkill(cur.name, d, nested || cur.style === 'list' ? 'paren' : cur.style, cur.and))}
                 placeholder="Une précision, puis Entrée"
                 details={!nested}
                 nested
@@ -156,13 +204,14 @@ export function TagsInput({ value, onChange, placeholder, details = false, neste
             <div className="field">
               <span className="field-label">Imbrication</span>
               <Segmented
-                value={cur.style}
-                onChange={(st) => set(edit, formatSkill(cur.name, cur.details, st))}
+                value={cur.style === 'list' ? 'paren' : cur.style}
+                onChange={(st) => set(edit, formatSkill(cur.name, cur.details, st, cur.and))}
                 options={[
                   { value: 'paren', label: 'Entre parenthèses' },
                   { value: 'colon', label: 'Après deux-points' },
                 ]}
               />
+              {cur.details.length > 1 && <Toggle label="Dernière précision après « et »" checked={!!cur.and} onChange={(v) => set(edit, formatSkill(cur.name, cur.details, cur.style === 'list' ? 'paren' : cur.style, v))} />}
               <span className="muted small tag-preview">{value[edit]}</span>
             </div>
           )}

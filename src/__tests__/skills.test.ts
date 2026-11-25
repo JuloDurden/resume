@@ -30,4 +30,19 @@ describe('compétences avec précisions', () => {
     expect(skillsInline(['ITIL', 'Microsoft 365 (Teams, Intune)'], 'colon')).toBe('ITIL · Microsoft 365 : Teams, Intune')
     expect(skillsInline(['ITIL', 'Microsoft 365 (Teams, Intune)'], 'paren')).toBe('ITIL, Microsoft 365 (Teams, Intune)')
   })
+  it('phrase de plusieurs compétences, « et » final', () => {
+    const r = parseSkill('Recrutement, formation et montée en compétences')
+    expect(r).toEqual({ name: '', details: ['Recrutement', 'formation', 'montée en compétences'], style: 'list', and: true })
+    expect(nestedCount('Recrutement, formation et montée en compétences')).toBe(3)
+    expect(formatSkill('', r.details, 'list', true)).toBe('Recrutement, formation et montée en compétences')
+    // « et » sans virgule : une seule compétence
+    expect(parseSkill('Hygiène et sécurité').details).toEqual([])
+    // précisions avec « et » final
+    expect(parseSkill('Reporting (Excel, Power BI et Looker)')).toEqual({ name: 'Reporting', details: ['Excel', 'Power BI', 'Looker'], style: 'paren', and: true })
+    expect(formatSkill('Reporting', ['Excel', 'Power BI', 'Looker'], 'paren', true)).toBe('Reporting (Excel, Power BI et Looker)')
+    expect(parseSkill('Management : recrutement, formation et animation').details).toEqual(['recrutement', 'formation', 'animation'])
+    // « et » entre parenthèses ne sépare pas
+    expect(parseSkill('Recrutement, gestion (paie et congés)').details).toEqual(['Recrutement', 'gestion (paie et congés)'])
+    expect(skillsInline(['ITIL', 'Recrutement, formation et montée en compétences'], 'paren')).toBe('ITIL · Recrutement, formation et montée en compétences')
+  })
 })

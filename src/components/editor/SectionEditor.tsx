@@ -103,7 +103,7 @@ export function SectionEditor({ section, onChange, onAskClaude, offerId, focusIt
               </div>
             ) : null
           })()}
-          {section.type === 'skills' && section.items.some((it) => (it.tags ?? []).some((t) => parseSkill(t).details.length)) && (
+          {section.type === 'skills' && section.items.some((it) => (it.tags ?? []).some((t) => { const p = parseSkill(t); return p.details.length > 0 && p.style !== 'list' })) && (
             <Field label="Précisions des compétences" hint={section.options.skillDisplay === 'inline' || section.options.skillDisplay === 'flow' ? 'En texte suivi, « en dessous » s\'affiche comme « après deux-points ».' : undefined}>
               <Segmented
                 value={section.options.skillDetails ?? 'paren'}

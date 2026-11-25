@@ -218,7 +218,8 @@ function entryBlocks(section: Section, item: SectionItem, style: StyleSettings, 
 /** Une compétence et ses précisions, selon l'affichage choisi. */
 function Skill({ raw, det }: { raw: string; det: SkillDetailsDisplay }) {
   const p = parseSkill(raw)
-  if (!p.details.length || det === 'paren') return <>{renderInline(raw)}</>
+  // phrase de plusieurs compétences : écrite telle quelle
+  if (!p.details.length || det === 'paren' || p.style === 'list') return <>{renderInline(raw)}</>
   if (det === 'colon')
     return (
       <>

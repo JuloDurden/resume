@@ -1,6 +1,6 @@
 // Carte des entreprises autour du domicile : entreprises suivies, candidatures et entreprises découvertes
 // (base SIRENE, secteurs choisis dans les profils de recherche). Volet flottant repliable à droite.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
@@ -97,7 +97,7 @@ const fromPlace = (p: Place, sector?: string): Partial<Company> => ({ siren: p.s
 const rankOf = (it: Item) => sizeRank(it.size) || sizeRank(it.place?.localSize) || (it.place?.cat === 'GE' ? 52 : it.place?.cat === 'ETI' ? 32 : 0)
 const sizeText = (it: Item) => (it.size && SIZE_LABEL[it.size]) || (it.place?.cat === 'GE' ? 'Grande entreprise' : it.place?.cat === 'ETI' ? 'ETI' : undefined)
 
-export function CompanyMap() {
+export function CompanyMap({ switcher }: { switcher?: React.ReactNode } = {}) {
   const profile = useDocs((s) => s.watch.profile)
   const saved = useDocs((s) => s.watch.companies)
   const offersMap = useDocs((s) => s.offers)
@@ -284,6 +284,24 @@ export function CompanyMap() {
   const markers = useRef(new Map<string, L.Marker>())
   const [ready, setReady] = useState(false)
 
+  // la carte descend jusqu'en bas de la fenêtre, quel que soit ce qui la précède (bandeau, onglets)
+  const root = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = root.current
+      if (!el || window.innerWidth <= 760) return el?.style.removeProperty('height')
+      const top = el.getBoundingClientRect().top + window.scrollY
+      el.style.height = `${Math.max(480, window.innerHeight - top - 16)}px`
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    const t = setInterval(fit, 1500) // un bandeau qui apparaît ou disparaît au-dessus
+    return () => {
+      window.removeEventListener('resize', fit)
+      clearInterval(t)
+    }
+  }, [])
+
   useEffect(() => {
     if (!box.current || map.current) return
     const m = L.map(box.current, { zoomControl: false, attributionControl: true }).setView([home.lat, home.lon], 11)
@@ -354,10 +372,19 @@ export function CompanyMap() {
         riseOnHover: true,
         keyboard: false,
       })
-      mk.bindTooltip(it.name, { permanent: true, direction: 'right', offset: [7, 0], className: `pin-label${it.kind === 'found' || it.kind === 'no' ? '' : ' lbl-pin'}` })
-      mk.on('click', () => {
+      mk.bindTooltip(it.name, { permanent: true, interactive: true, direction: 'right', offset: [7, 0], className: `pin-label${it.kind === 'found' || it.kind === 'no' ? '' : ' lbl-pin'}` })
+      // clic sur l'épingle ou sur son nom : la fiche s'ouvre dans le volet
+      const open = () => {
         setSelected(it.key)
         setPanel(true)
+      }
+      mk.on('click', open)
+      mk.on('tooltipopen', (e) => {
+        const el = (e as L.TooltipEvent).tooltip.getElement()
+        if (el) el.onclick = (ev) => {
+          ev.stopPropagation()
+          open()
+        }
       })
       mk.on('mouseover', () => mk.getTooltip()?.getElement()?.classList.add('hover'))
       mk.on('mouseout', () => mk.getTooltip()?.getElement()?.classList.remove('hover'))
@@ -426,8 +453,9 @@ export function CompanyMap() {
   const count = (k: Kind) => items.filter((it) => it.kind === k).length
 
   return (
-    <div className="cmap">
+    <div className="cmap" ref={root}>
       <div ref={box} className="cmap-map" />
+      {switcher && <div className="cmap-switch">{switcher}</div>}
       {!panel && (
         <button className="cmap-open btn" onClick={() => setPanel(true)} title="Afficher la liste">
           <PanelRightOpen size={15} /> Liste ({inView.length})

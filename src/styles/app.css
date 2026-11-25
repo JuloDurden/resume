@@ -5394,12 +5394,15 @@ button.followup-badge {
 /* ---------- carte des entreprises ---------- */
 .sites-wrap { display: flex; flex-direction: column; gap: 12px; }
 .sites-wrap > .segmented { align-self: flex-start; }
-.cmap { position: relative; isolation: isolate; height: calc(100vh - 200px); min-height: 520px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-2); }
+.cmap { position: relative; isolation: isolate; height: calc(100vh - 150px); min-height: 520px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-2); }
 .cmap-loading { display: grid; place-items: center; }
 .cmap-map { position: absolute; inset: 0; z-index: 0; }
 .cmap .leaflet-container { font: inherit; background: var(--bg-2); }
 .cmap-tiles { filter: grayscale(0.55) brightness(1.04) contrast(0.95); }
 [data-theme='dark'] .cmap-tiles { filter: invert(1) hue-rotate(180deg) grayscale(0.5) brightness(0.85) contrast(0.9); }
+.cmap-switch { position: absolute; top: 12px; left: 12px; z-index: 500; }
+.cmap-switch .segmented { background: var(--panel); box-shadow: var(--shadow-lg); border: 1px solid var(--line); }
+.cmap .leaflet-tooltip.pin-label { cursor: pointer; pointer-events: auto; }
 .cmap-open { position: absolute; top: 12px; right: 12px; z-index: 500; box-shadow: var(--shadow-lg); background: var(--panel); }
 .cmap-panel { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 340px; z-index: 500; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); overflow: hidden; }
 .cmap-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 12px; white-space: nowrap; }

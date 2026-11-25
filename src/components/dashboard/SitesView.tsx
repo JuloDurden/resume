@@ -93,22 +93,27 @@ export function SitesView() {
     setTab(t)
     localStorage.setItem('resume-sites-tab', t)
   }
+  const switcher = (
+    <Segmented
+      value={tab}
+      onChange={pick}
+      options={[
+        { value: 'map', label: <><MapIcon size={14} /> Carte des entreprises</> },
+        { value: 'boards', label: <><Globe size={14} /> Sites d'emploi</> },
+      ]}
+    />
+  )
   return (
     <div className="sites-wrap">
-      <Segmented
-        value={tab}
-        onChange={pick}
-        options={[
-          { value: 'map', label: <><MapIcon size={14} /> Carte des entreprises</> },
-          { value: 'boards', label: <><Globe size={14} /> Sites d'emploi</> },
-        ]}
-      />
       {tab === 'map' ? (
         <Suspense fallback={<div className="cmap cmap-loading muted">Chargement de la carte…</div>}>
-          <CompanyMap />
+          <CompanyMap switcher={switcher} />
         </Suspense>
       ) : (
-        <BoardsView />
+        <>
+          {switcher}
+          <BoardsView />
+        </>
       )}
     </div>
   )

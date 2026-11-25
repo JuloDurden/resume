@@ -32,3 +32,27 @@ export function initTheme() {
   applyTheme()
   media()?.addEventListener?.('change', () => themeChoice() === 'system' && applyTheme())
 }
+
+/** Largeur des pages : actuelle (1240 px), intermédiaire (1600 px) ou toute la largeur. */
+export type PageWidth = 'desktop' | 'wide' | 'full'
+const WKEY = 'resume-width'
+export function widthChoice(): PageWidth {
+  try {
+    const v = localStorage.getItem(WKEY)
+    return v === 'wide' || v === 'full' ? v : 'desktop'
+  } catch {
+    return 'desktop'
+  }
+}
+export function setWidth(w: PageWidth) {
+  try {
+    if (w === 'desktop') localStorage.removeItem(WKEY)
+    else localStorage.setItem(WKEY, w)
+  } catch {
+    /* appliqué pour cette session */
+  }
+  document.documentElement.dataset.width = w
+}
+export const initWidth = () => {
+  document.documentElement.dataset.width = widthChoice()
+}

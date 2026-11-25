@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Ban,
+  Pencil,
   Building2,
   CheckCircle2,
   ChevronRight,
@@ -37,6 +38,7 @@ import { sameCompany } from '../../lib/spontaneous'
 import { openSettings } from '../SettingsModal'
 import { Segmented, TextInput, Toggle, toast } from '../ui'
 import { CompanyAnalysisModal, SpontaneousModal } from './SpontaneousTools'
+import { CompanyEditModal } from './CompanyEdit'
 
 // leaflet.markercluster s'accroche à la variable globale L
 ;(window as unknown as { L: typeof L }).L = L
@@ -581,6 +583,7 @@ function VeilleStatus({ c }: { c: Company }) {
 
 function PlaceSheet({ it, onBack, onFollow, onUnfollow, onNo, onRestore, onPatch, onApply }: { it: Item; onBack: () => void; onFollow: () => void; onUnfollow: () => void; onNo: () => void; onRestore: () => void; onPatch: (p: Partial<Company>) => void; onApply: () => void }) {
   const c = it.company
+  const [edit, setEdit] = useState(false)
   const [url, setUrl] = useState(c?.url ?? '')
   useEffect(() => setUrl(c?.url ?? ''), [c?.id, c?.url])
   const followed = !!c && c.state !== 'no'
@@ -598,14 +601,22 @@ function PlaceSheet({ it, onBack, onFollow, onUnfollow, onNo, onRestore, onPatch
       <button className="link-btn" onClick={onBack}>
         <ArrowLeft size={14} /> Liste
       </button>
-      <h3>{it.name}</h3>
+      <h3 className="cmap-title">
+        {it.name}
+        {c && (
+          <button className="icon-btn xs" title="Modifier (nom, page, adresse, entreprise officielle)" onClick={() => setEdit(true)}>
+            <Pencil size={14} />
+          </button>
+        )}
+      </h3>
+      {edit && c && <CompanyEditModal company={c} onClose={() => setEdit(false)} />}
       <div className="cmap-badges">
         <span className={`cmap-badge k-${it.kind}`}>{KIND_LABEL[it.kind]}</span>
         {it.sector && <span className="cmap-badge">{it.sector}</span>}
       </div>
       <ul className="cmap-facts small">
         <li>
-          <MapPin size={13} /> {it.place?.address ?? c?.address ?? it.place?.city ?? c?.city ?? 'Lieu de l’offre'} · {Math.round(it.dist)} km{it.approx ? ' (centre de la commune)' : ''}
+          <MapPin size={13} /> {c?.address ?? it.place?.address ?? c?.city ?? it.place?.city ?? 'Lieu de l’offre'} · {Math.round(it.dist)} km{it.approx ? ' (centre de la commune)' : ''}
         </li>
         {sizeText(it) && (
           <li>

@@ -5385,10 +5385,16 @@ button.followup-badge {
 }
 
 
+/* ---------- largeur des pages ---------- */
+:root[data-width='wide'] .dashboard { max-width: 1600px; }
+:root[data-width='full'] .dashboard { max-width: none; }
+/* la carte des entreprises prend toute la largeur et toute la hauteur, comme une appli de cartes */
+.dashboard:has(.cmap) { max-width: none; padding-bottom: 16px; }
+
 /* ---------- carte des entreprises ---------- */
 .sites-wrap { display: flex; flex-direction: column; gap: 12px; }
 .sites-wrap > .segmented { align-self: flex-start; }
-.cmap { position: relative; height: calc(100vh - 260px); min-height: 520px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-2); }
+.cmap { position: relative; isolation: isolate; height: calc(100vh - 200px); min-height: 520px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-2); }
 .cmap-loading { display: grid; place-items: center; }
 .cmap-map { position: absolute; inset: 0; z-index: 0; }
 .cmap .leaflet-container { font: inherit; background: var(--bg-2); }
@@ -5432,6 +5438,20 @@ button.followup-badge {
 .k-no i, i.dot.k-no { background: transparent; border: 1.5px solid #8a8f98; }
 .cmap-sheet { padding: 12px; overflow-y: auto; display: grid; gap: 10px; align-content: start; }
 .cmap-sheet h3 { margin: 0; font-size: 17px; }
+.cmap-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.co-addr { position: relative; }
+.co-suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; display: grid; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-lg); overflow: hidden; }
+.co-suggest button { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--ink); text-align: left; cursor: pointer; }
+.co-suggest button:hover { background: var(--bg-2); }
+.co-edit .ok-text { color: var(--ok); }
+.co-link { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: var(--brand-soft); font-size: 13px; }
+.co-link > span { flex: 1; }
+.co-search { display: flex; gap: 6px; margin-top: 8px; }
+.co-search .input, .co-search > :first-child { flex: 1; min-width: 0; }
+.co-results { display: grid; gap: 4px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
+.co-result { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.co-result:hover { border-color: var(--brand-2); }
+.co-result > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .cmap-sheet .link-btn { justify-self: start; display: inline-flex; align-items: center; gap: 4px; }
 .cmap-badges { display: flex; flex-wrap: wrap; gap: 5px; }
 .cmap-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg-2); color: var(--ink-2); }

@@ -9,7 +9,7 @@ import { PhotoInput, SignatureInput } from './editor/fields'
 import { useDocs } from '../store/documents'
 import { download, parseBackup, toJson } from '../lib/export'
 import { FOLLOW_UP_CHOICES } from '../lib/followup'
-import { setTheme, themeChoice, type ThemeChoice } from '../lib/theme'
+import { setTheme, setWidth, themeChoice, widthChoice, type ThemeChoice } from '../lib/theme'
 import { SyncPanel } from './SyncModal'
 import { Field, Modal, Segmented, TextInput, toast } from './ui'
 
@@ -100,6 +100,7 @@ function UiPanel() {
       return 'compact'
     }
   })
+  const [width, setW] = useState(widthChoice)
   return (
     <div className="form-stack">
       <Field label="Thème" hint="Les CV et lettres restent sur une page blanche, comme à l'impression.">
@@ -113,6 +114,20 @@ function UiPanel() {
             { value: 'system', label: <><Monitor size={14} /> Système</> },
             { value: 'light', label: <><Sun size={14} /> Clair</> },
             { value: 'dark', label: <><Moon size={14} /> Sombre</> },
+          ]}
+        />
+      </Field>
+      <Field label="Largeur des pages" hint="La carte des entreprises occupe toujours toute la largeur.">
+        <Segmented
+          value={width}
+          onChange={(w) => {
+            setW(w)
+            setWidth(w)
+          }}
+          options={[
+            { value: 'desktop', label: 'Standard' },
+            { value: 'wide', label: 'Intermédiaire' },
+            { value: 'full', label: 'Toute la largeur' },
           ]}
         />
       </Field>

@@ -9,9 +9,10 @@ import { Toasts } from './components/ui'
 import { UpdateBanner } from './components/UpdateBanner'
 import { RomeDrawer } from './components/RomeDrawer'
 import { SettingsHost } from './components/SettingsModal'
-import { initTheme } from './lib/theme'
+import { initTheme, initWidth } from './lib/theme'
 
 initTheme()
+initWidth()
 import './styles/app.css'
 import { startAutoSync } from './store/sync'
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { Send, AlertTriangle, Building2, CheckCircle2, Clock, ExternalLink, Globe, Map as MapIcon, MapPinOff, Plus, Search, Trash2 } from 'lucide-react'
+import { Pencil, Send, AlertTriangle, Building2, CheckCircle2, Clock, ExternalLink, Globe, Map as MapIcon, MapPinOff, Plus, Search, Trash2 } from 'lucide-react'
 import type { Alert, Company } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
@@ -7,6 +7,8 @@ import { uid } from '../../lib/ids'
 import { searchLinks } from '../../lib/watch'
 import { guessBoard } from '../../lib/places'
 import { Field, Segmented, TextInput, Toggle, toast } from '../ui'
+
+import { CompanyEditModal } from './CompanyEdit'
 
 const CompanyMap = lazy(() => import('./CompanyMap').then((m) => ({ default: m.CompanyMap })))
 import { CompanyAnalysisModal, SpontaneousModal } from './SpontaneousTools'
@@ -30,6 +32,7 @@ const NONE: Company[] = []
 const ATS_HINT = /lever\.co|greenhouse\.io|smartrecruiters\.com|recruitee\.com|apply\.workable\.com|teamtailor\.com/
 
 function CompanyRow({ c, onChange, onDelete, onApply, board }: { c: Company; onChange: (p: Partial<Company>) => void; onDelete: () => void; onApply: () => void; board?: boolean }) {
+  const [edit, setEdit] = useState(false)
   const st = useFeed((s) => s.feed?.sources?.companies?.[c.id])
   const n = useFeed((s) => (s.feed?.items ?? []).filter((i) => i.id.startsWith(`co-${c.id}-`)).length)
   return (
@@ -73,6 +76,10 @@ function CompanyRow({ c, onChange, onDelete, onApply, board }: { c: Company; onC
       )}
       <Toggle label="Toutes les offres" checked={!!c.all} onChange={(v) => onChange({ all: v })} />
       <Toggle label="Active" checked={c.active !== false} onChange={(v) => onChange({ active: v })} />
+      <button className="icon-btn xs" title="Modifier (nom, page, adresse, entreprise officielle)" onClick={() => setEdit(true)}>
+        <Pencil size={14} />
+      </button>
+      {edit && <CompanyEditModal company={c} onClose={() => setEdit(false)} />}
       <button className="icon-btn xs" title="Retirer cette entreprise" onClick={onDelete}>
         <Trash2 size={14} />
       </button>
@@ -177,7 +184,7 @@ function BoardsView() {
             <h4 className="small">
               <MapPinOff size={14} /> Entreprises suivies introuvables sur la carte
             </h4>
-            <p className="muted small">Leur nom n'a pas été trouvé dans la base des entreprises. Si c'est un site d'emploi, rangez-le ici.</p>
+            <p className="muted small">Leur nom n'a pas été trouvé dans la base des entreprises. Modifiez-les (crayon) pour saisir leur adresse ou les rattacher à l'entreprise officielle. Si c'est un site d'emploi, rangez-le ici.</p>
             <div className="company-list">
               {lost.map((c) => (
                 <CompanyRow

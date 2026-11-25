@@ -105,14 +105,15 @@ export function prettyName(raw: string): string {
 }
 
 /** Établissement retenu pour une entreprise : ouvert, dans la zone, le plus gros (sinon le plus proche). */
-function toPlace(r: any, center: Point, radius: number): Place | undefined {
+function toPlace(r: any, center: Point, radius: number, nearest = false): Place | undefined {
   const open = ((r.matching_etablissements ?? []) as any[])
     .filter((e) => e.etat_administratif === 'A' && e.latitude && e.longitude)
     .map((e) => ({ e, p: { lat: parseFloat(e.latitude), lon: parseFloat(e.longitude) } }))
     .filter((x) => Number.isFinite(x.p.lat) && km(center, x.p) <= radius + 0.5)
   if (!open.length) return undefined
   const rank = (s?: string) => (s && /^\d\d$/.test(s) ? parseInt(s, 10) : 0)
-  open.sort((a, b) => rank(b.e.tranche_effectif_salarie) - rank(a.e.tranche_effectif_salarie) || km(center, a.p) - km(center, b.p))
+  if (nearest) open.sort((a, b) => km(center, a.p) - km(center, b.p))
+  else open.sort((a, b) => rank(b.e.tranche_effectif_salarie) - rank(a.e.tranche_effectif_salarie) || km(center, a.p) - km(center, b.p))
   const best = open[0]
   const enseigne = best.e.liste_enseignes?.[0] || best.e.nom_commercial
   const base = r.sigle && r.nom_raison_sociale ? `${r.nom_raison_sociale} (${r.sigle})` : r.nom_complet || r.nom_raison_sociale || ''
@@ -178,12 +179,12 @@ export async function nearbySector(sector: string, center: Point, pages: number)
 }
 
 /** Recherche par nom autour d'un point (département compris) : pour localiser une entreprise suivie. */
-export async function searchPlaces(q: string, center: Point, opts: { dept?: string } = {}): Promise<Place[]> {
+export async function searchPlaces(q: string, center: Point, opts: { dept?: string; nearest?: boolean } = {}): Promise<Place[]> {
   const params = new URLSearchParams({ q, per_page: '10', minimal: 'true', include: 'matching_etablissements', etat_administratif: 'A' })
   if (opts.dept) params.set('departement', opts.dept)
   const d = await getJson(`${API}/search?${params}`)
   return ((d.results ?? []) as any[])
-    .map((r) => toPlace(r, center, 400))
+    .map((r) => toPlace(r, center, 400, opts.nearest))
     .filter((p): p is Place => !!p)
     .sort((a, b) => km(center, a) - km(center, b))
 }
@@ -203,3 +204,29 @@ export function guessBoard(c: { url: string }): boolean {
   }
 }
 
+
+export interface Address {
+  label: string
+  lat: number
+  lon: number
+  city?: string
+  postcode?: string
+}
+/** Adresses correspondant à un texte (Géoplateforme IGN, Base Adresse Nationale). */
+export async function searchAddress(q: string, near?: Point): Promise<Address[]> {
+  const params = new URLSearchParams({ q, limit: '5' })
+  if (near) {
+    params.set('lat', String(near.lat))
+    params.set('lon', String(near.lon))
+  }
+  const r = await fetch(`https://data.geopf.fr/geocodage/search?${params}`)
+  if (!r.ok) throw new Error(`Recherche d'adresse : erreur ${r.status}`)
+  const d = await r.json()
+  return ((d.features ?? []) as any[]).map((f) => ({
+    label: f.properties?.label ?? q,
+    lon: f.geometry.coordinates[0],
+    lat: f.geometry.coordinates[1],
+    city: f.properties?.city,
+    postcode: f.properties?.postcode,
+  }))
+}

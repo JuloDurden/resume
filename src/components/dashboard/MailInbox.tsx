@@ -37,11 +37,18 @@ export function useMailAuto() {
     if (!auto.length) return
     const byOffer = new Map<string, InboxItem[]>()
     for (const it of auto) if (it.offer) byOffer.set(it.offer.id, [...(byOffer.get(it.offer.id) ?? []), it])
+    const noted: string[] = []
     for (const [id, items] of byOffer) {
       const cur = useDocs.getState().offers[id]
       if (!cur) continue
-      saveOffer(items.reduce((o, it) => (o.mails?.some((m) => m.id === it.r.id) ? o : applyAuto(o, it.r)), cur))
+      const fresh = items.filter((it) => !cur.mails?.some((m) => m.id === it.r.id))
+      if (!fresh.length) continue
+      saveOffer(fresh.reduce((o, it) => applyAuto(o, it.r), cur))
+      // retour visible : l'accusé de réception est noté sans rien demander
+      for (const it of fresh) noted.push(`${it.r.kind === 'ack' ? 'Accusé de réception' : 'Relance envoyée'} noté${it.r.kind === 'ack' ? '' : 'e'} : ${cur.company || cur.title}`)
     }
+    if (noted.length === 1) toast.ok(noted[0])
+    else if (noted.length > 1) toast.ok(`${noted.length} emails notés dans vos candidatures (${noted.map((n) => n.split(' : ')[1]).join(', ')})`)
   }, [auto, saveOffer])
 }
 

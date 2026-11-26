@@ -213,7 +213,6 @@ export async function readReplies({ user, password, label, offers, prev, version
   const me = user.toLowerCase()
   const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user, pass: password }, logger: false })
   await client.connect()
-  let read = 0
   let kept = 0
   try {
     const boxes = await client.list()
@@ -226,7 +225,6 @@ export async function readReplies({ user, password, label, offers, prev, version
       for await (const msg of client.fetch(uids.slice(-400), { source: true, envelope: true, internalDate: true, threadId: true }, { uid: true })) {
         const id = `m${msg.emailId ?? msg.uid}`
         if (known.has(id) && !reclassify) continue
-        read++
         const mail = await simpleParser(msg.source)
         const from = mail.from?.value?.[0] ?? {}
         const addr = (from.address ?? '').toLowerCase()
@@ -264,6 +262,15 @@ export async function readReplies({ user, password, label, offers, prev, version
   }
   const limit = Date.now() - KEEP_DAYS * 86400000
   const list = [...known.values()].filter((r) => new Date(r.at).getTime() >= limit).sort((a, b) => a.at.localeCompare(b.at)).slice(-MAX_ITEMS)
-  notes.push(`Gmail : ${kept} réponse(s) ou relance(s) lue(s) sur ${read} email(s) de candidature des ${days} derniers jours.`)
+  // bilan lisible : ce que contiennent les 7 derniers jours (les emails déjà lus aux passages précédents compris)
+  const recent = list.filter((r) => Date.now() - new Date(r.at).getTime() <= 7 * 86400000)
+  const KIND = { ack: ['accusé de réception', 'accusés de réception'], refus: ['refus', 'refus'], convoc: ['convocation', 'convocations'], other: ['autre réponse', 'autres réponses'], followup: ['relance envoyée', 'relances envoyées'] }
+  const parts = Object.entries(KIND)
+    .map(([k, [one, many]]) => {
+      const n = recent.filter((r) => r.kind === k).length
+      return n ? `${n} ${n > 1 ? many : one}` : ''
+    })
+    .filter(Boolean)
+  notes.push(`Gmail, 7 derniers jours : ${parts.length ? parts.join(', ') : 'aucune réponse de recruteur'}${kept ? ` (${kept} nouveau${kept > 1 ? 'x' : ''} à ce passage)` : ''}.`)
   return list
 }

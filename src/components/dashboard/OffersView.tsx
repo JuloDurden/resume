@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, MailCheck, Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, RecruiterUpdateModal, ShareModal, followUpLabel } from './OfferTools'
-import { FEELING, MODE_LABEL, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
+import { FEELING, MODE_LABEL, withOutcome, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
 import { announcedBy, followUpsSinceUpdate, nextFollowUp, setDefaultFollowUpDays, setSilentDays, silentSince } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import { Timeline, pastSteps } from './MetroTimeline'
@@ -252,7 +252,10 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, o
           <span className="or-status">
             <select className={`status-select st-${status}`} value={status} onChange={(e) => {
                 const v = e.target.value as JobStatus
-                saveOffer({ ...offer, status: v })
+                // refus ou proposition après un entretien sans issue notée : c'est son issue
+                const last = datedInterviews(offer).filter((s) => s.at <= Date.now()).pop()
+                if ((v === 'rejected' || v === 'offer') && last && !last.outcome) saveOffer(withOutcome({ ...offer, status: v }, last.id, v, Date.now()))
+                else saveOffer({ ...offer, status: v })
                 // passage en entretien : on demande tout de suite la date, l'heure et le lieu
                 if (v === 'interview' && !offer.interviews?.length) setIvPlan(true)
               }} aria-label="Statut de la candidature">

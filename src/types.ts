@@ -231,6 +231,8 @@ export interface Offer extends JobTarget {
   statusAt?: Partial<Record<JobStatus, number>>
   /** dates des relances envoyées */
   followUps?: number[]
+  /** détails d'une relance (même date que dans followUps) : moyen, interlocuteur, résultat */
+  followUpInfo?: FollowUpInfo[]
   /** relances désactivées pour cette offre */
   noFollowUp?: boolean
   /** dossier de candidature publié pour le recruteur (offre, CV et lettre en lecture seule) */
@@ -257,6 +259,16 @@ export interface Offer extends JobTarget {
   updates?: RecruiterUpdate[]
   /** emails de Gmail rattachés à cette candidature (lus par la veille), avec la suite donnée */
   mails?: OfferMail[]
+}
+
+/** Relance faite autrement que par email (ou détaillée) : appel, LinkedIn, sur place. */
+export interface FollowUpInfo {
+  at: number
+  channel: 'mail' | 'phone' | 'linkedin' | 'other'
+  /** personne contactée */
+  with?: string
+  /** résultat : « répondeur, message laissé », « pas joignable »... */
+  note?: string
 }
 
 /** Classement d'un email de candidature lu par la veille. */
@@ -329,7 +341,13 @@ export interface InterviewSlot {
   feeling?: InterviewFeeling
   /** compte rendu libre */
   report?: string
+  /** issue de l'entretien : en attente, étape suivante, refus, proposition */
+  outcome?: InterviewOutcome
+  /** jour où l'issue a été annoncée */
+  outcomeAt?: number
 }
+
+export type InterviewOutcome = 'wait' | 'next' | 'rejected' | 'offer'
 
 export type InterviewFeeling = 'great' | 'good' | 'mixed' | 'bad'
 

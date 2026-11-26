@@ -6877,3 +6877,39 @@ button.followup-badge {
   margin-top: 3px;
   font-size: 12px;
 }
+
+.tl-select {
+  display: block;
+  margin-top: 4px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+}
+.pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.pick-chip {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pick-chip.on {
+  border-color: var(--brand-2);
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 600;
+}

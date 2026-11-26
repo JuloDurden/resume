@@ -248,19 +248,27 @@ function InboxModal({ onClose }: { onClose: () => void }) {
 /** Enveloppe de la barre du haut, avec le nombre de réponses à confirmer (comme l'icône de Mail dans le Dock). */
 export function MailBell() {
   useMailAuto()
+  const hasFeed = useFeed((s) => !!s.feed)
   const hasReplies = useFeed((s) => !!s.feed?.replies)
   const box = useMailInbox()
   const [open, setOpen] = useState(false)
-  if (!hasReplies) return null
+  // pas de veille (pas de sauvegarde GitHub) : rien à lire
+  if (!hasFeed) return null
   const n = box.pending.length + box.unmatched.length
-  const label = n ? `${n} réponse${n > 1 ? 's' : ''} Gmail à confirmer` : 'Réponses lues dans Gmail'
+  const label = !hasReplies ? 'Réponses Gmail : en attente du prochain passage de la veille' : n ? `${n} réponse${n > 1 ? 's' : ''} Gmail à confirmer` : 'Aucune réponse Gmail à confirmer'
   return (
     <>
       <button className={`icon-btn mail-bell${n ? ' on' : ''}`} onClick={() => setOpen(true)} title={label} aria-label={label}>
         <Mail size={19} />
         {n > 0 && <span className="mail-count">{n > 99 ? '99+' : n}</span>}
       </button>
-      {open && <InboxModal onClose={() => setOpen(false)} />}
+      {open && hasReplies && <InboxModal onClose={() => setOpen(false)} />}
+      {open && !hasReplies && (
+        <Modal open onClose={() => setOpen(false)} title="Réponses lues dans Gmail" footer={<button className="btn" onClick={() => setOpen(false)}>Fermer</button>}>
+          <p>La veille n'a pas encore lu tes réponses. Elle le fera à son prochain passage (toutes les heures), ou tout de suite si tu la lances depuis l'onglet Annonces.</p>
+          <p className="muted small">Il faut que les secrets GMAIL_USER et GMAIL_APP_PASSWORD soient définis dans le dépôt de sauvegarde (ce sont les mêmes que pour les alertes email).</p>
+        </Modal>
+      )}
     </>
   )
 }

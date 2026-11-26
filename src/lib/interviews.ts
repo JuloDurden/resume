@@ -1,5 +1,5 @@
 // Entretiens d'une candidature : dates, lieux, agenda (.ics) et impression de la préparation.
-import type { InterviewFeeling, InterviewMode, InterviewPrep, InterviewSlot, Offer } from '../types'
+import type { InterviewFeeling, InterviewMode, InterviewOutcome, InterviewPrep, InterviewSlot, Offer } from '../types'
 import { fmtSalary, parseSalary } from './salary'
 
 export const FEELING: Record<InterviewFeeling, { label: string; tone: string }> = {
@@ -13,6 +13,23 @@ export const FEELING: Record<InterviewFeeling, { label: string; tone: string }> 
 export const toReport = (o: Offer, now = Date.now()) => datedInterviews(o).find((s) => !s.done && s.at < now - 3600000)
 
 export const MODE_LABEL: Record<InterviewMode, string> = { site: 'Sur place', phone: 'Téléphone', video: 'Visio' }
+
+export const OUTCOME_LABEL: Record<InterviewOutcome, string> = { wait: 'En attente du retour', next: 'Étape suivante', rejected: 'Refus', offer: 'Proposition' }
+
+/**
+ * Issue d'un entretien reportée sur la candidature : refus ou proposition changent le statut, à la date
+ * de l'annonce (juste après l'entretien s'il a été annoncé le jour même).
+ */
+export function withOutcome(o: Offer, slotId: string, outcome: InterviewOutcome | undefined, day?: number): Offer {
+  const slot = o.interviews?.find((s) => s.id === slotId)
+  if (!slot) return o
+  const sameDay = day !== undefined && slot.at !== undefined && new Date(day).toDateString() === new Date(slot.at).toDateString()
+  const at = outcome === 'rejected' || outcome === 'offer' ? (sameDay ? slot.at! + 60000 : (day ?? Date.now())) : undefined
+  const interviews = (o.interviews ?? []).map((s) => (s.id === slotId ? { ...s, done: true, outcome, outcomeAt: at } : s))
+  if (outcome === 'rejected') return { ...o, interviews, status: 'rejected', statusAt: { ...o.statusAt, rejected: at }, noFollowUp: true }
+  if (outcome === 'offer') return { ...o, interviews, status: 'offer', statusAt: { ...o.statusAt, offer: at } }
+  return { ...o, interviews }
+}
 
 const DAY = 86400000
 const startOfDay = (t: number) => {

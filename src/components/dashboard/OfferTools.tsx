@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { BellOff, CalendarPlus, Check, ClipboardCopy, ExternalLink, Globe, Mail, MessagesSquare, Plus, Printer, RotateCcw, Trash2 } from 'lucide-react'
-import type { InterviewFeeling, InterviewMode, InterviewPrep, InterviewSlot, Offer, ResumeDoc } from '../../types'
-import { FEELING, MODE_LABEL, datedInterviews, downloadIcs, fmtIn, fmtLong, printPrep, slotWhere } from '../../lib/interviews'
+import type { FollowUpInfo, InterviewOutcome, InterviewFeeling, InterviewMode, InterviewPrep, InterviewSlot, Offer, ResumeDoc } from '../../types'
+import { FEELING, MODE_LABEL, OUTCOME_LABEL, withOutcome, datedInterviews, downloadIcs, fmtIn, fmtLong, printPrep, slotWhere } from '../../lib/interviews'
 import { uid } from '../../lib/ids'
 import { useDocs } from '../../store/documents'
 import { FOLLOW_UP_CHOICES, appliedAt, placeInDay, followUpDays, followUpEmail, nextFollowUp, startOfDay, followUpsSinceUpdate, lastUpdate } from '../../lib/followup'
@@ -35,6 +35,28 @@ export function FollowUpModal({ offer, onClose }: { offer: Offer; onClose: () =>
   const [to, setTo] = useState(withEmail[0]?.email ?? '')
   const copy = async (t: string, msg: string) => toast[(await copyText(t)) ? 'ok' : 'error'](msg)
   const n = followUpsSinceUpdate(offer).length + 1
+  const [channel, setChannel] = useState<FollowUpInfo['channel']>('mail')
+  const [day, setDay] = useState(toInput(Date.now()))
+  const named = (offer.contacts ?? []).filter((c) => c.name)
+  const [who, setWho] = useState(named[0]?.name ?? '')
+  const [note, setNote] = useState('')
+
+  /** Relance par téléphone, LinkedIn ou sur place : date choisie, interlocuteur et résultat. */
+  const logged = () => {
+    const picked = fromInput(day)
+    const at = picked === undefined ? Date.now() : placeInDay(offer, startOfDay(picked))
+    // une relance déjà notée ce jour-là reçoit ces détails au lieu d'en compter une seconde
+    const same = (offer.followUps ?? []).find((t) => startOfDay(t) === startOfDay(at))
+    const when = same ?? at
+    const info: FollowUpInfo = { at: when, channel, with: who.trim() || undefined, note: note.trim() || undefined }
+    saveOffer({
+      ...offer,
+      followUps: same ? offer.followUps : [...(offer.followUps ?? []), at].sort((a, b) => a - b),
+      followUpInfo: [...(offer.followUpInfo ?? []).filter((x) => x.at !== when), info],
+    })
+    toast.ok(same ? 'Relance complétée' : 'Relance enregistrée')
+    onClose()
+  }
 
   const done = () => {
     let contacts = offer.contacts ?? []
@@ -63,13 +85,53 @@ export function FollowUpModal({ offer, onClose }: { offer: Offer; onClose: () =>
           >
             <BellOff size={15} /> Ne plus relancer
           </button>
-          <button className="btn primary" onClick={done}>
-            <Check size={15} /> J'ai envoyé la relance
-          </button>
+          {channel === 'mail' ? (
+            <button className="btn primary" onClick={done}>
+              <Check size={15} /> J'ai envoyé la relance
+            </button>
+          ) : (
+            <button className="btn primary" onClick={logged}>
+              <Check size={15} /> Enregistrer la relance
+            </button>
+          )}
         </>
       }
     >
       <div className="form-stack">
+        <Field label="Moyen">
+          <Segmented
+            value={channel}
+            onChange={setChannel}
+            options={[
+              { value: 'mail', label: 'Email' },
+              { value: 'phone', label: 'Téléphone' },
+              { value: 'linkedin', label: 'LinkedIn' },
+              { value: 'other', label: 'Autre' },
+            ]}
+          />
+        </Field>
+        {channel !== 'mail' ? (
+          <>
+            <Field label="Jour">
+              <input className="input" type="date" value={day} max={toInput(Date.now())} onChange={(e) => setDay(e.target.value)} />
+            </Field>
+            <Field label="Personne contactée">
+              <TextInput value={who} onChange={setWho} placeholder="Nom, fonction" />
+            </Field>
+            <Field label="Résultat">
+              <div className="pick-row">
+                {(channel === 'phone' ? ['Répondeur, message laissé', 'Pas joignable', 'Échange avec la personne'] : channel === 'linkedin' ? ['Message envoyé', 'Invitation envoyée', 'Échange avec la personne'] : ['Échange avec la personne', 'Message laissé']).map((p) => (
+                  <button key={p} type="button" className={`pick-chip${note === p ? ' on' : ''}`} onClick={() => setNote(p)}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <TextArea value={note} onChange={setNote} minRows={2} placeholder="Ce qui s'est dit, ce qui est convenu" />
+            </Field>
+            <p className="muted small">Si une réponse arrive ensuite, note-la avec « Noter une réponse » : la relance passera de « sans réponse » à « réponse reçue ».</p>
+          </>
+        ) : (
+          <>
         <p className="muted small">
           Candidature envoyée le {frDate(appliedAt(offer))}
           {offer.followUps?.length ? `, relancée le ${offer.followUps.map((t) => frDate(t)).join(' et le ')}` : ''}. Le message est modifiable avant envoi.
@@ -111,6 +173,8 @@ export function FollowUpModal({ offer, onClose }: { offer: Offer; onClose: () =>
             <Mail size={15} /> Ouvrir dans ma messagerie
           </a>
         </div>
+          </>
+        )}
       </div>
     </Modal>
   )
@@ -214,6 +278,7 @@ const OUTCOMES = [
   { value: 'pending', label: 'Toujours en lice' },
   { value: 'interview', label: 'Entretien proposé' },
   { value: 'rejected', label: 'Refus' },
+  { value: 'offer', label: 'Proposition' },
 ] as const
 const PHRASES = ['Candidature toujours à l\'étude', 'Processus plus long que prévu', 'Candidature transmise au manager', 'Réponse après les entretiens en cours']
 
@@ -238,10 +303,12 @@ export function RecruiterUpdateModal({ offer, onClose, onInterview }: { offer: O
     // une réponse se rattache à la dernière relance envoyée avant elle (le jour même compris)
     const fu = kind === 'reply' ? [...(offer.followUps ?? [])].filter((t) => startOfDay(t) <= startOfDay(at)).sort((a, b) => b - a)[0] : undefined
     const u = { id: uid(), at: fu ? Math.max(at, fu + 60000) : at, kind, text: text.trim() || undefined, waitUntil, afterFollowUp: fu }
-    const status = outcome === 'interview' ? 'interview' : outcome === 'rejected' ? 'rejected' : offer.status === 'todo' ? 'applied' : offer.status
+    const status = outcome === 'interview' ? 'interview' : outcome === 'rejected' ? 'rejected' : outcome === 'offer' ? 'offer' : offer.status === 'todo' ? 'applied' : offer.status
     // après un entretien, le délai annoncé devient la date de retour attendue
     const answerBy = waitUntil && (status === 'interview' || offer.status === 'interview') ? waitUntil : offer.answerBy
-    saveOffer({ ...offer, status, answerBy, followUpDate: undefined, updates: [...(offer.updates ?? []), u] })
+    // refus ou proposition : à la date de la réponse (pas à celle de la saisie)
+    const statusAt = (status === 'rejected' || status === 'offer') && status !== offer.status ? { ...offer.statusAt, [status]: u.at } : offer.statusAt
+    saveOffer({ ...offer, status, statusAt, ...(status === 'rejected' ? { noFollowUp: true } : {}), answerBy, followUpDate: undefined, updates: [...(offer.updates ?? []), u] })
     toast.ok(outcome === 'rejected' ? 'Réponse notée, candidature passée en refusée' : waitUntil ? `Réponse notée : retour annoncé le ${fmt(waitUntil)}` : 'Réponse notée')
     onClose()
     if (outcome === 'interview') onInterview?.()
@@ -430,13 +497,19 @@ export function InterviewReport({ offer, slotId, onClose, onNext }: { offer: Off
   const [feeling, setFeeling] = useState<InterviewFeeling | undefined>(slot?.feeling)
   const [report, setReport] = useState(slot?.report ?? '')
   const [answer, setAnswer] = useState(toInput(offer.answerBy))
+  const [mode, setMode] = useState<InterviewMode | undefined>(slot?.mode)
+  const [outcome, setOutcome] = useState<InterviewOutcome | undefined>(slot?.outcome)
+  const [told, setTold] = useState(toInput(slot?.outcomeAt ?? slot?.at ?? Date.now()))
   if (!slot) return null
   const n = datedInterviews(offer).findIndex((s) => s.id === slotId)
+  const final = outcome === 'rejected' || outcome === 'offer'
   const save = (next?: boolean) => {
-    saveOffer({ ...offer, answerBy: fromInput(answer), interviews: (offer.interviews ?? []).map((s) => (s.id === slotId ? { ...s, done, feeling: done ? feeling : undefined, report: report.trim() || undefined } : s)) })
-    toast.ok(done ? 'Compte rendu enregistré' : 'Entretien enregistré comme non passé')
+    let o: Offer = { ...offer, answerBy: final ? offer.answerBy : fromInput(answer), interviews: (offer.interviews ?? []).map((s) => (s.id === slotId ? { ...s, done, mode, feeling: done ? feeling : undefined, report: report.trim() || undefined } : s)) }
+    if (done) o = withOutcome(o, slotId, outcome, fromInput(told))
+    saveOffer(o)
+    toast.ok(!done ? 'Entretien enregistré comme non passé' : outcome === 'rejected' ? 'Compte rendu enregistré, candidature passée en refusée' : outcome === 'offer' ? 'Compte rendu enregistré : proposition reçue' : 'Compte rendu enregistré')
     onClose()
-    if (next) onNext()
+    if (next || (done && outcome === 'next')) onNext()
   }
   return (
     <Modal
@@ -446,7 +519,7 @@ export function InterviewReport({ offer, slotId, onClose, onNext }: { offer: Off
       title={`Compte rendu${(offer.interviews?.length ?? 0) > 1 ? ` de l'entretien ${n + 1}` : " d'entretien"} : ${[offer.title, offer.company].filter(Boolean).join(', ')}`}
       footer={
         <>
-          <button className="btn" onClick={() => save(true)} disabled={!done}>
+          <button className="btn" onClick={() => save(true)} disabled={!done || final}>
             <Plus size={15} /> Enregistrer et prévoir l'étape suivante
           </button>
           <button className="btn primary" onClick={() => save()}>
@@ -463,6 +536,17 @@ export function InterviewReport({ offer, slotId, onClose, onNext }: { offer: Off
         <Toggle checked={done} onChange={setDone} label="J'ai passé cet entretien" />
         {done ? (
           <>
+            <Field label="Type d'entretien">
+              <Segmented value={mode ?? ('' as InterviewMode)} onChange={setMode} options={(Object.keys(MODE_LABEL) as InterviewMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))} />
+            </Field>
+            <Field label="Issue" hint={outcome === 'next' ? "À l'enregistrement, tu pourras planifier l'étape suivante." : final ? 'Le statut de la candidature est mis à jour.' : undefined}>
+              <Segmented value={outcome ?? ('' as InterviewOutcome)} onChange={(v) => setOutcome(v === outcome ? undefined : v)} options={(Object.keys(OUTCOME_LABEL) as InterviewOutcome[]).map((k) => ({ value: k, label: OUTCOME_LABEL[k] }))} />
+            </Field>
+            {final && (
+              <Field label="Annoncé le" hint="Le jour de l'entretien si on te l'a dit pendant l'échange.">
+                <input className="input" type="date" value={told} onChange={(e) => setTold(e.target.value)} style={{ maxWidth: 200 }} />
+              </Field>
+            )}
             <Field label="Mon impression">
               <div className="feel-pick" role="radiogroup" aria-label="Mon impression">
                 {(Object.keys(FEELING) as InterviewFeeling[]).map((f) => (
@@ -475,9 +559,11 @@ export function InterviewReport({ offer, slotId, onClose, onNext }: { offer: Off
             <Field label="Compte rendu" hint="À écrire à chaud : il nourrit la préparation de l'étape suivante.">
               <TextArea value={report} minRows={9} onChange={setReport} placeholder={REPORT_HINT} />
             </Field>
-            <Field label="Retour attendu le" hint="Passé ce jour sans nouvelles, une relance « suite à notre entretien » est proposée.">
-              <input className="input" type="date" value={answer} onChange={(e) => setAnswer(e.target.value)} style={{ maxWidth: 200 }} />
-            </Field>
+            {!final && (
+              <Field label="Retour attendu le" hint="Passé ce jour sans nouvelles, une relance « suite à notre entretien » est proposée.">
+                <input className="input" type="date" value={answer} onChange={(e) => setAnswer(e.target.value)} style={{ maxWidth: 200 }} />
+              </Field>
+            )}
           </>
         ) : (
           <p className="muted small">Entretien reporté ou annulé ? Changez sa date dans « Entretien : date, heure et lieu ».</p>

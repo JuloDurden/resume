@@ -4531,11 +4531,22 @@ button.followup-badge {
   box-shadow: 0 14px 36px rgba(17, 24, 39, 0.14);
   cursor: auto;
 }
-.offer-list.has-open .offer-row:not(.open) {
-  opacity: 0.45;
+/* candidature ouverte : les autres s'estompent nettement */
+.offer-list.has-open .offer-row:not(.open),
+.offer-columns.has-open .offer-row:not(.open) {
+  opacity: 0.32;
+  filter: grayscale(0.85);
 }
-.offer-list.has-open .offer-row:not(.open):hover {
-  opacity: 0.85;
+.offer-list.has-open .offer-row:not(.open):hover,
+.offer-columns.has-open .offer-row:not(.open):hover {
+  opacity: 0.8;
+  filter: none;
+}
+.offer-row.open {
+  position: relative;
+  z-index: 1;
+  border-color: var(--brand-2);
+  margin: 6px 0;
 }
 .or-line {
   display: flex;
@@ -6531,4 +6542,338 @@ button.followup-badge {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+
+/* ---------- réponses lues dans Gmail ---------- */
+.mail-bell {
+  position: relative;
+  width: 36px;
+  height: 36px;
+}
+.mail-bell.on {
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+.mail-count {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: #d92d20;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.mail-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 13px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mail-mark.t-refus,
+.rc-tag.t-refus {
+  background: rgba(192, 57, 43, 0.1);
+  color: #9b2c1f;
+}
+.mail-mark.t-convoc,
+.rc-tag.t-convoc {
+  background: rgba(47, 111, 179, 0.12);
+  color: #1d4f86;
+}
+.mail-mark.t-other,
+.rc-tag.t-other {
+  background: rgba(194, 119, 12, 0.13);
+  color: #7a4a06;
+}
+.rc-tag.t-ack {
+  background: var(--line-2);
+  color: var(--ink-2);
+}
+:root[data-theme='dark'] .mail-mark.t-refus,
+:root[data-theme='dark'] .rc-tag.t-refus {
+  color: #ff9b90;
+}
+:root[data-theme='dark'] .mail-mark.t-convoc,
+:root[data-theme='dark'] .rc-tag.t-convoc {
+  color: #9cc4ff;
+}
+:root[data-theme='dark'] .mail-mark.t-other,
+:root[data-theme='dark'] .rc-tag.t-other {
+  color: #f5c066;
+}
+.reply-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--panel);
+}
+.reply-card.t-refus {
+  border-color: rgba(192, 57, 43, 0.3);
+}
+.reply-card.t-convoc {
+  border-color: rgba(47, 111, 179, 0.35);
+}
+.reply-card.t-other {
+  border-color: rgba(194, 119, 12, 0.35);
+}
+.reply-card.compact {
+  padding: 10px 12px;
+}
+.reply-card.done {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ok);
+}
+.rc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rc-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.rc-subject {
+  font-size: 13.5px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.rc-date {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.rc-from,
+.rc-offer {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.rc-excerpt {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--bg-2);
+}
+.rc-link {
+  margin-top: 6px;
+  max-width: 420px;
+}
+.rc-actions a.btn {
+  color: var(--ink);
+  text-decoration: none;
+}
+.rc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.inbox section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inbox h4 {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.inbox-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-2);
+  padding: 6px 0;
+}
+.inbox-more[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inbox-auto {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* ---------- fiche de la candidature : onglets ---------- */
+.or-open.tabbed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.or-mails {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.or-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.or-tabs button {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  padding: 8px 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.or-tabs button:hover {
+  color: var(--ink);
+}
+.or-tabs button.on {
+  color: var(--brand);
+  font-weight: 600;
+  border-bottom-color: var(--brand-2);
+}
+.or-tab {
+  min-height: 60px;
+}
+.or-open .or-actions {
+  padding-top: 10px;
+  border-top: 1px solid var(--line-2);
+}
+
+/* ---------- chronologie verticale (onglet Échanges) ---------- */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+.tl-step {
+  --c: var(--brand-2);
+  position: relative;
+  display: grid;
+  grid-template-columns: 76px 22px minmax(0, 1fr);
+  column-gap: 10px;
+  padding-bottom: 14px;
+}
+.tl-step::before {
+  content: '';
+  position: absolute;
+  left: 97px;
+  top: 14px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--line);
+}
+.tl-step:last-child::before {
+  display: none;
+}
+.tl-date {
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  padding-top: 1px;
+}
+.tl-dot {
+  width: 12px;
+  height: 12px;
+  margin: 4px auto 0;
+  border-radius: 50%;
+  border: 3px solid var(--c);
+  background: var(--panel);
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+}
+.tl-step.t-news .tl-dot,
+.tl-step.t-end-ko .tl-dot,
+.tl-step.t-end-ok .tl-dot,
+.tl-step.t-reply .tl-dot {
+  background: var(--c);
+}
+.tl-step.t-news,
+.tl-step.t-reply {
+  --c: #3b8a2e;
+}
+.tl-step.t-iv {
+  --c: #6a5fd0;
+}
+.tl-step.t-fu {
+  --c: #c2770c;
+}
+.tl-step.t-ack {
+  --c: var(--ink-3);
+}
+.tl-step.t-end-ko {
+  --c: #c0392b;
+}
+.tl-step.t-end-ok {
+  --c: var(--ok);
+}
+.tl-step.future .tl-dot {
+  border-style: dashed;
+}
+.tl-step.future .tl-body strong {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.tl-step.child .tl-body {
+  padding-left: 14px;
+  border-left: 2px solid rgba(194, 119, 12, 0.35);
+}
+.tl-body {
+  font-size: 13.5px;
+  min-width: 0;
+}
+.tl-body p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.tl-src {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.tl-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 12px;
 }

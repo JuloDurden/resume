@@ -14,6 +14,7 @@ import { JobsView } from '../components/dashboard/JobsView'
 import { useFeed } from '../store/feed'
 import { PdfImportModal } from '../components/PdfImportModal'
 import { SyncButton } from '../components/SyncModal'
+import { MailBell } from '../components/dashboard/MailInbox'
 import { ThemeToggle, downloadBackup, importBackupFile, openSettings } from '../components/SettingsModal'
 import { SharedIntro, ShowcaseGrid, ShowcaseIntro, useSharedShowcase, useShowcase } from './Showcase'
 import { useSync } from '../store/sync'
@@ -267,6 +268,7 @@ export default function Dashboard() {
           <span>Resume</span>
         </div>
         <div className="dash-actions">
+          {!slug && <MailBell />}
           <SyncButton onClick={() => setSettings('sync')} />
           <ThemeToggle />
           <button className="icon-btn" onClick={() => setSettings('ui')} title="Réglages" aria-label="Réglages">

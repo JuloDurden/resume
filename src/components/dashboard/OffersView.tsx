@@ -1,12 +1,14 @@
 import { docNameFor } from '../../lib/filename'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MailCheck, Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Mail, MailCheck, Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, RecruiterUpdateModal, ShareModal, followUpLabel } from './OfferTools'
 import { FEELING, MODE_LABEL, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
-import { announcedBy, followUpsSinceUpdate, nextFollowUp, setDefaultFollowUpDays } from '../../lib/followup'
+import { announcedBy, followUpsSinceUpdate, nextFollowUp, setDefaultFollowUpDays, setSilentDays, silentSince } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
-import { MetroTimeline } from './MetroTimeline'
+import { Timeline, pastSteps } from './MetroTimeline'
+import { ReplyCard, useMailInbox } from './MailInbox'
+import { MAIL_MARK, type InboxItem } from '../../lib/replies'
 import { CompanyAnalysisModal, CompanyCard, SpontaneousModal } from './SpontaneousTools'
 import type { AnyDoc, JobStatus, LetterDoc, Offer, ResumeDoc } from '../../types'
 import { useDocs } from '../../store/documents'
@@ -111,10 +113,15 @@ function nextStep(o: Offer, docs: AnyDoc[]): Next {
   const promised = announcedBy(o)
   if (promised) return { text: `Retour annoncé le ${frDay(promised)}`, tone: 'ok', stage: 'wait', act: 'planner', title: n ? `Sans nouvelles, relance proposée le ${frDay(n)}` : undefined }
   if (n) return { text: `${followUpsSinceUpdate(o).length ? 'Seconde relance' : 'Relance'} le ${frDay(n)}`, tone: '', stage: 'wait', act: 'planner' }
+  const quiet = silentSince(o)
+  if (quiet) return { text: `Sans réponse depuis le ${frDay(quiet)}`, tone: 'muted', stage: 'wait', act: 'planner', title: 'Aucune nouvelle depuis la dernière relance (délai réglable dans Réglages, Relances)' }
   return { text: o.noFollowUp ? 'Sans relance' : 'En attente', tone: 'muted', stage: 'wait', act: 'planner' }
 }
 
-function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offer: Offer; docs: AnyDoc[]; resumes: ResumeDoc[]; onEdit: () => void; open: boolean; onOpen: (v: boolean) => void; narrow?: boolean }) {
+/** Réponses montrées dans chaque candidature ouverte (la carte est recréée quand la candidature change de groupe). */
+const keptMails = new Map<string, InboxItem[]>()
+
+function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, offers }: { offer: Offer; docs: AnyDoc[]; resumes: ResumeDoc[]; onEdit: () => void; open: boolean; onOpen: (v: boolean) => void; narrow?: boolean; mails?: InboxItem[]; offers: Offer[] }) {
   const navigate = useNavigate()
   const saveOffer = useDocs((s) => s.saveOffer)
   const removeOffer = useDocs((s) => s.removeOffer)
@@ -148,6 +155,21 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
   const [analysing, setAnalysing] = useState(false)
   const [replying, setReplying] = useState(false)
   const [reportFor, setReportFor] = useState<string | null>(null)
+  const [tab, setTab] = useState<'suivi' | 'docs' | 'echanges' | 'entreprise'>(offer.spontaneous ? 'entreprise' : 'suivi')
+  // réponses Gmail montrées dans la candidature ouverte : gardées après la décision, pour pouvoir l'annuler
+  const [kept, setKept] = useState<InboxItem[]>(() => (open ? keptMails.get(offer.id) ?? [] : []))
+  useEffect(() => {
+    setKept((k) => {
+      if (!open) {
+        keptMails.delete(offer.id)
+        return k.length ? [] : k
+      }
+      const add = (mails ?? []).filter((m) => !k.some((x) => x.r.id === m.r.id))
+      if (!add.length) return k
+      keptMails.set(offer.id, [...k, ...add])
+      return [...k, ...add]
+    })
+  }, [open, mails, offer.id])
   const minPay = useDocs((s) => s.watch.profile?.salary?.min)
   const pay = offerSalary(offer)
   const payTone = pay?.max && minPay ? (pay.max < minPay ? 'below' : 'ok') : ''
@@ -220,6 +242,12 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
             {status === 'todo' ? ` · ajoutée ${since(offer.createdAt)}` : sent ? ` · envoyée ${since(sent)}` : ''}
           </span>
         </div>
+        {!!mails?.length && (
+          <button className={`mail-mark t-${mails[0].r.kind}`} onClick={() => onOpen(true)} title="Réponse lue dans Gmail, à confirmer">
+            <Mail size={13} /> {MAIL_MARK[mails[0].r.kind]}
+            {mails.length > 1 ? ` +${mails.length - 1}` : ''}
+          </button>
+        )}
         {!narrow && (
           <span className="or-status">
             <select className={`status-select st-${status}`} value={status} onChange={(e) => {
@@ -393,145 +421,167 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
         </Menu>
       </div>
 
-      {open && offer.spontaneous && <CompanyCard offer={offer} onAnalyse={() => setAnalysing(true)} />}
-      {open && !narrow && <MetroTimeline offer={offer} />}
       {open && (
-        <div className="or-open">
-          <section>
-            <h4>Documents</h4>
-            <div className="oc-docs">
-              {sortedDocs.map((d) => (
-                <button key={d.id} className="oc-doc" onClick={() => navigate(openPath(d))} title={d.name}>
-                  <DocThumb doc={d} width={86} />
-                  <span className={`kind-badge ${d.kind}`}>{d.kind === 'resume' ? 'CV' : 'Lettre'}</span>
-                </button>
+        <div className="or-open tabbed">
+          {kept.length > 0 && (
+            <div className="or-mails">
+              {kept.map((it) => (
+                <ReplyCard key={it.r.id} item={mails?.find((m) => m.r.id === it.r.id) ?? it} compact offers={offers} />
               ))}
             </div>
-            <Menu
-              trigger={(t) => (
-                <button className="btn sm" onClick={t}>
-                  <Plus size={14} /> Document <ChevronDown size={13} />
-                </button>
-              )}
-            >
-              {(close) => (
-                <>
-                  <MenuItem
-                    icon={<FilePlus2 size={14} />}
-                    onClick={() => {
-                      close()
-                      if (resumes.length) setCvModal(true)
-                      else toast.error("Créez d'abord un CV dans l'onglet Documents")
-                    }}
-                  >
-                    CV adapté à cette offre
-                  </MenuItem>
-                  <MenuItem
-                    icon={<FileSignature size={14} />}
-                    onClick={() => {
-                      close()
-                      createLetter()
-                    }}
-                  >
-                    Lettre de motivation
-                  </MenuItem>
-                </>
-              )}
-            </Menu>
-          </section>
-          <section>
-            <h4>Suivi</h4>
-            <p>
-              {[offer.location, offer.contract].filter(Boolean).join(' · ') || 'Lieu non précisé'}
-            </p>
-            <p>
-              <Euro size={13} className="muted" />{' '}
-              {pay ? (
-                <span className={payTone ? `pay ${payTone}` : undefined}>
-                  {pay.text}
-                  {pay.max ? ' brut annuel' : ''}
-                  {payTone === 'below' && ' (sous votre minimum)'}
-                </span>
-              ) : (
-                <span className="muted">
-                  Salaire non indiqué{' '}
-                  <button className="link" onClick={onEdit}>
-                    ajouter
-                  </button>
-                </span>
-              )}
-            </p>
-            {(status === 'interview' || slots.length > 0) && (
-              <div className="or-iv">
-                {slots.map((s, i) => (
-                  <div key={s.id} className={`iv-line${s.at < Date.now() - 2 * 3600000 && !s.done ? ' muted' : ''}`}>
-                    <CalendarDays size={13} /> <strong>{slots.length > 1 ? `Entretien ${i + 1}` : 'Entretien'}</strong> {fmtShort(s.at)}
-                    {s.at > Date.now() ? <span className="muted"> ({fmtIn(s.at)})</span> : ''}
-                    {s.done && <span className={`feel-chip f-${s.feeling ?? 'none'}`}>{s.feeling ? FEELING[s.feeling].label : 'Passé'}</span>}
-                    {s.at < Date.now() && (
-                      <>
-                        {' '}
-                        <button className="link small" onClick={() => setReportFor(s.id)}>
-                          {s.done ? (s.report ? 'modifier le compte rendu' : 'ajouter un compte rendu') : 'passé ? compte rendu'}
-                        </button>
-                      </>
-                    )}
-                    {slotWhere(s) && (
-                      <>
-                        <br />
-                        <span className="small">
-                          {s.mode === 'video' && s.place && /^https?:/i.test(s.place) ? (
-                            <>
-                              {MODE_LABEL.video},{' '}
-                              <a href={s.place} target="_blank" rel="noreferrer">
-                                rejoindre
-                              </a>
-                              {s.with ? `, avec ${s.with}` : ''}
-                            </>
-                          ) : (
-                            slotWhere(s)
-                          )}
-                        </span>
-                      </>
-                    )}
-                    {s.report && (
-                      <details className="iv-report">
-                        <summary>Compte rendu</summary>
-                        <p>{s.report}</p>
-                      </details>
-                    )}
-                  </div>
-                ))}
-                {offer.answerBy && <p>Retour attendu le {new Date(offer.answerBy).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>}
+          )}
+          <div className="or-tabs" role="tablist" aria-label="Fiche de la candidature">
+            {([
+              ['suivi', 'Suivi'],
+              ['docs', `Documents (${docs.length})`],
+              ['echanges', `Échanges (${pastSteps(offer)})`],
+              ...(offer.spontaneous ? [['entreprise', 'Entreprise']] : []),
+            ] as [typeof tab, string][]).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="or-tab" role="tabpanel">
+            {tab === 'suivi' && (
+              <section>
                 <p>
-                  {!slots.length && <span className="muted">Date de l'entretien non précisée </span>}
-                  <button className="link" onClick={() => setIvPlan(true)}>
-                    {slots.length ? 'modifier, ajouter une étape' : 'préciser'}
-                  </button>
+                  {[offer.location, offer.contract].filter(Boolean).join(' · ') || 'Lieu non précisé'}
                 </p>
-              </div>
+                <p>
+                  <Euro size={13} className="muted" />{' '}
+                  {pay ? (
+                    <span className={payTone ? `pay ${payTone}` : undefined}>
+                      {pay.text}
+                      {pay.max ? ' brut annuel' : ''}
+                      {payTone === 'below' && ' (sous votre minimum)'}
+                    </span>
+                  ) : (
+                    <span className="muted">
+                      Salaire non indiqué{' '}
+                      <button className="link" onClick={onEdit}>
+                        ajouter
+                      </button>
+                    </span>
+                  )}
+                </p>
+                {(status === 'interview' || slots.length > 0) && (
+                  <div className="or-iv">
+                    {slots.map((s, i) => (
+                      <div key={s.id} className={`iv-line${s.at < Date.now() - 2 * 3600000 && !s.done ? ' muted' : ''}`}>
+                        <CalendarDays size={13} /> <strong>{slots.length > 1 ? `Entretien ${i + 1}` : 'Entretien'}</strong> {fmtShort(s.at)}
+                        {s.at > Date.now() ? <span className="muted"> ({fmtIn(s.at)})</span> : ''}
+                        {s.done && <span className={`feel-chip f-${s.feeling ?? 'none'}`}>{s.feeling ? FEELING[s.feeling].label : 'Passé'}</span>}
+                        {s.at < Date.now() && (
+                          <>
+                            {' '}
+                            <button className="link small" onClick={() => setReportFor(s.id)}>
+                              {s.done ? (s.report ? 'modifier le compte rendu' : 'ajouter un compte rendu') : 'passé ? compte rendu'}
+                            </button>
+                          </>
+                        )}
+                        {slotWhere(s) && (
+                          <>
+                            <br />
+                            <span className="small">
+                              {s.mode === 'video' && s.place && /^https?:/i.test(s.place) ? (
+                                <>
+                                  {MODE_LABEL.video},{' '}
+                                  <a href={s.place} target="_blank" rel="noreferrer">
+                                    rejoindre
+                                  </a>
+                                  {s.with ? `, avec ${s.with}` : ''}
+                                </>
+                              ) : (
+                                slotWhere(s)
+                              )}
+                            </span>
+                          </>
+                        )}
+                        {s.report && (
+                          <details className="iv-report">
+                            <summary>Compte rendu</summary>
+                            <p>{s.report}</p>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                    {offer.answerBy && <p>Retour attendu le {new Date(offer.answerBy).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>}
+                    <p>
+                      {!slots.length && <span className="muted">Date de l'entretien non précisée </span>}
+                      <button className="link" onClick={() => setIvPlan(true)}>
+                        {slots.length ? 'modifier, ajouter une étape' : 'préciser'}
+                      </button>
+                    </p>
+                  </div>
+                )}
+                {status === 'applied' && (
+                  <p>
+                    {fu ? fu.title.split('.')[0] : 'Pas de relance prévue'}{' '}
+                    <button className="link" onClick={() => setPlanner(true)}>
+                      changer
+                    </button>
+                  </p>
+                )}
+                {offer.share && (
+                  <p className="ok-text">
+                    Dossier en ligne pour le recruteur{' '}
+                    <button className="link" onClick={() => setShare(true)}>
+                      lien et réglages
+                    </button>
+                  </p>
+                )}
+                {!!offer.contacts?.length && <p>Contact : {offer.contacts.map((c) => [c.name, c.role, c.email].filter(Boolean).join(', ')).join(' ; ')}</p>}
+                {offer.notes && <p className="muted">{offer.notes}</p>}
+              </section>
             )}
-            {status === 'applied' && (
-              <p>
-                {fu ? fu.title.split('.')[0] : 'Pas de relance prévue'}{' '}
-                <button className="link" onClick={() => setPlanner(true)}>
-                  changer
-                </button>
-              </p>
+            {tab === 'docs' && (
+              <section>
+                <div className="oc-docs">
+                  {sortedDocs.map((d) => (
+                    <button key={d.id} className="oc-doc" onClick={() => navigate(openPath(d))} title={d.name}>
+                      <DocThumb doc={d} width={86} />
+                      <span className={`kind-badge ${d.kind}`}>{d.kind === 'resume' ? 'CV' : 'Lettre'}</span>
+                    </button>
+                  ))}
+                </div>
+                <Menu
+                  trigger={(t) => (
+                    <button className="btn sm" onClick={t}>
+                      <Plus size={14} /> Document <ChevronDown size={13} />
+                    </button>
+                  )}
+                >
+                  {(close) => (
+                    <>
+                      <MenuItem
+                        icon={<FilePlus2 size={14} />}
+                        onClick={() => {
+                          close()
+                          if (resumes.length) setCvModal(true)
+                          else toast.error("Créez d'abord un CV dans l'onglet Documents")
+                        }}
+                      >
+                        CV adapté à cette offre
+                      </MenuItem>
+                      <MenuItem
+                        icon={<FileSignature size={14} />}
+                        onClick={() => {
+                          close()
+                          createLetter()
+                        }}
+                      >
+                        Lettre de motivation
+                      </MenuItem>
+                    </>
+                  )}
+                </Menu>
+              </section>
             )}
-            {offer.share && (
-              <p className="ok-text">
-                Dossier en ligne pour le recruteur{' '}
-                <button className="link" onClick={() => setShare(true)}>
-                  lien et réglages
-                </button>
-              </p>
-            )}
-            {!!offer.contacts?.length && <p>Contact : {offer.contacts.map((c) => [c.name, c.role, c.email].filter(Boolean).join(', ')).join(' ; ')}</p>}
-            {offer.notes && <p className="muted">{offer.notes}</p>}
-          </section>
-          <section>
-            <h4>Actions</h4>
+            {tab === 'echanges' && <Timeline offer={offer} />}
+            {tab === 'entreprise' && offer.spontaneous && <CompanyCard offer={offer} onAnalyse={() => setAnalysing(true)} />}
+          </div>
+          <section className="or-actions">
             <div className="row-gap wrap">
               {offer.url && (
                 <a className="btn sm" href={href(offer.url)} target="_blank" rel="noreferrer">
@@ -580,6 +630,13 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow }: { offe
 export function OffersView() {
   const offersMap = useDocs((s) => s.offers)
   setDefaultFollowUpDays(useDocs((s) => s.watch.profile?.followUpDays))
+  setSilentDays(useDocs((s) => s.watch.profile?.silentDays))
+  const inbox = useMailInbox()
+  const mailsOf = useMemo(() => {
+    const m = new Map<string, InboxItem[]>()
+    for (const it of inbox.pending) if (it.offer) m.set(it.offer.id, [...(m.get(it.offer.id) ?? []), it])
+    return m
+  }, [inbox])
   const docsMap = useDocs((s) => s.docs)
   const saveOffer = useDocs((s) => s.saveOffer)
   const [filter, setFilter] = useState<Filter>('all')
@@ -623,7 +680,7 @@ export function OffersView() {
   const count = (st: Stage) => offers.filter((o) => stageOf(o) === st).length
   const editingOffer = editing ? offersMap[editing] : undefined
   const row = (o: Offer, narrow?: boolean) => (
-    <OfferRow key={o.id} offer={o} docs={docsOf(o)} resumes={resumes} onEdit={() => setEditing(o.id)} open={openId === o.id} onOpen={(v) => setOpenId(v ? o.id : null)} narrow={narrow} />
+    <OfferRow key={o.id} offer={o} docs={docsOf(o)} resumes={resumes} onEdit={() => setEditing(o.id)} open={openId === o.id} onOpen={(v) => setOpenId(v ? o.id : null)} narrow={narrow} mails={mailsOf.get(o.id)} offers={offers} />
   )
   const STAGES: { id: Stage; title: string; sub: string }[] = [
     { id: 'now', title: 'À faire maintenant', sub: 'relances dues, entretiens à préparer, candidatures à envoyer' },
@@ -728,7 +785,7 @@ export function OffersView() {
       ) : view === 'stats' ? (
         <OfferStats offers={offers} />
       ) : view === 'columns' ? (
-        <div className="offer-columns">
+        <div className={`offer-columns${openId && shown.some((o) => o.id === openId) ? ' has-open' : ''}`}>
           {(Object.keys(JOB_STATUS) as JobStatus[]).map((st) => {
             const col = shown.filter((o) => (o.status ?? 'todo') === st)
             return (

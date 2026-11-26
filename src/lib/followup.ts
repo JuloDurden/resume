@@ -42,6 +42,27 @@ export function placeInDay(o: Offer, dayStart: number, now = Date.now()): number
   return known.length ? Math.min(Math.max(...known) + 60000, end - 1) : dayStart
 }
 
+let silentDefault = 30
+export const setSilentDays = (n?: number) => {
+  silentDefault = n && n > 0 ? n : 30
+}
+
+/**
+ * « Sans réponse » : candidature envoyée, plus de relance prévue, et rien reçu depuis la dernière relance
+ * (ou depuis l'envoi, sans relance) depuis le délai choisi. Renvoie la date du dernier contact.
+ */
+export function silentSince(o: Offer, now = Date.now()): number | undefined {
+  if (o.status !== 'applied') return
+  const sent = appliedAt(o)
+  if (!sent) return
+  const last = Math.max(sent, ...(o.followUps ?? []), ...(o.updates ?? []).map((u) => u.at))
+  if ((o.updates ?? []).some((u) => u.at === last && u.waitUntil && u.waitUntil > now)) return
+  const n = nextFollowUp(o)
+  if (n && n >= startOfDay(now)) return
+  const wait = (o.followUps?.length ? silentDefault : silentDefault + followUpDays(o)) * 86400000
+  return now - last >= wait ? last : undefined
+}
+
 export function nextFollowUp(o: Offer): number | undefined {
   if (o.status !== 'applied' || o.noFollowUp) return undefined
   // une réponse du recruteur relance le compteur : on repart de son message (ou du délai qu'il annonce)

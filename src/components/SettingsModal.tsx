@@ -86,6 +86,12 @@ function FollowUpPanel() {
       <Field label="Délai avant une relance" hint="Proposé par défaut pour chaque nouvelle candidature, et après une réponse sans délai annoncé. Modifiable candidature par candidature.">
         <Segmented value={v} onChange={(d) => profile && setProfile({ ...profile, followUpDays: d })} options={FOLLOW_UP_CHOICES.map((d) => ({ value: d, label: `${d} jours` }))} />
       </Field>
+      <Field label="« Sans réponse » après" hint="Une candidature envoyée sans nouvelles ce délai après la dernière relance passe en « Sans réponse ».">
+        <Segmented value={profile?.silentDays ?? 30} onChange={(d) => profile && setProfile({ ...profile, silentDays: d })} options={[21, 30, 45, 60].map((d) => ({ value: d, label: `${d} jours` }))} />
+      </Field>
+      <Field label="Dossier Gmail des candidatures" hint="La veille y lit les accusés de réception, refus et convocations (en plus des échanges avec les entreprises de vos candidatures). Lecture seule, avec le même accès que les alertes email.">
+        <TextInput value={profile?.mailLabel ?? ''} placeholder="Emploi/Candidatures Emploi" onChange={(v) => profile && setProfile({ ...profile, mailLabel: v || undefined })} />
+      </Field>
       {!profile && <p className="notice small">Créez d'abord votre profil de recherche dans l'onglet Annonces.</p>}
     </div>
   )

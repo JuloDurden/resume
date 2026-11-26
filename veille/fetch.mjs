@@ -8,7 +8,7 @@
 // Puis vérifie que les annonces existent toujours et retire celles qui ont été supprimées.
 // Lancé par GitHub Actions (.github/workflows/veille.yml) dans le dépôt privé de sauvegarde. Node 20 ou plus.
 import { createReadStream } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
 
 const KEEP_DAYS = 45
 const MAX_ITEMS = 1500
@@ -48,7 +48,7 @@ function salaryLog(items) {
 }
 
 async function save(status, items) {
-  const feed = { updatedAt: new Date().toISOString(), status, errors, notes, alerts: alerts.length, sources, salaryLog: salaryLog(items), items }
+  const feed = { updatedAt: new Date().toISOString(), status, errors, notes, alerts: alerts.length, sources, salaryLog: salaryLog(items), replies, items }
   await writeFile('data/feed.json', JSON.stringify(feed, null, 1) + '\n')
   console.log(`${status} : ${items.length} annonce(s), ${errors.length} erreur(s)`)
   for (const e of [...notes, ...errors]) console.log(' -', e)
@@ -361,6 +361,28 @@ if (hasMail) {
     sources.mail = { at: new Date().toISOString(), v: PARSER_VERSION }
   } catch (e) {
     errors.push(/auth|credentials|invalid/i.test(`${e.message} ${e.responseText ?? ''}`) ? 'Gmail : connexion refusée. Vérifiez GMAIL_USER (adresse complète) et le mot de passe d\'application (16 lettres).' : `Gmail : ${e.message}`)
+  }
+}
+
+// réponses des employeurs (accusés de réception, refus, convocations) et relances envoyées
+let replies = prev.replies ?? []
+if (hasMail) {
+  try {
+    const { readReplies, REPLIES_VERSION } = await import('./replies.mjs')
+    const offers = []
+    for (const f of await readdir('data/offers').catch(() => [])) if (f.endsWith('.json')) offers.push(await readJson(`data/offers/${f}`, null))
+    replies = await readReplies({
+      user: process.env.GMAIL_USER.trim(),
+      password: process.env.GMAIL_APP_PASSWORD.replace(/\s+/g, ''),
+      label: watch.profile?.mailLabel,
+      offers: offers.filter(Boolean),
+      prev: replies,
+      version: sources.replies?.v,
+      notes,
+    })
+    sources.replies = { at: new Date().toISOString(), v: REPLIES_VERSION }
+  } catch (e) {
+    errors.push(`Gmail (réponses) : ${e.message}`)
   }
 }
 

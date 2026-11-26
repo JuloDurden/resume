@@ -255,6 +255,44 @@ export interface Offer extends JobTarget {
   answerBy?: number
   /** réponses et nouvelles du recruteur (après une relance ou spontanément) */
   updates?: RecruiterUpdate[]
+  /** emails de Gmail rattachés à cette candidature (lus par la veille), avec la suite donnée */
+  mails?: OfferMail[]
+}
+
+/** Classement d'un email de candidature lu par la veille. */
+export type MailKind = 'ack' | 'refus' | 'convoc' | 'other' | 'followup'
+
+/** Email lu dans Gmail par la veille (data/feed.json, champ replies). */
+export interface MailReply {
+  id: string
+  /** fil Gmail (X-GM-THRID) */
+  thread?: string
+  at: string
+  kind: MailKind
+  /** classement sans doute possible */
+  sure?: boolean
+  /** email envoyé (relance) */
+  out?: boolean
+  from: string
+  fromName?: string
+  to?: string[]
+  subject: string
+  excerpt?: string
+  url?: string
+}
+
+/** Email rattaché à une candidature : auto (accusé de réception, relance), applied (statut changé), noted, ignored. */
+export interface OfferMail {
+  id: string
+  at: number
+  kind: MailKind
+  decision: 'auto' | 'applied' | 'noted' | 'ignored'
+  thread?: string
+  from?: string
+  fromName?: string
+  subject?: string
+  excerpt?: string
+  url?: string
 }
 
 export interface RecruiterUpdate {
@@ -269,6 +307,8 @@ export interface RecruiterUpdate {
   waitUntil?: number
   /** relance à laquelle répond ce message */
   afterFollowUp?: number
+  /** email d'origine dans Gmail */
+  mailUrl?: string
 }
 
 export type InterviewMode = 'site' | 'phone' | 'video'
@@ -421,6 +461,8 @@ export interface WatchState {
   reviews?: Record<string, JobReview>
   /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
   marks: Record<string, { s: MarkState; at: number; t?: string }>
+  /** emails de Gmail sans candidature : ignorés, ou rattachés à la main à une candidature */
+  mailMarks?: Record<string, { s: 'ignored' | 'linked'; offer?: string; at: number }>
 }
 
 export interface Company {
@@ -463,6 +505,10 @@ export interface MatchProfile {
   salary?: { min?: number }
   /** délai par défaut avant de relancer une candidature, en jours */
   followUpDays?: number
+  /** candidature sans réponse ce nombre de jours après la dernière relance : « Sans réponse » (30 par défaut) */
+  silentDays?: number
+  /** dossier Gmail où sont rangés les emails de candidature (« Emploi/Candidatures Emploi » par défaut) */
+  mailLabel?: string
   /** types de contrat recherchés (vide : tous) ; une annonce qui ne propose aucun d'eux passe en « Hors critères » */
   contracts?: string[]
   /** profils de recherche (IT junior, management confirmé...) : chaque annonce est notée face à chacun, la meilleure note l'emporte */
@@ -547,5 +593,7 @@ export interface Feed {
   sources?: { degraded?: Record<string, string>; companies?: Record<string, { at: string; url: string; jobs: number; kept: number; method: string; error?: string }> }
   /** salaires vus dans les annonces de l'année (repères par métier et région) */
   salaryLog?: { id: string; at: string; title: string; location?: string; salary: string }[]
+  /** emails de candidature lus dans Gmail : réponses des employeurs et relances envoyées */
+  replies?: MailReply[]
   items: FeedItem[]
 }

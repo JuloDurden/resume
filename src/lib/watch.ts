@@ -4,6 +4,7 @@ import { newOffer } from './offers'
 import fetchScript from '../../veille/fetch.mjs?raw'
 import workflow from '../../veille/veille.yml?raw'
 import mailScript from '../../veille/mail.mjs?raw'
+import repliesScript from '../../veille/replies.mjs?raw'
 import careerScript from '../../veille/career.mjs?raw'
 import browserScript from '../../veille/browser.mjs?raw'
 
@@ -102,6 +103,7 @@ async function putFile(c: SyncConfig, path: string, content: string, message: st
 const FILES: [string, string][] = [
   ['veille/fetch.mjs', fetchScript],
   ['veille/mail.mjs', mailScript],
+  ['veille/replies.mjs', repliesScript],
   ['veille/career.mjs', careerScript],
   ['veille/browser.mjs', browserScript],
   ['.github/workflows/veille.yml', workflow],

@@ -42,8 +42,15 @@ export function mergeWatch(a?: WatchState, b?: WatchState): WatchState | undefin
       trackFor[id] = t
       trackChanged = true
     }
-  const same = !trackChanged && newer === a && prof === a && comp === a && idt === a && !textsChanged && !reviewsChanged && !manualChanged && Object.keys(marks).length === Object.keys(a.marks).length && Object.entries(b.marks).every(([id, m]) => a.marks[id] && a.marks[id].at >= m.at)
-  return same ? a : { alerts: newer.alerts, alertsAt: newer.alertsAt, excludes: newer.excludes, profile: prof.profile, profileAt: prof.profileAt, companies: comp.companies, companiesAt: comp.companiesAt, identity: idt.identity, identityAt: idt.identityAt, texts, trackFor, reviews, manual, marks }
+  const mailMarks = { ...(a.mailMarks ?? {}) }
+  let mailChanged = false
+  for (const [id, m] of Object.entries(b.mailMarks ?? {}))
+    if (!mailMarks[id] || m.at > mailMarks[id].at) {
+      mailMarks[id] = m
+      mailChanged = true
+    }
+  const same = !mailChanged && !trackChanged && newer === a && prof === a && comp === a && idt === a && !textsChanged && !reviewsChanged && !manualChanged && Object.keys(marks).length === Object.keys(a.marks).length && Object.entries(b.marks).every(([id, m]) => a.marks[id] && a.marks[id].at >= m.at)
+  return same ? a : { alerts: newer.alerts, alertsAt: newer.alertsAt, excludes: newer.excludes, profile: prof.profile, profileAt: prof.profileAt, companies: comp.companies, companiesAt: comp.companiesAt, identity: idt.identity, identityAt: idt.identityAt, texts, trackFor, reviews, manual, marks, mailMarks }
 }
 
 /** Durée de conservation des suppressions (pour qu'un appareil resté hors ligne ne fasse pas revenir un document supprimé). */

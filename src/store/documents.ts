@@ -46,6 +46,8 @@ export interface DocsState {
   mark: (id: string, s: MarkState, title?: string) => void
   markMany: (ids: string[], s: MarkState, titles?: Record<string, string>) => void
   setExcludes: (terms: string[]) => void
+  /** email de Gmail sans candidature : ignoré, rattaché à une candidature, ou remis à examiner (undefined) */
+  markMail: (id: string, m?: { s: 'ignored' | 'linked'; offer?: string }) => void
   setProfile: (p: MatchProfile) => void
   /** enregistre l'identité et la reporte dans tous les documents */
   setIdentity: (i: Identity) => void
@@ -175,6 +177,9 @@ export const useDocs = create<DocsState>()(
           }
           return { docs, watch: { ...s.watch, identity, identityAt: now } }
         }),
+      markMail: (id, m) =>
+        // remis à examiner : un rattachement vide (garde une date plus récente pour la fusion entre navigateurs)
+        setState((s) => ({ watch: { ...s.watch, mailMarks: { ...(s.watch.mailMarks ?? {}), [id]: m ? { ...m, at: Date.now() } : { s: 'linked', offer: '', at: Date.now() } } } })),
       setProfile: (profile) => setState((s) => ({ watch: { ...s.watch, profile, profileAt: Date.now() } })),
       setCompanies: (companies) => setState((s) => ({ watch: { ...s.watch, companies, companiesAt: Date.now() } })),
       setText: (id, text) =>

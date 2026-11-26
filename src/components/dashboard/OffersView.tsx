@@ -1,12 +1,14 @@
 import { docNameFor } from '../../lib/filename'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mail, MailCheck, Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Euro, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Mail, MailCheck, Building2, ChevronDown, Sparkles, BarChart3, BellRing, Undo2, BookOpen, CalendarClock, CalendarDays, Globe, Briefcase, Columns3, ExternalLink, FilePlus2, FileSignature, List, Link2, MessagesSquare, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FollowUpModal, FollowUpPlanner, InterviewModal, InterviewPlanner, InterviewReport, RecruiterUpdateModal, ShareModal, followUpLabel } from './OfferTools'
-import { FEELING, MODE_LABEL, withOutcome, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, offerSalary, slotWhere, upcomingInterview } from '../../lib/interviews'
+import { FEELING, MODE_LABEL, withOutcome, toReport, datedInterviews, daysUntil, fmtIn, fmtLong, fmtShort, slotWhere, upcomingInterview } from '../../lib/interviews'
 import { announcedBy, followUpsSinceUpdate, nextFollowUp, setDefaultFollowUpDays, setSilentDays, silentSince } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import { Timeline, pastSteps } from './MetroTimeline'
+import { PayChip, SalaryBlock } from './PayTools'
+import { payOf } from '../../lib/pay'
 import { ReplyCard, useMailInbox } from './MailInbox'
 import { MAIL_MARK, type InboxItem } from '../../lib/replies'
 import { CompanyAnalysisModal, CompanyCard, SpontaneousModal } from './SpontaneousTools'
@@ -171,8 +173,8 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, o
     })
   }, [open, mails, offer.id])
   const minPay = useDocs((s) => s.watch.profile?.salary?.min)
-  const pay = offerSalary(offer)
-  const payTone = pay?.max && minPay ? (pay.max < minPay ? 'below' : 'ok') : ''
+  const pay = payOf(offer)
+  const [payEdit, setPayEdit] = useState(false)
   const slots = datedInterviews(offer)
   const openRome = useRomeDrawer((s) => s.open)
   const linkedCv = docs.find((d): d is ResumeDoc => d.kind === 'resume')
@@ -231,17 +233,23 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, o
                 </span>
               </>
             )}
-            {pay && pay.max ? (
-              <>
-                {' · '}
-                <span className={payTone ? `pay ${payTone}` : undefined} title={payTone === 'below' ? 'Sous votre salaire minimum' : 'Salaire annoncé'}>
-                  {pay.text}
-                </span>
-              </>
-            ) : null}
             {status === 'todo' ? ` · ajoutée ${since(offer.createdAt)}` : sent ? ` · envoyée ${since(sent)}` : ''}
           </span>
         </div>
+        {pay ? (
+          <PayChip pay={pay} minBrut={minPay} />
+        ) : (status === 'interview' || status === 'offer') && !narrow ? (
+          <button
+            className="pay-add sm"
+            onClick={() => {
+              setPayEdit(true)
+              setTab('suivi')
+              onOpen(true)
+            }}
+          >
+            <Plus size={13} /> Salaire
+          </button>
+        ) : null}
         {!!mails?.length && (
           <button className={`mail-mark t-${mails[0].r.kind}`} onClick={() => onOpen(true)} title="Réponse lue dans Gmail, à confirmer">
             <Mail size={13} /> {MAIL_MARK[mails[0].r.kind]}
@@ -451,23 +459,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, o
                 <p>
                   {[offer.location, offer.contract].filter(Boolean).join(' · ') || 'Lieu non précisé'}
                 </p>
-                <p>
-                  <Euro size={13} className="muted" />{' '}
-                  {pay ? (
-                    <span className={payTone ? `pay ${payTone}` : undefined}>
-                      {pay.text}
-                      {pay.max ? ' brut annuel' : ''}
-                      {payTone === 'below' && ' (sous votre minimum)'}
-                    </span>
-                  ) : (
-                    <span className="muted">
-                      Salaire non indiqué{' '}
-                      <button className="link" onClick={onEdit}>
-                        ajouter
-                      </button>
-                    </span>
-                  )}
-                </p>
+                <SalaryBlock offer={offer} autoEdit={payEdit} />
                 {(status === 'interview' || slots.length > 0) && (
                   <div className="or-iv">
                     {slots.map((s, i) => (

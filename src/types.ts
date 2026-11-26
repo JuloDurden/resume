@@ -227,6 +227,10 @@ export interface Offer extends JobTarget {
   /** Identifiant de l'annonce dans la veille */
   sourceId?: string
   salary?: string
+  /** salaire noté après coup (absent de l'annonce) : date de la saisie */
+  salaryAt?: number
+  /** statut pour l'estimation du net : non-cadre, cadre, fonction publique (sinon déduit de l'annonce) */
+  payStatus?: 'nc' | 'c' | 'fp'
   /** date de chaque changement de statut (statistiques) */
   statusAt?: Partial<Record<JobStatus, number>>
   /** dates des relances envoyées */
@@ -521,6 +525,8 @@ export interface MatchProfile {
   maxKm?: number
   /** prétentions salariales : minimum acceptable, brut annuel en euros */
   salary?: { min?: number }
+  /** taux de prélèvement à la source, en %, pour le net après impôt */
+  taxRate?: number
   /** délai par défaut avant de relancer une candidature, en jours */
   followUpDays?: number
   /** candidature sans réponse ce nombre de jours après la dernière relance : « Sans réponse » (30 par défaut) */

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, Plus, Settings, Globe, BellRing, Briefcase, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files } from 'lucide-react'
+import { Calculator, ChevronDown, Plus, Settings, Wrench, Globe, BellRing, Briefcase, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files } from 'lucide-react'
 import type { ResumeDoc } from '../types'
 import { uid } from '../lib/ids'
 import { useDocs } from '../store/documents'
@@ -15,6 +15,7 @@ import { useFeed } from '../store/feed'
 import { PdfImportModal } from '../components/PdfImportModal'
 import { SyncButton } from '../components/SyncModal'
 import { MailBell } from '../components/dashboard/MailInbox'
+import { PayCalculator, usePayCalc } from '../components/dashboard/PayTools'
 import { ThemeToggle, downloadBackup, importBackupFile, openSettings } from '../components/SettingsModal'
 import { SharedIntro, ShowcaseGrid, ShowcaseIntro, useSharedShowcase, useShowcase } from './Showcase'
 import { useSync } from '../store/sync'
@@ -269,6 +270,27 @@ export default function Dashboard() {
         </div>
         <div className="dash-actions">
           {!slug && <MailBell />}
+          <Menu
+            align="right"
+            trigger={(t) => (
+              <button className="btn" onClick={t}>
+                <Wrench size={15} /> Outils <ChevronDown size={14} />
+              </button>
+            )}
+          >
+            {(close) => (
+              <MenuItem
+                icon={<Calculator size={15} />}
+                onClick={() => {
+                  close()
+                  usePayCalc.getState().show()
+                }}
+              >
+                Salaire brut / net
+              </MenuItem>
+            )}
+          </Menu>
+          <PayCalculator />
           <SyncButton onClick={() => setSettings('sync')} />
           <ThemeToggle />
           <button className="icon-btn" onClick={() => setSettings('ui')} title="Réglages" aria-label="Réglages">

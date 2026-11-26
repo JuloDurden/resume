@@ -44,13 +44,19 @@ const IV_MODE: Record<InterviewMode, string> = { site: 'sur place', phone: 'tél
 
 export function slotsOf(o: Offer, now = Date.now()): Slot[] {
   const slots: { at: number; slot: Slot }[] = []
-  const main = (st: Station) => slots.push({ at: st.at, slot: { kind: 'main', st } })
+  /** order : rang dans la frise, si différent de la date affichée */
+  const main = (st: Station, order = st.at) => slots.push({ at: order, slot: { kind: 'main', st } })
   main({ at: o.createdAt, label: 'Ajoutée', tone: 'main' })
-  const sent = appliedAt(o)
+  // l'envoi est souvent noté dans l'application après coup : un accusé de réception plus ancien prouve qu'il a eu lieu avant
+  const acks = (o.mails ?? []).filter((m) => m.kind === 'ack' && m.decision !== 'ignored').map((m) => m.at)
+  const firstAck = acks.length ? Math.min(...acks) : undefined
+  const noted = appliedAt(o)
+  const sent = noted !== undefined && firstAck !== undefined && firstAck <= noted ? firstAck - 60000 : noted
   if (sent) main({ at: Math.max(sent, o.createdAt + 1), label: 'Envoyée', tone: 'main' })
   for (const u of o.updates ?? []) if (u.kind === 'news') main({ at: u.at, label: 'Message', sub: [u.text, waitText(u)].filter(Boolean).join(' · '), tone: 'news', url: u.mailUrl })
   // accusés de réception lus dans Gmail
-  for (const m of o.mails ?? []) if (m.kind === 'ack' && m.decision !== 'ignored') main({ at: m.at, label: 'Accusé de réception', sub: m.fromName, tone: 'ack', url: m.url, auto: m.decision === 'auto' })
+  // un accusé de réception vient toujours après l'envoi (date d'envoi saisie après coup, ou au jour près) ; sa vraie date reste affichée
+  for (const m of o.mails ?? []) if (m.kind === 'ack' && m.decision !== 'ignored') main({ at: m.at, label: 'Accusé de réception', sub: m.fromName, tone: 'ack', url: m.url, auto: m.decision === 'auto' }, Math.max(m.at, (sent ?? o.createdAt) + 1.5))
   pairReplies(o).forEach(({ fu, reply }, i) => {
     const info = (o.followUpInfo ?? []).find((x) => x.at === fu)
     const fuSt: Station = { at: fu, label: `Relance ${i + 1}${info && info.channel !== 'mail' ? ` ${CHANNEL[info.channel]}` : ''}`, sub: info ? [info.with, info.note].filter(Boolean).join(' · ') || undefined : undefined, tone: 'fu' }

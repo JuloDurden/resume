@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error module JavaScript de la veille, sans types
 import { classifyMail, labelQuery, repliesQuery } from '../../veille/replies.mjs'
-import { applyAuto, decide, inboxOf, matchReply, offerFromMail } from '../lib/replies'
+import { applyAuto, decide, inboxOf, matchReply, offerFromMail, staleAuto } from '../lib/replies'
 import { silentSince, setSilentDays } from '../lib/followup'
 import type { MailReply, Offer } from '../types'
 
@@ -42,6 +42,9 @@ describe('classement des emails de candidature (veille)', () => {
     expect(c('Bienvenue dans notre processus', 'Merci pour votre candidature. Voici les étapes : un entretien avec le recruteur sur Teams.').kind).toBe('ack')
     expect(c('Votre candidature', 'Elle est toujours en cours d’étude. Pour nos conseils, rendez-vous sur le blog.').kind).toBe('ack')
     expect(c('RDV', 'Comme convenu, je vous confirme notre rendez-vous le jeudi 19/11 à 14h.').kind).toBe('convoc')
+    expect(c('Acme recrute au poste de Formateur', 'Votre alerte Emploi', { reply: true, from: 'jobalerts-noreply@linkedin.com' }).kind).toBeUndefined()
+    expect(c("Nouvelles offres d'emploi chez Acme", 'x', { from: 'donotreply@jobalert.indeed.com' }).kind).toBeUndefined()
+    expect(c('Votre candidature - offre 12', "Nous vous remercions d'avoir répondu à notre annonce.").kind).toBe('ack')
   })
   it('recherche Gmail : dossier, contacts et entreprises des candidatures en cours', () => {
     expect(labelQuery('Emploi/Candidatures Emploi ')).toBe('label:emploi-candidatures-emploi')
@@ -94,6 +97,14 @@ describe('rattachement des réponses aux candidatures', () => {
     // rattaché à la main
     expect(inboxOf(replies, [acme], { x: { s: 'linked', offer: 'acme', at: 1 } }, at(12)).pending.map((i) => i.r.id)).toContain('x')
     expect(inboxOf(replies, [acme], { x: { s: 'ignored', at: 1 } }, at(12)).unmatched).toEqual([])
+  })
+  it('type corrigé à la main, note automatique refaite quand le classement change', () => {
+    const r = mail({ id: 'k', kind: 'refus', fromName: 'Acme Technologies' })
+    expect(inboxOf([r], [acme], { k: { s: 'linked', offer: '', kind: 'ack', at: 1 } }, at(12)).auto.map((i) => i.r.kind)).toEqual(['ack'])
+    const noted = applyAuto(acme, { ...r, kind: 'convoc' })
+    expect(staleAuto(noted, [r], undefined, at(12))?.mails).toEqual([])
+    expect(staleAuto(noted, [], undefined, at(12))?.mails).toEqual([])
+    expect(staleAuto(noted, [{ ...r, kind: 'convoc' }], undefined, at(12))).toBeUndefined()
   })
   it('suite donnée : refus, convocation, note, relance repérée', () => {
     const fu = applyAuto(acme, mail({ id: 'f', kind: 'followup', out: true, at: iso(8) }))

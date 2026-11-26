@@ -480,7 +480,7 @@ export interface WatchState {
   /** état de chaque annonce (favori, masquée, candidature créée), avec sa date pour la fusion */
   marks: Record<string, { s: MarkState; at: number; t?: string }>
   /** emails de Gmail sans candidature : ignorés, ou rattachés à la main à une candidature */
-  mailMarks?: Record<string, { s: 'ignored' | 'linked'; offer?: string; at: number }>
+  mailMarks?: Record<string, { s: 'ignored' | 'linked'; offer?: string; kind?: MailKind; at: number }>
 }
 
 export interface Company {

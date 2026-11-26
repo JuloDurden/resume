@@ -6913,3 +6913,13 @@ button.followup-badge {
   color: var(--brand);
   font-weight: 600;
 }
+
+select.rc-kind {
+  border: 0;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0 6px 0 9px;
+  cursor: pointer;
+  appearance: auto;
+}

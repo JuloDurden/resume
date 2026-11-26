@@ -5,7 +5,7 @@ import { Check, ExternalLink, Mail, Plus } from 'lucide-react'
 import type { MailReply, Offer } from '../../types'
 import { useDocs } from '../../store/documents'
 import { useFeed } from '../../store/feed'
-import { MAIL_LABEL, applyAuto, decide, inboxOf, offerFromMail, type InboxItem, type MailAction } from '../../lib/replies'
+import { MAIL_LABEL, applyAuto, decide, inboxOf, offerFromMail, staleAuto, type InboxItem, type MailAction } from '../../lib/replies'
 import { newOffer } from '../../lib/offers'
 import { Modal, toast } from '../ui'
 
@@ -24,6 +24,15 @@ export function useMailInbox() {
 export function useMailAuto() {
   const { auto } = useMailInbox()
   const saveOffer = useDocs((s) => s.saveOffer)
+  const replies = useFeed((s) => s.feed?.replies)
+  const marks = useDocs((s) => s.watch.mailMarks)
+  // classement changé par la veille ou corrigé à la main : la note automatique est refaite
+  useEffect(() => {
+    for (const o of Object.values(useDocs.getState().offers)) {
+      const next = staleAuto(o, replies, marks)
+      if (next) saveOffer(next)
+    }
+  }, [replies, marks, saveOffer])
   useEffect(() => {
     if (!auto.length) return
     const byOffer = new Map<string, InboxItem[]>()
@@ -72,6 +81,7 @@ const decided = new Map<string, { text: string; undo: () => void }>()
 export function ReplyCard({ item, compact, offers }: { item: InboxItem; compact?: boolean; offers?: Offer[] }) {
   const saveOffer = useDocs((s) => s.saveOffer)
   const markMail = useDocs((s) => s.markMail)
+  const setMailKind = useDocs((s) => s.setMailKind)
   const [done, setDoneState] = useState<{ text: string; undo: () => void } | null>(() => decided.get(item.r.id) ?? null)
   const setDone = (d: { text: string; undo: () => void } | null) => {
     if (d) decided.set(item.r.id, d)
@@ -116,7 +126,29 @@ export function ReplyCard({ item, compact, offers }: { item: InboxItem; compact?
   return (
     <div className={`reply-card t-${TONE[r.kind]}${compact ? ' compact' : ''}`}>
       <div className="rc-head">
-        <span className={`rc-tag t-${TONE[r.kind]}`}>{MAIL_LABEL[r.kind]}</span>
+        <select
+          className={`rc-tag rc-kind t-${TONE[r.kind]}`}
+          value={r.kind}
+          title="Mal classé ? Choisis le bon type"
+          aria-label="Type de l'email"
+          onChange={(e) => {
+            const v = e.target.value
+            if (v === 'noise') {
+              markMail(r.id, { s: 'ignored' })
+              setDone({ text: 'Écarté (alerte ou publicité)', undo: () => markMail(r.id) })
+              return
+            }
+            setMailKind(r.id, v as MailReply['kind'])
+            if (v === 'ack') setDone({ text: 'Classé en accusé de réception, noté dans les échanges', undo: () => setMailKind(r.id, r.kind) })
+          }}
+        >
+          {(['ack', 'refus', 'convoc', 'other'] as const).map((k) => (
+            <option key={k} value={k}>
+              {MAIL_LABEL[k]}
+            </option>
+          ))}
+          <option value="noise">Alerte ou publicité</option>
+        </select>
         {!compact && <strong className="rc-subject">{r.subject}</strong>}
         <span className="rc-date">{fmtFull(item.at)}</span>
       </div>

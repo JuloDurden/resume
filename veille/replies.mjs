@@ -4,7 +4,7 @@
 // L'application rattache chaque réponse à sa candidature et propose le changement de statut.
 
 /** Change à chaque évolution du classement : les réponses déjà lues sont alors reclassées. */
-export const REPLIES_VERSION = 2
+export const REPLIES_VERSION = 3
 
 /** Dossier Gmail par défaut (filtre « candidature » dans l'objet). */
 export const DEFAULT_LABEL = 'Emploi/Candidatures Emploi'
@@ -92,10 +92,11 @@ function conditionalAt(f, index) {
 const FIRM = /je vous (propose|confirme|invite|contacte)|nous vous (proposons|confirmons|invitons)|convenu|seriez-vous disponible|etes-vous disponible|vos disponibilites|merci de (me|nous) (confirmer|indiquer|faire part)|\b(lundi|mardi|mercredi|jeudi|vendredi|samedi)\b|\b\d{1,2} ?h ?\d{0,2}\b|\b\d{1,2}\/\d{1,2}\b/
 /** Alertes et lettres d'offres : jamais une réponse à une candidature. */
 const ALERT = /votre alerte|alerte (emploi|email)|nouvelles? offres?|vous proposent des offres|offres? (similaires|recommandees|pour vous)|recrute ?:|recrute au poste|emplois? \d+-\d+ sur/
-const ALERT_FROM = /jobalerts-noreply@linkedin\.com|alert@indeed\.com|alerte@|jobijoba\.com|glassdoor\.com|newsletter|actu\.adecco\.fr$/
+const ALERT_FROM = /jobalerts?|alert@|alerte@|jobijoba\.com|glassdoor\.com|newsletter|actu\.adecco\.fr$/
 
 const ACK = [
   /accus\w* (de )?reception/,
+  /(merci|remercions?) d'avoir (pris le temps de nous (envoyer|adresser)|repondu a notre annonce|postule|candidate)/,
   /(toujours )?en cours d'etude|(toujours )?a l'etude/,
   /bien (ete )?recue?/,
   /accuse (de )?reception/,
@@ -149,7 +150,8 @@ export function classifyMail({ subject, text, out, reply, from }) {
   const f = fold(raw)
   const fOwn = fold(own)
   if (REMINDER.test(f)) return { kind: undefined }
-  if (!out && !reply && (ALERT.test(fold(subject)) || (ALERT_FROM.test((from ?? '').toLowerCase()) && !/candidature/.test(fold(subject))))) return { kind: undefined }
+  // alertes d'offres : écartées même si un ancien passage les avait rangées dans un fil connu
+  if (!out && (ALERT.test(fold(subject)) || (ALERT_FROM.test((from ?? '').toLowerCase()) && !/candidature/.test(fold(subject))))) return { kind: undefined }
   if (out) {
     if (isReply && FOLLOWUP.test(f)) return { kind: 'followup', sure: true, excerpt: opening(own) }
     return { kind: undefined }
@@ -220,7 +222,7 @@ export async function readReplies({ user, password, label, offers, prev, version
     try {
       const uids = (await client.search({ gmraw: repliesQuery({ label, days, offers }) }, { uid: true })) || []
       // fils déjà connus : une réponse dans le fil d'une candidature compte même si son objet ne dit rien
-      const threads = new Set((prev ?? []).map((r) => r.thread).filter(Boolean))
+      const threads = new Set([...known.values()].map((r) => r.thread).filter(Boolean))
       for await (const msg of client.fetch(uids.slice(-400), { source: true, envelope: true, internalDate: true, threadId: true }, { uid: true })) {
         const id = `m${msg.emailId ?? msg.uid}`
         if (known.has(id) && !reclassify) continue

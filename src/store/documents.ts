@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { del, get, set } from 'idb-keyval'
-import type { Alert, AnyDoc, Company, FeedItem, Identity, JobReview, MarkState, MatchProfile, Offer, WatchState } from '../types'
+import type { Alert, AnyDoc, Company, FeedItem, Identity, JobReview, MarkState, MatchProfile, Offer, WatchState, MailKind } from '../types'
 import { applyIdentity } from '../lib/identity'
 import { uid } from '../lib/ids'
 import { migrate, shortenDocNames } from '../lib/migrate'
@@ -48,6 +48,8 @@ export interface DocsState {
   setExcludes: (terms: string[]) => void
   /** email de Gmail sans candidature : ignoré, rattaché à une candidature, ou remis à examiner (undefined) */
   markMail: (id: string, m?: { s: 'ignored' | 'linked'; offer?: string }) => void
+  /** type corrigé à la main (accusé de réception, refus...) d'un email lu dans Gmail */
+  setMailKind: (id: string, kind: MailKind) => void
   setProfile: (p: MatchProfile) => void
   /** enregistre l'identité et la reporte dans tous les documents */
   setIdentity: (i: Identity) => void
@@ -179,7 +181,12 @@ export const useDocs = create<DocsState>()(
         }),
       markMail: (id, m) =>
         // remis à examiner : un rattachement vide (garde une date plus récente pour la fusion entre navigateurs)
-        setState((s) => ({ watch: { ...s.watch, mailMarks: { ...(s.watch.mailMarks ?? {}), [id]: m ? { ...m, at: Date.now() } : { s: 'linked', offer: '', at: Date.now() } } } })),
+        setState((s) => ({ watch: { ...s.watch, mailMarks: { ...(s.watch.mailMarks ?? {}), [id]: m ? { ...m, kind: s.watch.mailMarks?.[id]?.kind, at: Date.now() } : { s: 'linked', offer: '', kind: s.watch.mailMarks?.[id]?.kind, at: Date.now() } } } })),
+      setMailKind: (id, kind) =>
+        setState((s) => {
+          const cur = s.watch.mailMarks?.[id]
+          return { watch: { ...s.watch, mailMarks: { ...(s.watch.mailMarks ?? {}), [id]: { s: cur?.s ?? 'linked', offer: cur?.offer ?? '', kind, at: Date.now() } } } }
+        }),
       setProfile: (profile) => setState((s) => ({ watch: { ...s.watch, profile, profileAt: Date.now() } })),
       setCompanies: (companies) => setState((s) => ({ watch: { ...s.watch, companies, companiesAt: Date.now() } })),
       setText: (id, text) =>

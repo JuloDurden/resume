@@ -122,7 +122,9 @@ export interface Inbox {
 export function inboxOf(replies: MailReply[] | undefined, offers: Offer[], marks?: WatchState['mailMarks'], now = Date.now()): Inbox {
   const done = new Set(offers.flatMap((o) => (o.mails ?? []).map((m) => m.id)))
   const box: Inbox = { pending: [], unmatched: [], unmatchedAcks: [], auto: [] }
-  for (const r of replies ?? []) {
+  for (const raw of replies ?? []) {
+    // type corrigé à la main
+    const r = marks?.[raw.id]?.kind ? { ...raw, kind: marks[raw.id].kind! } : raw
     const at = new Date(r.at).getTime()
     if (done.has(r.id) || marks?.[r.id]?.s === 'ignored' || now - at > SHOWN_DAYS * DAY) continue
     const m = matchReply(r, offers, marks)
@@ -153,6 +155,23 @@ export function inboxOf(replies: MailReply[] | undefined, offers: Offer[], marks
   box.unmatched.sort(recent)
   box.unmatchedAcks.sort(recent)
   return box
+}
+
+/**
+ * Emails notés tout seuls dont la veille a changé le classement (ou qu'elle a écartés : alerte, rappel) :
+ * retirés des échanges, pour être notés à nouveau selon le nouveau classement.
+ */
+export function staleAuto(o: Offer, replies: MailReply[] | undefined, marks?: WatchState['mailMarks'], now = Date.now()): Offer | undefined {
+  if (!replies || !o.mails?.some((m) => m.decision === 'auto')) return
+  const byId = new Map(replies.map((r) => [r.id, r]))
+  const keep = o.mails.filter((m) => {
+    if (m.decision !== 'auto') return true
+    const r = byId.get(m.id)
+    // au-delà de 110 jours, la veille ne garde plus l'email : la note reste
+    if (!r) return now - m.at > 110 * DAY
+    return (marks?.[m.id]?.kind ?? r.kind) === m.kind
+  })
+  return keep.length === o.mails.length ? undefined : { ...o, mails: keep }
 }
 
 const mailOf = (r: MailReply, decision: OfferMail['decision']): OfferMail => ({

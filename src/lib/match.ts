@@ -388,7 +388,8 @@ export function experienceOf(title: string, text: string, level?: string): Exper
           continue
         }
       }
-      if (/debutant|sans experience|aucune experience|jeune diplome|experience (n.est pas|non) (exigee|requise|obligatoire)/.test(s)) {
+      // « profil non expérimenté recherché », « inexpérimenté », « pas forcément expérimenté » : débutant accepté
+      if (/debutant|sans experience|aucune experience|jeune diplome|experience (n.est pas|non) (exigee|requise|obligatoire)|(non|peu) experimente|inexperiment|pas (forcement |necessairement |obligatoirement )?experimente/.test(s)) {
         keep({ min: 0, max: 2, kind: 'junior', label: 'Débutant accepté', quote: q })
         continue
       }
@@ -403,7 +404,7 @@ export function experienceOf(title: string, text: string, level?: string): Exper
         keep({ min: 2, max: 3, kind: 'junior', label: 'Deuxième expérience', quote: q })
         continue
       }
-      if (/(solide|significative|longue|forte|confirmee|reussie de plusieurs|importante) experience|experience (solide|significative|confirmee|importante|averee)|experimente|profil (senior|confirme)/.test(s)) {
+      if (/(solide|significative|longue|forte|confirmee|reussie de plusieurs|importante) experience|experience (solide|significative|confirmee|importante|averee)|(?<!(non|peu|pas|in|forcement|necessairement) ?)experimente|profil (senior|confirme)/.test(s)) {
         keep({ min: 4, kind: 'mid', label: 'Expérience significative demandée', quote: q })
         continue
       }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedItem } from '../types'
-import { contractsOf, levelScore, matchBest, matchItem, payOf, pickCommune, placeName } from '../lib/match'
+import { contractsOf, experienceOf, levelScore, matchBest, matchItem, payOf, pickCommune, placeName } from '../lib/match'
 import { trackYears } from '../lib/tracks'
 import type { RomeIndex } from '../lib/rome'
 import type { RomeNear } from '../lib/romeNear'
@@ -275,4 +275,12 @@ describe('prétentions salariales', () => {
     expect(payOf(item({ title: 'x' }), want)).toBeUndefined()
     expect(matchItem(low, { ...p, salary: want }).score).toBeLessThan(matchItem(low, p).score)
   })
+})
+
+it('« profil non expérimenté » : débutant accepté, pas une expérience significative', () => {
+  const e = experienceOf('Testeur fonctionnel H/F', 'Profil non expérimenté en test recherché et possédant la capacité de vous adapter à nos processus internes. Vous rejoignez une équipe de 6 testeurs.')
+  expect(e.kind).toBe('junior')
+  expect(e.label).toBe('Débutant accepté')
+  expect(experienceOf('Chef de projet', 'Profil expérimenté en gestion de projet.').label).toBe('Expérience significative demandée')
+  expect(experienceOf('Chef de projet', 'Vous êtes inexpérimenté ? Nous vous formons.').kind).toBe('junior')
 })

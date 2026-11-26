@@ -58,6 +58,19 @@ export function slotsOf(o: Offer, now = Date.now()): Slot[] {
   if (lastWait && startOfDay(lastWait) >= startOfDay(now) && o.status !== 'rejected') main({ at: lastWait, label: 'Retour annoncé', tone: 'main', future: true })
   const n = nextFollowUp(o)
   if (n && n >= startOfDay(now)) main({ at: n + DAY / 2, label: 'Relance prévue', tone: 'fu', future: true })
+  // les données anciennes datent une réponse saisie sans heure à minuit : elle passe après l'entretien du même jour,
+  // et la fin du parcours (refus, proposition) passe après tout ce qui a déjà eu lieu
+  const ivs = datedInterviews(o).filter((s) => s.at <= now)
+  for (const s of slots) {
+    if (s.slot.kind !== 'main' || s.slot.st.future || !['news', 'reply'].includes(s.slot.st.tone)) continue
+    const iv = ivs.filter((v) => startOfDay(v.at) === startOfDay(s.at) && v.at > s.at).pop()
+    if (iv) s.at = iv.at + 1
+  }
+  for (const s of slots) {
+    if (s.slot.kind !== 'main' || !s.slot.st.tone.startsWith('end-')) continue
+    const before = slots.filter((x) => x !== s && !(x.slot.kind === 'main' && x.slot.st.future))
+    s.at = Math.max(s.at, ...before.map((x) => x.at + 1))
+  }
   return slots.sort((a, b) => a.at - b.at).map((s) => s.slot)
 }
 

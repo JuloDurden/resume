@@ -4,7 +4,7 @@ import type { InterviewFeeling, InterviewMode, InterviewPrep, InterviewSlot, Off
 import { FEELING, MODE_LABEL, datedInterviews, downloadIcs, fmtIn, fmtLong, printPrep, slotWhere } from '../../lib/interviews'
 import { uid } from '../../lib/ids'
 import { useDocs } from '../../store/documents'
-import { FOLLOW_UP_CHOICES, appliedAt, followUpDays, followUpEmail, nextFollowUp, startOfDay, followUpsSinceUpdate, lastUpdate } from '../../lib/followup'
+import { FOLLOW_UP_CHOICES, appliedAt, placeInDay, followUpDays, followUpEmail, nextFollowUp, startOfDay, followUpsSinceUpdate, lastUpdate } from '../../lib/followup'
 import { resumeToText } from '../../lib/export'
 import { CLAUDE_URL, copyText, extractJson, interviewPrepPrompt } from '../../lib/prompts'
 import { Field, Modal, Segmented, Select, TextArea, TextInput, Toggle, toast } from '../ui'
@@ -229,7 +229,8 @@ export function RecruiterUpdateModal({ offer, onClose, onInterview }: { offer: O
   const [wait, setWait] = useState('none')
   const [waitDate, setWaitDate] = useState('')
   const [outcome, setOutcome] = useState<(typeof OUTCOMES)[number]['value']>('pending')
-  const at = fromInput(day) ?? Date.now()
+  const picked = fromInput(day)
+  const at = picked === undefined ? Date.now() : placeInDay(offer, startOfDay(picked))
   const w = WAITS.find((x) => x.value === wait)
   const waitUntil = wait === 'date' ? fromInput(waitDate) : w?.days ? at + w.days * 86400000 : undefined
   const fmt = (t: number) => new Date(t).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })

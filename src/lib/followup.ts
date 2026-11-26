@@ -30,6 +30,18 @@ const addDays = (t: number, n: number) => {
  * Jour de la prochaine relance, ou undefined si aucune n'est prévue : délai compté en jours à partir du jour de la candidature
  * (ou de la relance précédente), ou date précise choisie pour la première relance.
  */
+/**
+ * Heure d'un événement saisi avec une date seule (réponse, message) : maintenant si c'est aujourd'hui,
+ * sinon juste après le dernier événement connu de ce jour-là (envoi, relance, entretien), à défaut le début du jour.
+ * Évite qu'un refus annoncé pendant un entretien s'affiche avant cet entretien.
+ */
+export function placeInDay(o: Offer, dayStart: number, now = Date.now()): number {
+  if (startOfDay(now) === startOfDay(dayStart)) return now
+  const end = dayStart + 86400000
+  const known = [appliedAt(o), ...(o.followUps ?? []), ...(o.interviews ?? []).map((s) => s.at)].filter((t): t is number => !!t && t >= dayStart && t < end)
+  return known.length ? Math.min(Math.max(...known) + 60000, end - 1) : dayStart
+}
+
 export function nextFollowUp(o: Offer): number | undefined {
   if (o.status !== 'applied' || o.noFollowUp) return undefined
   // une réponse du recruteur relance le compteur : on repart de son message (ou du délai qu'il annonce)

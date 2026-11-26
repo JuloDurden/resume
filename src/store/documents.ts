@@ -198,8 +198,11 @@ export const useDocs = create<DocsState>()(
         setState((s) => {
           const prev = s.offers[o.id]
           const st = o.status ?? 'todo'
-          // date de passage à chaque statut, pour les statistiques et les relances
-          const statusAt = (!prev || prev.status !== o.status) && !o.statusAt?.[st] ? { ...o.statusAt, [st]: Date.now() } : o.statusAt
+          // date de passage à chaque statut, pour les statistiques et les relances. Une date restée d'un passage
+          // précédent au même statut (refus annulé puis remis) est remplacée ; la date d'envoi, elle, est gardée.
+          const changed = !prev || prev.status !== o.status
+          const stale = !!prev && st !== 'applied' && o.statusAt?.[st] !== undefined && o.statusAt?.[st] === prev.statusAt?.[st]
+          const statusAt = changed && (!o.statusAt?.[st] || stale) ? { ...o.statusAt, [st]: Date.now() } : o.statusAt
           return { offers: { ...s.offers, [o.id]: { ...o, statusAt, updatedAt: Date.now() } } }
         }),
       removeOffer: (id) =>

@@ -4,7 +4,7 @@
 // L'application rattache chaque réponse à sa candidature et propose le changement de statut.
 
 /** Change à chaque évolution du classement : les réponses déjà lues sont alors reclassées. */
-export const REPLIES_VERSION = 1
+export const REPLIES_VERSION = 2
 
 /** Dossier Gmail par défaut (filtre « candidature » dans l'objet). */
 export const DEFAULT_LABEL = 'Emploi/Candidatures Emploi'
@@ -24,6 +24,23 @@ const clean = (s) =>
     .replace(/[ ͏​-‍﻿]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘', laquo: '«', raquo: '»', hellip: '…', ndash: '–', mdash: '-', euro: '€', oelig: 'œ' }
+const ACCENT = { eacute: 'é', egrave: 'è', ecirc: 'ê', euml: 'ë', agrave: 'à', acirc: 'â', ccedil: 'ç', ocirc: 'ô', ucirc: 'û', ugrave: 'ù', icirc: 'î', iuml: 'ï', Eacute: 'É', Egrave: 'È', Agrave: 'À', Ccedil: 'Ç' }
+
+/** Texte lisible : entités HTML décodées, balises, liens et cadres de mise en page retirés. */
+export function plain(text) {
+  return (text ?? '')
+    .replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => (e[0] === '#' ? String.fromCodePoint(/^#x/i.test(e) ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : (ACCENT[e] ?? ENT[e.toLowerCase()] ?? m)))
+    .replace(/\[(https?:\/\/[^\]]*)\]|\((https?:\/\/[^)]*)\)/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/^[\s|]*mail content[\s|]*$/gim, '')
+    .replace(/(^|\n)[ \t|]+/g, '$1')
+    .replace(/[ \t]*\|[ \t]*$/gm, '')
+}
 
 /** Garde le message lui-même : coupe la citation du message précédent et la signature automatique. */
 export function ownPart(text) {
@@ -56,9 +73,12 @@ const REFUS = [
   /(suite|reponse) (negative|defavorable)/,
   /pas en mesure de (donner suite|retenir|poursuivre)/,
   /n'avons pas retenu/,
+  /(ne pouvoir|ne pouvons|ne pourrons) (pas )?(y )?(donner|reserver) (une )?suite/,
+  /regret de ne (pas|pouvoir)/,
+  /pas en mesure de repondre favorablement/,
 ]
 const CONVOC = /\b(entretien|rendez-vous|rdv|echange telephonique|echanger (avec vous )?par telephone|appel telephonique|vous rencontrer|rencontrons-nous|convocation|convie|disponibilites|creneaux?|visioconference|teams\.microsoft|meet\.google|zoom\.us|calendly|test technique|cas pratique|jury)\b/g
-const CONDITIONAL = /\b(si|s'il|s'ils|lorsque|des que|au cas ou|dans le cas ou|le cas echeant|eventuel(le)?|eventuellement|pourrait|pourrions|prochaine etape sera|sans (retour|reponse|nouvelles)|considere[rz]?|faute de)\b/
+const CONDITIONAL = /\b(si|s'il|s'ils|lorsque|des que|au cas ou|dans le cas ou|le cas echeant|eventuel(le)?|eventuellement|pourrait|pourrions|prochaine etape sera|sans (retour|reponse|nouvelles?)|considere[rz]?|faute de|cas contraire|n'aura)\b/
 
 /** Vrai si la phrase qui contient la position est au conditionnel (« si votre profil est retenu… »). */
 function conditionalAt(f, index) {
@@ -68,7 +88,15 @@ function conditionalAt(f, index) {
   const stop = rest.search(/[.!?](\s|$)|\n/)
   return CONDITIONAL.test(before.slice(start) + ' ' + (stop < 0 ? rest : rest.slice(0, stop)))
 }
+/** Une convocation propose ou confirme un rendez-vous : formule, jour ou heure. */
+const FIRM = /je vous (propose|confirme|invite|contacte)|nous vous (proposons|confirmons|invitons)|convenu|seriez-vous disponible|etes-vous disponible|vos disponibilites|merci de (me|nous) (confirmer|indiquer|faire part)|\b(lundi|mardi|mercredi|jeudi|vendredi|samedi)\b|\b\d{1,2} ?h ?\d{0,2}\b|\b\d{1,2}\/\d{1,2}\b/
+/** Alertes et lettres d'offres : jamais une réponse à une candidature. */
+const ALERT = /votre alerte|alerte (emploi|email)|nouvelles? offres?|vous proposent des offres|offres? (similaires|recommandees|pour vous)|recrute ?:|recrute au poste|emplois? \d+-\d+ sur/
+const ALERT_FROM = /jobalerts-noreply@linkedin\.com|alert@indeed\.com|alerte@|jobijoba\.com|glassdoor\.com|newsletter|actu\.adecco\.fr$/
+
 const ACK = [
+  /accus\w* (de )?reception/,
+  /(toujours )?en cours d'etude|(toujours )?a l'etude/,
   /bien (ete )?recue?/,
   /accuse (de )?reception/,
   /confirm\w* (de )?(la )?reception/,
@@ -111,15 +139,17 @@ function opening(text, max = 220) {
  * envoyée), ou undefined (rappel « finalisez votre candidature », email sans rapport).
  * sure : le classement ne laisse pas de doute (sinon la réponse est à confirmer dans tous les cas).
  */
-export function classifyMail({ subject, text, out, reply }) {
+export function classifyMail({ subject, text, out, reply, from }) {
   // texte coupé à 72 colonnes : les lignes d'un même paragraphe sont recollées
-  const own = ownPart(text ?? '').replace(/([^\n])\n(?!\n)/g, '$1 ')
+  const own = ownPart(plain(text)).replace(/([^\n])\n(?!\n)/g, '$1 ').replace(/[ \t]{2,}/g, ' ')
+  subject = plain(subject)
   // dans une réponse, l'objet est celui du premier message (« Bienvenue au processus… ») : seul le texte compte
   const isReply = reply || /^(re|tr|fwd?)\s*:/i.test(subject ?? '')
   const raw = isReply ? own : `${subject ?? ''}\n${own}`
   const f = fold(raw)
   const fOwn = fold(own)
   if (REMINDER.test(f)) return { kind: undefined }
+  if (!out && !reply && (ALERT.test(fold(subject)) || (ALERT_FROM.test((from ?? '').toLowerCase()) && !/candidature/.test(fold(subject))))) return { kind: undefined }
   if (out) {
     if (isReply && FOLLOWUP.test(f)) return { kind: 'followup', sure: true, excerpt: opening(own) }
     return { kind: undefined }
@@ -133,7 +163,7 @@ export function classifyMail({ subject, text, out, reply }) {
   CONVOC.lastIndex = 0
   let m
   while ((m = CONVOC.exec(fOwn))) {
-    if (conditionalAt(fOwn, m.index)) continue
+    if (conditionalAt(fOwn, m.index) || !FIRM.test(sentenceAt(fOwn, m.index, 400))) continue
     return { kind: 'convoc', sure: false, excerpt: sentenceAt(own, m.index) }
   }
   for (const re of ACK) {
@@ -174,7 +204,9 @@ export async function readReplies({ user, password, label, offers, prev, version
   const { simpleParser } = await import('mailparser')
   const { htmlToText } = await import('./mail.mjs')
   const reclassify = version !== REPLIES_VERSION
-  const known = new Map((prev ?? []).map((r) => [r.id, r]))
+  // nouveau classement : les 60 derniers jours sont relus et reclassés de zéro
+  const relook = Date.now() - 60 * 86400000
+  const known = new Map((prev ?? []).filter((r) => !reclassify || new Date(r.at).getTime() < relook).map((r) => [r.id, r]))
   const days = !prev?.length || reclassify ? 60 : 7
   const me = user.toLowerCase()
   const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user, pass: password }, logger: false })
@@ -200,7 +232,7 @@ export async function readReplies({ user, password, label, offers, prev, version
         const text = mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html) : '')
         const thread = msg.threadId ? String(msg.threadId) : undefined
         const reply = !!mail.inReplyTo || (thread ? threads.has(thread) : false)
-        const c = classifyMail({ subject: mail.subject, text, out, reply })
+        const c = classifyMail({ subject: mail.subject, text, out, reply, from: addr })
         if (!c.kind) {
           known.delete(id)
           continue

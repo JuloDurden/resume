@@ -34,6 +34,15 @@ describe('classement des emails de candidature (veille)', () => {
     expect(c('Finalisez votre candidature', 'Il ne reste qu’une étape').kind).toBeUndefined()
     expect(c('Candidature Business Analyst', 'Veuillez trouver ci-joint ma candidature.', { out: true }).kind).toBeUndefined()
   })
+  it('alertes d’offres, HTML, convocation sans rendez-vous proposé', () => {
+    expect(c('Acme recrute : Business Analyst (F/H)', 'Votre alerte Emploi', { from: 'jobalerts-noreply@linkedin.com' }).kind).toBeUndefined()
+    expect(c("Nouvelles offres d'emploi chez Acme", 'x', { from: 'alert@indeed.com' }).kind).toBeUndefined()
+    expect(c('Votre candidature', 'Apr&egrave;s examen, nous sommes au regret de ne pouvoir y donner une suite favorable.').kind).toBe('refus')
+    expect(c('Votre candidature', '<p>Bonjour,</p><p>Nous accusons r&eacute;ception de votre candidature.</p>').excerpt).toBe('Nous accusons réception de votre candidature.')
+    expect(c('Bienvenue dans notre processus', 'Merci pour votre candidature. Voici les étapes : un entretien avec le recruteur sur Teams.').kind).toBe('ack')
+    expect(c('Votre candidature', 'Elle est toujours en cours d’étude. Pour nos conseils, rendez-vous sur le blog.').kind).toBe('ack')
+    expect(c('RDV', 'Comme convenu, je vous confirme notre rendez-vous le jeudi 19/11 à 14h.').kind).toBe('convoc')
+  })
   it('recherche Gmail : dossier, contacts et entreprises des candidatures en cours', () => {
     expect(labelQuery('Emploi/Candidatures Emploi ')).toBe('label:emploi-candidatures-emploi')
     const q = repliesQuery({ label: '', days: 7, offers: [{ status: 'applied', company: 'Acme Sud', createdAt: Date.now(), contacts: [{ email: 'rh@acme.fr' }] }, { status: 'todo', company: 'Autre' }] })
@@ -56,6 +65,14 @@ describe('rattachement des réponses aux candidatures', () => {
     expect(matchReply(mail({ from: 'paul@beta-conseil.fr', subject: 'Échange' }), [acme, beta]).offer?.id).toBe('beta')
     expect(matchReply(mail({ subject: 'Suite à votre candidature chez Gamma' }), [acme, beta]).offer).toBeUndefined()
   })
+  it('raison sociale entre parenthèses, adresse de l’entreprise, intitulé seul', () => {
+    const simax = offer({ id: 's', title: 'Support fonctionnel', company: 'SIMAX (NOUT SAS)' })
+    expect(matchReply(mail({ from: 'noreply@simax.fr', subject: 'Votre candidature' }), [simax]).offer?.id).toBe('s')
+    const ediser = offer({ id: 'e', title: 'Technicien Support', company: 'ENPC-EDISER' })
+    expect(matchReply(mail({ from: 'recrutement@ediser.com', subject: 'Accusé réception' }), [ediser]).offer?.id).toBe('e')
+    const amdm = offer({ id: 'm', title: 'Responsable de Bureau Motard', company: 'Mutuelle des Motards' })
+    expect(matchReply(mail({ from: 'noreply@talent-soft.com', subject: 'Votre candidature - offre 2026-424 – Responsable de Bureau Motard H/F' }), [amdm, ediser]).offer?.id).toBe('m')
+  })
   it('nom collé (sigle avec tiret)', () => {
     const cats = offer({ id: 'cats', title: 'Business Analyst', company: 'CA-TS' })
     expect(matchReply(mail({ from: 'lisa@cats.teamtailor-mail.com', subject: 'Suite à votre candidature' }), [cats]).offer?.id).toBe('cats')
@@ -70,7 +87,7 @@ describe('rattachement des réponses aux candidatures', () => {
     expect(box.pending.map((i) => i.r.id)).toEqual(['r'])
     expect(box.unmatched.map((i) => i.r.id)).toEqual(['x'])
     expect(box.unmatchedAcks.map((i) => i.r.id)).toEqual(['y'])
-    const rejected = inboxOf(replies, [{ ...acme, status: 'rejected' }], undefined, at(12))
+    const rejected = inboxOf(replies, [{ ...acme, status: 'rejected', statusAt: { applied: at(4), rejected: at(11) } }], undefined, at(12))
     expect(rejected.auto.map((i) => i.r.id)).toEqual(['a', 'r'])
     // une fois noté, l'email ne revient plus
     expect(inboxOf(replies, [applyAuto(acme, replies[0])], undefined, at(12)).auto).toEqual([])

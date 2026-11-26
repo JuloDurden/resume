@@ -5,8 +5,9 @@ import { uid } from './ids'
 import { startOfDay } from './followup'
 
 const DAY = 86400000
-/** Au-delà, une réponse non traitée n'est plus proposée. */
+/** Au-delà, une réponse non traitée n'est plus proposée (moins longtemps sans candidature trouvée). */
 const SHOWN_DAYS = 60
+const LOOSE_DAYS = 30
 
 export const MAIL_LABEL: Record<MailKind, string> = {
   ack: 'Accusé de réception',
@@ -34,7 +35,8 @@ const domain = (email?: string) => (email ?? '').split('@')[1]?.toLowerCase() ??
 
 /** Formes du nom de l'entreprise à chercher dans l'email : nom sans forme juridique, et nom collé (CA-TS → cats). */
 function companyKeys(company?: string): { phrase: string; compact: string; tokens: string[] } | undefined {
-  const tokens = fold(company)
+  // « SIMAX (NOUT SAS) » : le nom d'usage, sans la raison sociale entre parenthèses
+  const tokens = fold((company ?? '').replace(/\(.*?\)/g, ' '))
     .split(' ')
     .filter((t) => t && !LEGAL.has(t))
   if (!tokens.length) return
@@ -64,13 +66,18 @@ export function scoreFor(r: MailReply, o: Offer): number {
     if (k.compact.length >= 3 && hay.includes(` ${k.phrase} `)) score = Math.max(score, 55)
     else if (k.compact.length >= 4 && compactHay.includes(k.compact)) score = Math.max(score, 45)
     else if (k.tokens.length >= 2 && k.tokens.every((t) => hay.includes(` ${t} `))) score = Math.max(score, 45)
+    // adresse de l'entreprise : recrutement@ediser.com pour « ENPC-EDISER »
+    const labels = party.flatMap((p) => domain(p).split('.'))
+    if (k.tokens.some((t) => t.length >= 4 && labels.includes(t))) score = Math.max(score, 55)
   }
   const words = fold(o.title)
     .split(' ')
     .filter((w) => w.length > 1 && !TITLE_STOP.has(w))
-  if (words.length && score > 0) {
+  if (words.length) {
     const share = words.filter((w) => hay.includes(` ${w} `)).length / words.length
-    if (share >= 0.5) score += Math.round(25 * share)
+    if (score > 0 && share >= 0.5) score += Math.round(25 * share)
+    // intitulé repris presque mot pour mot dans l'objet (expéditeur anonyme : plateforme de recrutement)
+    else if (!score && words.length >= 2 && share >= 0.75) score = 45 + Math.round(10 * share)
   }
   // un email antérieur à la candidature ne la concerne pas (sauf le jour même ou la veille)
   const start = o.statusAt?.applied ?? o.createdAt
@@ -121,7 +128,7 @@ export function inboxOf(replies: MailReply[] | undefined, offers: Offer[], marks
     const m = matchReply(r, offers, marks)
     const item: InboxItem = { r, at, offer: m.offer, sure: m.sure }
     if (!m.offer) {
-      if (r.out) continue
+      if (r.out || now - at > LOOSE_DAYS * DAY) continue
       if (r.kind === 'ack') box.unmatchedAcks.push(item)
       else if (r.kind !== 'followup') box.unmatched.push(item)
       continue
@@ -132,7 +139,10 @@ export function inboxOf(replies: MailReply[] | undefined, offers: Offer[], marks
       continue
     }
     // déjà pris en compte à la main (statut changé avant la lecture de l'email)
-    if ((r.kind === 'refus' && st === 'rejected') || (r.kind === 'convoc' && (st === 'interview' || st === 'offer'))) {
+    // candidature déjà terminée après cet email (refus, proposition) : l'email n'est plus que de l'historique
+    const endAt = st === 'rejected' ? m.offer.statusAt?.rejected : st === 'offer' ? m.offer.statusAt?.offer : undefined
+    const past = endAt !== undefined && startOfDay(at) <= startOfDay(endAt)
+    if (past || (r.kind === 'refus' && st === 'rejected') || (r.kind === 'convoc' && (st === 'interview' || st === 'offer'))) {
       box.auto.push(item)
       continue
     }

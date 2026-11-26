@@ -191,55 +191,25 @@ function InboxModal({ onClose }: { onClose: () => void }) {
   const offers = useMemo(() => Object.values(offersMap).sort((a, b) => (b.statusAt?.applied ?? b.createdAt) - (a.statusAt?.applied ?? a.createdAt)), [offersMap])
   // gardées le temps du panneau, pour l'annulation
   const [shown] = useState(() => ({ pending: box.pending, unmatched: box.unmatched }))
-  const recentAuto = useMemo(
-    () =>
-      offers
-        .flatMap((o) => (o.mails ?? []).filter((m) => m.decision === 'auto' && Date.now() - m.at < 21 * 86400000).map((m) => ({ m, o })))
-        .sort((a, b) => b.m.at - a.m.at)
-        .slice(0, 30),
-    [offers],
-  )
+  const recentAuto = useMemo(() => offers.reduce((n, o) => n + (o.mails ?? []).filter((m) => m.decision === 'auto' && Date.now() - m.at < 21 * 86400000).length, 0), [offers])
   const fresh = (list: InboxItem[]) => list.map((it) => box.pending.find((x) => x.r.id === it.r.id) ?? box.unmatched.find((x) => x.r.id === it.r.id) ?? it)
   return (
     <Modal open onClose={onClose} wide title="Réponses lues dans Gmail" footer={<button className="btn" onClick={onClose}>Fermer</button>}>
       <div className="inbox">
-        <p className="muted small">Rien ne change sans ton accord, sauf les accusés de réception et tes relances, notés dans les échanges.</p>
+        <p className="muted small">Rien ne change sans ton accord. Les accusés de réception, les alertes d'offres et les rappels « finalisez votre candidature » ne sont pas listés ici.</p>
         <section>
           <h4>À confirmer ({box.pending.length})</h4>
           {shown.pending.length ? fresh(shown.pending).map((it) => <ReplyCard key={it.r.id} item={it} offers={offers} />) : <p className="muted small">Aucune réponse en attente.</p>}
         </section>
-        {(shown.unmatched.length > 0 || box.unmatchedAcks.length > 0) && (
+        {shown.unmatched.length > 0 && (
           <section>
             <h4>Sans candidature correspondante ({box.unmatched.length})</h4>
             {fresh(shown.unmatched).map((it) => (
               <ReplyCard key={it.r.id} item={it} offers={offers} />
             ))}
-            {box.unmatchedAcks.length > 0 && (
-              <details className="inbox-more">
-                <summary>
-                  {box.unmatchedAcks.length} accusé{box.unmatchedAcks.length > 1 ? 's' : ''} de réception sans candidature
-                </summary>
-                {box.unmatchedAcks.map((it) => (
-                  <ReplyCard key={it.r.id} item={it} offers={offers} />
-                ))}
-              </details>
-            )}
           </section>
         )}
-        {recentAuto.length > 0 && (
-          <details className="inbox-more">
-            <summary>
-              {recentAuto.length} email{recentAuto.length > 1 ? 's' : ''} noté{recentAuto.length > 1 ? 's' : ''} automatiquement ces 3 dernières semaines
-            </summary>
-            <ul className="inbox-auto">
-              {recentAuto.map(({ m, o }) => (
-                <li key={m.id}>
-                  <strong>{MAIL_LABEL[m.kind]}</strong> · {o.company || o.title} <span className="muted">· {fmt(m.at)}</span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
+        {recentAuto > 0 && <p className="muted small">{recentAuto} accusé{recentAuto > 1 ? 's' : ''} de réception et relance{recentAuto > 1 ? 's' : ''} notés ces 3 dernières semaines, visibles dans l'onglet Échanges de chaque candidature.</p>}
       </div>
     </Modal>
   )

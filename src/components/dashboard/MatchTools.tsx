@@ -55,7 +55,7 @@ function Chips({ values, onChange, placeholder }: { values: string[]; onChange: 
   )
 }
 
-function HomeInput({ value, onChange }: { value?: MatchProfile['home']; onChange: (h: MatchProfile['home']) => void }) {
+export function HomeInput({ value, onChange }: { value?: MatchProfile['home']; onChange: (h: MatchProfile['home']) => void }) {
   const [q, setQ] = useState(value?.nom ?? '')
   const [list, setList] = useState<Commune[]>([])
   const [open, setOpen] = useState(false)

@@ -2,13 +2,39 @@
 // saisie d'un salaire appris après coup, pastille de la liste, et calculateur brut / net (menu Outils).
 import { useState } from 'react'
 import { create } from 'zustand'
-import { Check, Plus } from 'lucide-react'
+import { Bike, Bus, Car, KeyRound, Plus } from 'lucide-react'
 import type { Offer } from '../../types'
 import { useDocs } from '../../store/documents'
 import { Modal, Segmented } from '../ui'
 import { RATES, STATUS_LABEL, afterTax, fmtEur, fmtRange, payOf, signed, vsMinimum, type Pay, type PayStatus } from '../../lib/pay'
+import { cachedPrices, fetchPrices, type CommuteCost, type FuelPrices } from '../../lib/commute'
+import { useCommuteTool } from './CommuteTool'
+import { useFeed } from '../../store/feed'
 
 const frDay = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+
+/* ---------- prix du carburant (relevé du jour autour de l'adresse de départ) ---------- */
+
+export const useFuel = create<{ prices?: FuelPrices; load: (near?: { lat: number; lon: number }) => void }>((set, get) => ({
+  prices: cachedPrices(),
+  load: (near) => {
+    if (!near) return
+    const cur = get().prices
+    if (cur && Date.now() - cur.at < 12 * 3600000 && Math.abs(cur.near.lat - near.lat) < 0.05 && Math.abs(cur.near.lon - near.lon) < 0.05) return
+    // relevé direct ; à défaut, celui de la veille (data/feed.json)
+    fetchPrices(near).then((p) => {
+      const fromFeed = useFeed.getState().feed?.fuel
+      const best = [p, fromFeed].filter((x): x is FuelPrices => !!x).sort((a, b) => b.at - a.at)[0]
+      if (best) set({ prices: best })
+    })
+  },
+}))
+
+export const MODE_ICON = { car: Car, company: KeyRound, tc: Bus, bike: Bike }
+
+/** Montant en k€ avec une décimale : 24 209 → « 24,2 k€ ». */
+const kEur = (n: number) => `${(Math.round(n / 100) / 10).toLocaleString('fr-FR')} k€`
+const kRange = (a: number, b: number) => (kEur(a) === kEur(b) ? kEur(a) : `${kEur(a).replace(' k€', '')} – ${kEur(b)}`)
 
 /* ---------- calculateur (ouvert depuis le menu Outils ou l'encadré Salaire) ---------- */
 
@@ -148,29 +174,50 @@ function CalcModal({ amount: initAmount, status: initStatus, onClose }: { amount
 
 /* ---------- liste : pastille du net estimé ---------- */
 
-export function PayChip({ pay, minBrut }: { pay: Pay; minBrut?: number }) {
+export function PayChip({ pay, minBrut, commute }: { pay: Pay; minBrut?: number; commute?: CommuteCost }) {
   const vs = vsMinimum(pay, minBrut)
+  const cost = commute?.month ?? 0
+  const Icon = commute ? MODE_ICON[commute.mode] : undefined
+  const title = [
+    `Salaire ${pay.text} (${STATUS_LABEL[pay.status]}) : ${fmtRange(pay.netMin, pay.netMax)} net/mois estimés`,
+    commute ? `trajet ${commute.note} : ${cost ? `− ${fmtEur(cost)} €/mois` : '0 €'}` : '',
+    vs ? (vs.tone === 'ok' ? 'au-dessus de ton minimum' : vs.tone === 'ko' ? 'en dessous de ton minimum' : 'autour de ton minimum') : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
   return (
-    <span className={`pay-chip t-${vs?.tone ?? 'none'}`} title={`${pay.text} · estimation du net, ${STATUS_LABEL[pay.status]}${vs ? ` · ${vs.tone === 'ok' ? 'au-dessus de' : vs.tone === 'ko' ? 'en dessous de' : 'autour de'} ton minimum` : ''}`}>
-      {fmtRange(pay.netMin, pay.netMax)}
-      <small>net/mois</small>
+    <span className={`pay-chip t-${vs?.tone ?? 'none'}`} title={title}>
+      <span className="pc-month">
+        {fmtRange(pay.netMin - cost, pay.netMax - cost)} <small>/ mois</small>
+      </span>
+      <span className="pc-year">
+        {kRange((pay.netMin - cost) * 12, (pay.netMax - cost) * 12)} / an
+        {commute && Icon && (
+          <>
+            {' · '}
+            <Icon size={12} aria-label={commute.mode === 'company' ? 'véhicule fourni' : 'trajet'} /> {cost ? `− ${fmtEur(cost)} € trajet` : 'trajet 0 €'}
+          </>
+        )}
+      </span>
     </span>
   )
 }
 
 /* ---------- candidature ouverte : encadré Salaire, ou saisie ---------- */
 
-export function SalaryBlock({ offer, autoEdit }: { offer: Offer; autoEdit?: boolean }) {
+export function SalaryBlock({ offer, autoEdit, commute }: { offer: Offer; autoEdit?: boolean; commute?: CommuteCost }) {
   const saveOffer = useDocs((s) => s.saveOffer)
   const minBrut = useDocs((s) => s.watch.profile?.salary?.min)
+  const hasFrom = useDocs((s) => !!s.watch.profile?.commuteFrom)
   const showCalc = usePayCalc((s) => s.show)
+  const openCommute = useCommuteTool((s) => s.show)
   const pay = payOf(offer)
   const [editing, setEditing] = useState(!!autoEdit && !pay)
   const [text, setText] = useState(offer.salary ?? '')
   const save = () => {
     const t = text.trim()
-    saveOffer({ ...offer, salary: t || undefined, // noté après coup : l'annonce n'en donnait pas
-      salaryAt: t ? (offer.salary ? offer.salaryAt : Date.now()) : undefined })
+    // noté après coup : l'annonce n'en donnait pas
+    saveOffer({ ...offer, salary: t || undefined, salaryAt: t ? (offer.salary ? offer.salaryAt : Date.now()) : undefined })
     setEditing(false)
   }
   if (!pay || editing)
@@ -197,59 +244,83 @@ export function SalaryBlock({ offer, autoEdit }: { offer: Offer; autoEdit?: bool
       </button>
     )
   const vs = vsMinimum(pay, minBrut)
-  const scale = Math.max((vs?.minNet ?? 0) * 1.5, pay.netMax * 1.15, 1)
-  const pct = (n: number) => `${Math.min(100, (n / scale) * 100).toFixed(1)}%`
+  const cost = commute?.month ?? 0
+  const Icon = commute ? MODE_ICON[commute.mode] : Car
   const flip = (s: PayStatus): PayStatus => (s === 'c' ? 'nc' : 'c')
+  const vsText = vs ? (Math.round(vs.low) === Math.round(vs.high) ? signed(vs.low) : `${signed(vs.low)} à ${signed(vs.high)}`) : ''
   return (
-    <section className={`pay-block t-${vs?.tone ?? 'none'}`} aria-label="Salaire">
-      <div className="pb-net">
-        <span className="pb-kicker">Salaire net estimé</span>
-        <strong>{fmtRange(pay.netMin, pay.netMax)}</strong>
-        <span>par mois, avant impôt</span>
-      </div>
-      <div className="pb-gross">
-        <span className="muted small">{pay.later ? `Noté le ${frDay(offer.salaryAt!)}` : 'Annoncé'}</span>
-        <strong>{pay.text}</strong>
-        <span className="small muted">
-          {fmtRange(pay.min / 12, pay.max / 12)} brut / mois ·{' '}
-          <button className="link" onClick={() => saveOffer({ ...offer, payStatus: flip(pay.status) })} title="Changer le statut de l'estimation">
-            {STATUS_LABEL[pay.status]}
-          </button>{' '}
-          ·{' '}
-          <button
-            className="link"
-            onClick={() => {
-              setText(offer.salary ?? '')
-              setEditing(true)
-            }}
-          >
-            modifier
-          </button>
-        </span>
-      </div>
-      <div className="pb-vs">
-        {vs ? (
-          <>
-            <span className="pb-pill">
-              {vs.tone === 'ok' && <Check size={14} />}
-              {Math.round(vs.low) === Math.round(vs.high) ? signed(vs.low) : `${signed(vs.low)} à ${signed(vs.high)}`}
-            </span>
-            <span className="small">{vs.tone === 'ok' ? 'au-dessus de ton minimum' : vs.tone === 'ko' ? 'en dessous de ton minimum' : 'selon la fourchette'}</span>
-          </>
-        ) : (
-          <span className="small muted">Indique ton minimum dans ton profil de recherche pour situer ce salaire.</span>
-        )}
-        <button className="link small" onClick={() => showCalc({ amount: Math.round((pay.min + pay.max) / 2), status: pay.status })}>
-          Calculer en détail
-        </button>
-      </div>
-      {vs && (
-        <div className="pb-bar" aria-hidden="true">
-          <span className="pb-range" style={{ left: pct(pay.netMin), width: `max(6px, calc(${pct(pay.netMax)} - ${pct(pay.netMin)}))` }} />
-          <span className="pb-min" style={{ left: pct(vs.minNet) }} />
-        </div>
-      )}
-      {vs && <div className="pb-legend small muted">ton minimum : {fmtEur(vs.minNet)} € net / mois ({Math.round((minBrut ?? 0) / 1000)} k€ brut / an)</div>}
+    <section className={`pay-block t-${vs?.tone ?? 'none'}`} aria-label="Salaire et trajet">
+      <table>
+        <colgroup>
+          <col className="pb-c1" />
+          <col className="pb-c2" />
+          <col className="pb-c3" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col" className="pb-head">
+              <div className="pb-meta">
+                <span className="pb-kicker">Salaire</span>
+                <span className="pb-text" title={pay.text}>
+                  {pay.later ? `noté le ${frDay(offer.salaryAt!)} : ` : ''}
+                  {pay.text}
+                </span>
+                <button className="link" onClick={() => saveOffer({ ...offer, payStatus: flip(pay.status) })} title="Changer le statut de l'estimation">
+                  {STATUS_LABEL[pay.status]}
+                </button>
+                <button
+                  className="link"
+                  onClick={() => {
+                    setText(offer.salary ?? '')
+                    setEditing(true)
+                  }}
+                >
+                  modifier
+                </button>
+                <button className="link" onClick={() => showCalc({ amount: Math.round((pay.min + pay.max) / 2), status: pay.status })} title="Calculateur brut / net">
+                  détail
+                </button>
+              </div>
+            </th>
+            <th scope="col">Par mois</th>
+            <th scope="col">Par an</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">
+              Net estimé{' '}
+              {vs && (
+                <span className="pb-pill" title={`${vs.tone === 'ok' ? 'Au-dessus de' : vs.tone === 'ko' ? 'En dessous de' : 'Autour de'} ton minimum (${fmtEur(vs.minNet)} € net / mois)`}>
+                  {vsText}
+                </span>
+              )}
+            </th>
+            <td className="pb-big">{fmtRange(pay.netMin, pay.netMax)}</td>
+            <td className="pb-mid">{kRange(pay.netMin * 12, pay.netMax * 12)}</td>
+          </tr>
+          <tr className="pb-commute">
+            <th scope="row">
+              <Icon size={14} /> Trajets{' '}
+              <span className="small muted">
+                {commute ? `${commute.note}${commute.price ? ` · ${commute.price.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/L` : ''}` : hasFrom ? 'lieu de travail inconnu' : 'adresse de départ à indiquer'} ·{' '}
+                <button className="link" onClick={() => openCommute(offer.id)}>
+                  {commute ? 'modifier' : 'renseigner'}
+                </button>
+              </span>
+            </th>
+            <td className="pb-cost">{commute ? (cost ? `− ${fmtEur(cost)} €` : '0 €') : ''}</td>
+            <td className="pb-cost">{commute ? (commute.year ? `− ${fmtEur(commute.year)} €` : '0 €') : ''}</td>
+          </tr>
+          {commute && (
+            <tr className="pb-rest">
+              <th scope="row">Il te reste</th>
+              <td className="pb-big">{fmtRange(pay.netMin - cost, pay.netMax - cost)}</td>
+              <td className="pb-mid">{kRange((pay.netMin - cost) * 12, (pay.netMax - cost) * 12)}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </section>
   )
 }

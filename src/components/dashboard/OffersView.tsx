@@ -7,7 +7,9 @@ import { FEELING, MODE_LABEL, withOutcome, toReport, datedInterviews, daysUntil,
 import { announcedBy, followUpsSinceUpdate, nextFollowUp, setDefaultFollowUpDays, setSilentDays, silentSince } from '../../lib/followup'
 import { OfferStats } from './OfferStats'
 import { Timeline, pastSteps } from './MetroTimeline'
-import { PayChip, SalaryBlock } from './PayTools'
+import { PayChip, SalaryBlock, useFuel } from './PayTools'
+import { commuteOf } from '../../lib/commute'
+import { geocode } from '../../lib/match'
 import { payOf } from '../../lib/pay'
 import { ReplyCard, useMailInbox } from './MailInbox'
 import { MAIL_MARK, type InboxItem } from '../../lib/replies'
@@ -175,6 +177,9 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, o
   const minPay = useDocs((s) => s.watch.profile?.salary?.min)
   const pay = payOf(offer)
   const [payEdit, setPayEdit] = useState(false)
+  const profile = useDocs((s) => s.watch.profile)
+  const prices = useFuel((s) => s.prices?.prices)
+  const commute = commuteOf(offer, profile, prices)
   const slots = datedInterviews(offer)
   const openRome = useRomeDrawer((s) => s.open)
   const linkedCv = docs.find((d): d is ResumeDoc => d.kind === 'resume')
@@ -237,7 +242,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, o
           </span>
         </div>
         {pay ? (
-          <PayChip pay={pay} minBrut={minPay} />
+          <PayChip pay={pay} minBrut={minPay} commute={commute} />
         ) : (status === 'interview' || status === 'offer') && !narrow ? (
           <button
             className="pay-add sm"
@@ -459,7 +464,7 @@ function OfferRow({ offer, docs, resumes, onEdit, open, onOpen, narrow, mails, o
                 <p>
                   {[offer.location, offer.contract].filter(Boolean).join(' · ') || 'Lieu non précisé'}
                 </p>
-                <SalaryBlock offer={offer} autoEdit={payEdit} />
+                <SalaryBlock offer={offer} autoEdit={payEdit} commute={commute} />
                 {(status === 'interview' || slots.length > 0) && (
                   <div className="or-iv">
                     {slots.map((s, i) => (
@@ -626,6 +631,14 @@ export function OffersView() {
   const offersMap = useDocs((s) => s.offers)
   setDefaultFollowUpDays(useDocs((s) => s.watch.profile?.followUpDays))
   setSilentDays(useDocs((s) => s.watch.profile?.silentDays))
+  // trajets : lieux des candidatures localisés, prix du carburant du jour autour de l'adresse de départ
+  const commuteFrom = useDocs((s) => s.watch.profile?.commuteFrom)
+  const loadPrices = useFuel((s) => s.load)
+  const [, setGeoTick] = useState(0)
+  useEffect(() => loadPrices(commuteFrom), [commuteFrom, loadPrices])
+  useEffect(() => {
+    if (commuteFrom) geocode(Object.values(offersMap).map((o) => o.location), () => setGeoTick((n) => n + 1), commuteFrom)
+  }, [offersMap, commuteFrom])
   const inbox = useMailInbox()
   const mailsOf = useMemo(() => {
     const m = new Map<string, InboxItem[]>()

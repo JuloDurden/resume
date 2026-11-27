@@ -4,6 +4,7 @@ import { BellRing, Cloud, Database, Download, Monitor, Moon, Palette, Sun, Targe
 import { useEffect } from 'react'
 import type { Identity } from '../types'
 import { identityFromDocs } from '../lib/identity'
+import { HomeInput } from './dashboard/MatchTools'
 import { MatchProfileModal } from './dashboard/MatchTools'
 import { PhotoInput, SignatureInput } from './editor/fields'
 import { useDocs } from '../store/documents'
@@ -248,12 +249,28 @@ function IdentityPanel() {
           <SignatureInput value={v.signature} onChange={(x) => set({ signature: x })} />
         </Field>
       </div>
+      <CommuteFromField />
       <div className="set-foot">
         <button className="btn primary" onClick={save} disabled={!dirty && !!saved}>
           Enregistrer et mettre à jour les {n} documents
         </button>
       </div>
     </div>
+  )
+}
+
+/** Adresse de départ des trajets : privée, distincte de la localisation affichée sur les CV. */
+function CommuteFromField() {
+  const profile = useDocs((s) => s.watch.profile)
+  const setProfile = useDocs((s) => s.setProfile)
+  return (
+    <Field label="Adresse de départ des trajets" hint="Sert seulement au calcul des trajets vers tes candidatures. Jamais affichée sur un CV ni une lettre : la localisation ci-dessus reste celle des documents.">
+      {profile ? (
+        <HomeInput key={profile.commuteFrom?.nom ?? ''} value={profile.commuteFrom} onChange={(h) => h && setProfile({ ...profile, commuteFrom: h })} />
+      ) : (
+        <p className="muted small">Crée d'abord ton profil de recherche (onglet Annonces).</p>
+      )}
+    </Field>
   )
 }
 

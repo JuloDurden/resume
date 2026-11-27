@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Calculator, ChevronDown, Plus, Settings, Wrench, Globe, BellRing, Briefcase, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files } from 'lucide-react'
+import { Calculator, Car, ChevronDown, Plus, Settings, Wrench, Globe, BellRing, Briefcase, RefreshCw, FileUp, FilePlus2, FileSignature, FileJson, Files } from 'lucide-react'
 import type { ResumeDoc } from '../types'
 import { uid } from '../lib/ids'
 import { useDocs } from '../store/documents'
@@ -16,6 +16,7 @@ import { PdfImportModal } from '../components/PdfImportModal'
 import { SyncButton } from '../components/SyncModal'
 import { MailBell } from '../components/dashboard/MailInbox'
 import { PayCalculator, usePayCalc } from '../components/dashboard/PayTools'
+import { CommuteTool, useCommuteTool } from '../components/dashboard/CommuteTool'
 import { ThemeToggle, downloadBackup, importBackupFile, openSettings } from '../components/SettingsModal'
 import { SharedIntro, ShowcaseGrid, ShowcaseIntro, useSharedShowcase, useShowcase } from './Showcase'
 import { useSync } from '../store/sync'
@@ -279,18 +280,30 @@ export default function Dashboard() {
             )}
           >
             {(close) => (
-              <MenuItem
-                icon={<Calculator size={15} />}
-                onClick={() => {
-                  close()
-                  usePayCalc.getState().show()
-                }}
-              >
-                Salaire brut / net
-              </MenuItem>
+              <>
+                <MenuItem
+                  icon={<Calculator size={15} />}
+                  onClick={() => {
+                    close()
+                    usePayCalc.getState().show()
+                  }}
+                >
+                  Salaire brut / net
+                </MenuItem>
+                <MenuItem
+                  icon={<Car size={15} />}
+                  onClick={() => {
+                    close()
+                    useCommuteTool.getState().show()
+                  }}
+                >
+                  Trajet domicile-travail
+                </MenuItem>
+              </>
             )}
           </Menu>
           <PayCalculator />
+          <CommuteTool />
           <SyncButton onClick={() => setSettings('sync')} />
           <ThemeToggle />
           <button className="icon-btn" onClick={() => setSettings('ui')} title="Réglages" aria-label="Réglages">

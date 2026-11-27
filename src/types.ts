@@ -231,6 +231,8 @@ export interface Offer extends JobTarget {
   salaryAt?: number
   /** statut pour l'estimation du net : non-cadre, cadre, fonction publique (sinon déduit de l'annonce) */
   payStatus?: 'nc' | 'c' | 'fp'
+  /** trajet domicile-travail (sinon voiture, 5 jours sur 5) */
+  commute?: OfferCommute
   /** date de chaque changement de statut (statistiques) */
   statusAt?: Partial<Record<JobStatus, number>>
   /** dates des relances envoyées */
@@ -263,6 +265,21 @@ export interface Offer extends JobTarget {
   updates?: RecruiterUpdate[]
   /** emails de Gmail rattachés à cette candidature (lus par la veille), avec la suite donnée */
   mails?: OfferMail[]
+}
+
+/** Trajet domicile-travail d'une candidature. */
+export interface OfferCommute {
+  mode: 'car' | 'company' | 'tc' | 'bike'
+  /** jours sur site par semaine */
+  days: number
+  /** distance aller saisie à la main (sinon estimée) */
+  km?: number
+  /** véhicule fourni : carburant pris en charge (oui par défaut) */
+  fuelPaid?: boolean
+  /** péage par mois (voiture) */
+  toll?: number
+  /** abonnement de transport par mois, avant remboursement de 50 % */
+  pass?: number
 }
 
 /** Relance faite autrement que par email (ou détaillée) : appel, LinkedIn, sur place. */
@@ -527,6 +544,11 @@ export interface MatchProfile {
   salary?: { min?: number }
   /** taux de prélèvement à la source, en %, pour le net après impôt */
   taxRate?: number
+  /** adresse de départ des trajets (privée : jamais sur un CV ni une lettre) */
+  commuteFrom?: { nom: string; lat: number; lon: number }
+  /** carburant et consommation (L / 100 km) de la voiture */
+  fuel?: 'gazole' | 'sp95' | 'e10'
+  conso?: number
   /** délai par défaut avant de relancer une candidature, en jours */
   followUpDays?: number
   /** candidature sans réponse ce nombre de jours après la dernière relance : « Sans réponse » (30 par défaut) */
@@ -619,5 +641,7 @@ export interface Feed {
   salaryLog?: { id: string; at: string; title: string; location?: string; salary: string }[]
   /** emails de candidature lus dans Gmail : réponses des employeurs et relances envoyées */
   replies?: MailReply[]
+  /** prix moyen du carburant autour de l'adresse de départ des trajets */
+  fuel?: { at: number; maj?: string; n: number; near: { lat: number; lon: number }; prices: { gazole: number; sp95: number; e10: number } }
   items: FeedItem[]
 }

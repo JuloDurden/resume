@@ -48,7 +48,7 @@ function salaryLog(items) {
 }
 
 async function save(status, items) {
-  const feed = { updatedAt: new Date().toISOString(), status, errors, notes, alerts: alerts.length, sources, salaryLog: salaryLog(items), replies, items }
+  const feed = { updatedAt: new Date().toISOString(), status, errors, notes, alerts: alerts.length, sources, salaryLog: salaryLog(items), replies, fuel, items }
   await writeFile('data/feed.json', JSON.stringify(feed, null, 1) + '\n')
   console.log(`${status} : ${items.length} annonce(s), ${errors.length} erreur(s)`)
   for (const e of [...notes, ...errors]) console.log(' -', e)
@@ -383,6 +383,21 @@ if (hasMail) {
     sources.replies = { at: new Date().toISOString(), v: REPLIES_VERSION }
   } catch (e) {
     errors.push(`Gmail (réponses) : ${e.message}`)
+  }
+}
+
+// prix moyen du carburant autour de l'adresse de départ des trajets (données ouvertes « Prix des carburants »)
+let fuel = prev.fuel
+const from = watch.profile?.commuteFrom
+if (from?.lat && from?.lon) {
+  try {
+    const where = `within_distance(geom, geom'POINT(${from.lon.toFixed(4)} ${from.lat.toFixed(4)})', 20km)`
+    const select = 'avg(gazole_prix) as gazole, avg(sp95_prix) as sp95, avg(e10_prix) as e10, max(gazole_maj) as maj, count(*) as n'
+    const r = await fetch(`https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records?select=${encodeURIComponent(select)}&where=${encodeURIComponent(where)}&limit=1`)
+    const row = r.ok ? (await r.json()).results?.[0] : undefined
+    if (row?.n) fuel = { at: Date.now(), maj: row.maj, n: row.n, near: { lat: from.lat, lon: from.lon }, prices: { gazole: row.gazole, sp95: row.sp95, e10: row.e10 } }
+  } catch (e) {
+    notes.push(`Prix des carburants indisponible : ${e.message}`)
   }
 }
 

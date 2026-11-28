@@ -1,6 +1,6 @@
 // Trajet domicile-travail d'une candidature : distance estimée depuis l'adresse de départ, coût par mois et
 // par an selon le moyen (voiture, véhicule fourni, transports, vélo), à déduire du salaire net.
-import type { MatchProfile, Offer, OfferCommute } from '../types'
+import type { FuelStation, MatchProfile, Offer, OfferCommute } from '../types'
 import { geoOf } from './match'
 
 export type CommuteMode = OfferCommute['mode']
@@ -101,8 +101,20 @@ export function commuteOf(o: Offer, profile: MatchProfile | undefined, prices: R
 /* ---------- prix moyen du carburant autour de l'adresse de départ (prix-carburants.gouv.fr) ---------- */
 
 const PRICE_KEY = 'resume-fuel-prices'
+export interface StationPrice {
+  label: string
+  main?: boolean
+  prices: Partial<Record<Fuel, number>>
+  maj?: string
+  /** pas de relevé : moyenne des stations à moins de 2 km */
+  estimated?: boolean
+}
 export interface FuelPrices {
   at: number
+  /** prix des stations habituelles (sinon : moyenne des stations à moins de 20 km) */
+  stations?: StationPrice[]
+  /** empreinte des stations habituelles prises en compte */
+  key?: string
   /** relevé le plus récent pris en compte */
   maj?: string
   n: number
@@ -142,4 +154,68 @@ export async function fetchPrices(near: { lat: number; lon: number }, now = Date
   } catch {
     return c
   }
+}
+
+/* ---------- stations habituelles ---------- */
+
+const DATASET = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records'
+const FUELS: Fuel[] = ['gazole', 'sp95', 'e10']
+type Row = { id: number; adresse?: string; ville?: string; cp?: string; gazole_prix?: number | null; sp95_prix?: number | null; e10_prix?: number | null; e10_maj?: string; gazole_maj?: string; geom?: { lat: number; lon: number } }
+const ask = async (where: string, select: string, limit = 20): Promise<Row[]> => {
+  const r = await fetch(`${DATASET}?select=${encodeURIComponent(select)}&where=${encodeURIComponent(where)}&limit=${limit}`)
+  if (!r.ok) throw new Error(`Prix des carburants : erreur ${r.status}`)
+  return ((await r.json()) as { results?: Row[] }).results ?? []
+}
+const near = (lat: number, lon: number, km: number) => `within_distance(geom, geom'POINT(${lon.toFixed(5)} ${lat.toFixed(5)})', ${km}km)`
+const ROW = 'id,adresse,ville,cp,gazole_prix,sp95_prix,e10_prix,e10_maj,gazole_maj,geom'
+
+export const stationsKey = (st?: { id?: number; lat: number; lon: number; main?: boolean }[]) => (st ?? []).map((s) => `${s.id ?? `${s.lat.toFixed(4)},${s.lon.toFixed(4)}`}${s.main ? '*' : ''}`).join('|')
+
+/** Stations du jeu de données qui répondent à une recherche (adresse, ville), les plus proches d'abord. */
+export async function searchStations(q: string, from: { lat: number; lon: number }): Promise<{ id: number; label: string; lat: number; lon: number; prices: Partial<Record<Fuel, number>> }[]> {
+  const words = q.replace(/["\\]/g, ' ').trim()
+  if (words.length < 3) return []
+  const rows = await ask(`"${words}" and ${near(from.lat, from.lon, 60)}`, ROW, 15)
+  const dist = (r: Row) => (r.geom ? (r.geom.lat - from.lat) ** 2 + (r.geom.lon - from.lon) ** 2 : 9)
+  return rows
+    .filter((r) => r.geom)
+    .sort((a, b) => dist(a) - dist(b))
+    .map((r) => ({
+      id: r.id,
+      label: `${(r.adresse ?? '').toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (_m, a: string, b: string) => a + b.toUpperCase())}, ${r.ville ?? ''}`.replace(/^, /, ''),
+      lat: r.geom!.lat,
+      lon: r.geom!.lon,
+      prices: { gazole: r.gazole_prix ?? undefined, sp95: r.sp95_prix ?? undefined, e10: r.e10_prix ?? undefined },
+    }))
+}
+
+/** Prix aux stations habituelles : relevé de la station, sinon moyenne des stations à moins de 2 km ; la principale compte trois fois plus. */
+export async function fetchStationPrices(stations: FuelStation[], fallback?: FuelPrices, now = Date.now()): Promise<FuelPrices | undefined> {
+  if (!stations.length) return undefined
+  const ids = stations.map((s) => s.id).filter((x): x is number => x !== undefined)
+  const rows = ids.length ? await ask(ids.map((id) => `id=${id}`).join(' or '), ROW, ids.length) : []
+  const out: StationPrice[] = []
+  for (const s of stations) {
+    const row = rows.find((r) => r.id === s.id)
+    const prices: Partial<Record<Fuel, number>> = {}
+    for (const f of FUELS) if (row?.[`${f}_prix`]) prices[f] = row[`${f}_prix`]!
+    let estimated = false
+    // carburant sans relevé à cette station : la moyenne de ses voisines
+    if (FUELS.some((f) => prices[f] === undefined)) {
+      const around = await ask(near(s.lat, s.lon, 2), 'avg(gazole_prix) as gazole_prix, avg(sp95_prix) as sp95_prix, avg(e10_prix) as e10_prix', 1).catch(() => [])
+      for (const f of FUELS) if (prices[f] === undefined && around[0]?.[`${f}_prix`]) {
+        prices[f] = around[0][`${f}_prix`]!
+        estimated = true
+      }
+    }
+    out.push({ label: s.label, main: s.main, prices, maj: row?.e10_maj ?? row?.gazole_maj, estimated: estimated || undefined })
+  }
+  const avg = {} as Record<Fuel, number>
+  for (const f of FUELS) {
+    const w = out.filter((s) => s.prices[f] !== undefined).map((s) => ({ p: s.prices[f]!, w: s.main ? 3 : 1 }))
+    const total = w.reduce((n, x) => n + x.w, 0)
+    avg[f] = total ? w.reduce((n, x) => n + x.p * x.w, 0) / total : (fallback?.prices[f] ?? FALLBACK_PRICES[f])
+  }
+  const maj = out.map((s) => s.maj).filter(Boolean).sort().at(-1)
+  return { at: now, maj, n: out.length, near: { lat: stations[0].lat, lon: stations[0].lon }, prices: avg, stations: out, key: stationsKey(stations) }
 }

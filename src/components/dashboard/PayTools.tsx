@@ -7,7 +7,7 @@ import type { Offer } from '../../types'
 import { useDocs } from '../../store/documents'
 import { Modal, Segmented } from '../ui'
 import { RATES, STATUS_LABEL, afterTax, fmtEur, fmtRange, payOf, signed, vsMinimum, type Pay, type PayStatus } from '../../lib/pay'
-import { cachedPrices, fetchPrices, type CommuteCost, type FuelPrices } from '../../lib/commute'
+import { cachedPrices, fetchPrices, fetchStationPrices, stationsKey, type CommuteCost, type FuelPrices } from '../../lib/commute'
 import { useCommuteTool } from './CommuteTool'
 import { useFeed } from '../../store/feed'
 
@@ -15,17 +15,30 @@ const frDay = (t: number) => new Date(t).toLocaleDateString('fr-FR', { day: 'num
 
 /* ---------- prix du carburant (relevé du jour autour de l'adresse de départ) ---------- */
 
-export const useFuel = create<{ prices?: FuelPrices; load: (near?: { lat: number; lon: number }) => void }>((set, get) => ({
+export const useFuel = create<{ prices?: FuelPrices; load: (near?: { lat: number; lon: number }, force?: boolean) => void }>((set, get) => ({
   prices: cachedPrices(),
-  load: (near) => {
+  load: (near, force) => {
     if (!near) return
+    const stations = useDocs.getState().watch.profile?.fuelStations ?? []
+    const key = stationsKey(stations)
     const cur = get().prices
-    if (cur && Date.now() - cur.at < 12 * 3600000 && Math.abs(cur.near.lat - near.lat) < 0.05 && Math.abs(cur.near.lon - near.lon) < 0.05) return
+    const fresh = cur && Date.now() - cur.at < 12 * 3600000 && (cur.key ?? '') === key
+    if (!force && fresh && (key || (Math.abs(cur.near.lat - near.lat) < 0.05 && Math.abs(cur.near.lon - near.lon) < 0.05))) return
     // relevé direct ; à défaut, celui de la veille (data/feed.json)
-    fetchPrices(near).then((p) => {
+    fetchPrices(near).then(async (p) => {
       const fromFeed = useFeed.getState().feed?.fuel
-      const best = [p, fromFeed].filter((x): x is FuelPrices => !!x).sort((a, b) => b.at - a.at)[0]
-      if (best) set({ prices: best })
+      const area = [p, fromFeed].filter((x): x is FuelPrices => !!x).sort((a, b) => b.at - a.at)[0]
+      // stations habituelles : leur prix l'emporte sur la moyenne des alentours
+      const mine = key ? await fetchStationPrices(stations, area).catch(() => undefined) : undefined
+      const best = mine ?? area
+      if (best) {
+        set({ prices: best })
+        try {
+          localStorage.setItem('resume-fuel-prices', JSON.stringify(best))
+        } catch {
+          /* cache facultatif */
+        }
+      }
     })
   },
 }))

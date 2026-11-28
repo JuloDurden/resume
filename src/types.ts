@@ -530,6 +530,17 @@ export interface Company {
   noGeo?: boolean
 }
 
+/** Station-service habituelle (données « Prix des carburants ») ; sans id : station sans relevé, placée par son adresse. */
+export interface FuelStation {
+  id?: number
+  label: string
+  address?: string
+  lat: number
+  lon: number
+  /** station principale (compte trois fois plus) */
+  main?: boolean
+}
+
 export interface MatchProfile {
   /** CV de référence (compétences) */
   cvId?: string
@@ -549,6 +560,8 @@ export interface MatchProfile {
   /** carburant et consommation (L / 100 km) de la voiture */
   fuel?: 'gazole' | 'sp95' | 'e10'
   conso?: number
+  /** stations où l'on fait le plein : leur prix remplace la moyenne des alentours */
+  fuelStations?: FuelStation[]
   /** délai par défaut avant de relancer une candidature, en jours */
   followUpDays?: number
   /** candidature sans réponse ce nombre de jours après la dernière relance : « Sans réponse » (30 par défaut) */

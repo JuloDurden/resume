@@ -1,11 +1,13 @@
 // Outils › Trajet domicile-travail : coût des trajets vers une candidature, par mois et par an, déduit du salaire net.
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
-import type { MatchProfile, Offer, OfferCommute } from '../../types'
+import type { FuelStation, MatchProfile, Offer, OfferCommute } from '../../types'
 import { useDocs } from '../../store/documents'
 import { Modal, Segmented, toast } from '../ui'
 import { HomeInput } from './MatchTools'
-import { DEFAULT_CONSO, FUEL_LABEL, commuteOf, inMetro, roadKm, type Fuel } from '../../lib/commute'
+import { DEFAULT_CONSO, FUEL_LABEL, commuteOf, inMetro, roadKm, searchStations, type Fuel, type FuelPrices } from '../../lib/commute'
+import { searchAddress } from '../../lib/places'
+import { Fuel as FuelIcon, MapPin, Plus, Star, X } from 'lucide-react'
 import { geocode } from '../../lib/match'
 import { fmtEur, fmtRange, payOf } from '../../lib/pay'
 import { useFuel } from './PayTools'
@@ -20,6 +22,93 @@ export function CommuteTool() {
   const st = useCommuteTool()
   if (!st.open) return null
   return <CommuteModal initial={st.offerId} onClose={st.close} />
+}
+
+const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })
+
+/** Stations où l'on fait le plein : leur prix remplace la moyenne des alentours. */
+function FuelStations({ profile, fuel, prices, onChange }: { profile?: MatchProfile; fuel: Fuel; prices?: FuelPrices; onChange: (s: FuelStation[]) => void }) {
+  const list = profile?.fuelStations ?? []
+  const from = profile?.commuteFrom
+  const [adding, setAdding] = useState(false)
+  const [q, setQ] = useState('')
+  const [name, setName] = useState('')
+  const [found, setFound] = useState<{ id?: number; label: string; lat: number; lon: number; price?: number }[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const update = (next: FuelStation[]) => {
+    onChange(next)
+    // nouveau calcul du prix tout de suite
+    setTimeout(() => useFuel.getState().load(from, true), 50)
+  }
+  const search = async () => {
+    if (!from || q.trim().length < 3) return
+    setBusy(true)
+    try {
+      const st = await searchStations(q.trim(), from)
+      // sans station au relevé : une adresse, le prix sera celui des stations voisines
+      const addr = st.length ? [] : await searchAddress(q.trim(), from).catch(() => [])
+      setFound([...st.map((x) => ({ id: x.id, label: x.label, lat: x.lat, lon: x.lon, price: x.prices[fuel] })), ...addr.map((a) => ({ label: a.label, lat: a.lat, lon: a.lon }))])
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const add = (f: { id?: number; label: string; lat: number; lon: number }) => {
+    update([...list, { id: f.id, label: name.trim() || f.label, address: f.label, lat: f.lat, lon: f.lon, main: !list.length || undefined }])
+    setAdding(false)
+    setQ('')
+    setName('')
+    setFound(null)
+  }
+  const priceOf = (i: number) => prices?.stations?.[i]?.prices[fuel]
+  return (
+    <div className="fuel-stations">
+      {list.map((s, i) => (
+        <span key={`${s.id ?? s.label}-${i}`} className={`fuel-st${s.main ? ' main' : ''}`} title={[s.address, s.main ? 'Station principale' : 'De temps en temps', prices?.stations?.[i]?.estimated ? 'pas de relevé : prix des stations voisines' : ''].filter(Boolean).join(' · ')}>
+          <button className="fuel-star" onClick={() => update(list.map((x, j) => ({ ...x, main: j === i ? !x.main || undefined : x.main })))} title={s.main ? 'Station principale' : 'Faire de cette station la principale'}>
+            <Star size={13} />
+          </button>
+          {s.label}
+          {priceOf(i) !== undefined && <strong>{eur(priceOf(i)!)} €{prices?.stations?.[i]?.estimated ? ' ≈' : ''}</strong>}
+          <button onClick={() => update(list.filter((_, j) => j !== i))} title="Retirer">
+            <X size={12} />
+          </button>
+        </span>
+      ))}
+      {!adding ? (
+        <button className="btn sm ghost" onClick={() => setAdding(true)} disabled={!from} title={from ? undefined : "Indiquez d'abord l'adresse de départ"}>
+          <FuelIcon size={13} /> {list.length ? 'Ajouter une station' : 'Mes stations habituelles'}
+        </button>
+      ) : (
+        <div className="fuel-add">
+          <div className="row-gap">
+            <input className="input" autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder="Rue ou commune de la station" />
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom affiché (ex. Intermarché)" />
+            <button className="btn sm" onClick={search} disabled={busy || q.trim().length < 3}>
+              {busy ? 'Recherche…' : 'Chercher'}
+            </button>
+            <button className="btn sm ghost" onClick={() => setAdding(false)}>
+              Annuler
+            </button>
+          </div>
+          {found && (
+            <div className="fuel-found">
+              {!found.length && <span className="small muted">Aucune station ni adresse trouvée.</span>}
+              {found.map((f) => (
+                <button key={`${f.id ?? f.label}`} onClick={() => add(f)}>
+                  {f.id ? <FuelIcon size={13} /> : <MapPin size={13} />}
+                  <span>{f.label}</span>
+                  <span className="muted small">{f.id ? (f.price ? `${eur(f.price)} €` : `pas de prix ${FUEL_LABEL[fuel]}`) : 'pas de relevé : prix des stations voisines'}</span>
+                  <Plus size={13} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const kEur = (n: number) => `${(Math.round(n / 100) / 10).toLocaleString('fr-FR')} k€`
@@ -157,9 +246,12 @@ function CommuteModal({ initial, onClose }: { initial?: string; onClose: () => v
                 <Segmented value={fuel} onChange={(f) => setP({ fuel: f })} options={(Object.keys(FUEL_LABEL) as Fuel[]).map((f) => ({ value: f, label: FUEL_LABEL[f] }))} />
                 <span className="small muted">
                   {price && prices
-                    ? `${price.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € / L : prix moyen des ${prices.n} stations à moins de 20 km${prices.maj ? `, relevé le ${new Date(prices.maj).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''} (prix-carburants.gouv.fr)`
+                    ? prices.stations?.length
+                      ? `${eur(price)} € / L : prix de vos stations habituelles${prices.stations.length > 1 ? ' (la principale compte trois fois plus)' : ''}${prices.maj ? `, relevé le ${new Date(prices.maj).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''}`
+                      : `${eur(price)} € / L : prix moyen des ${prices.n} stations à moins de 20 km${prices.maj ? `, relevé le ${new Date(prices.maj).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''} (prix-carburants.gouv.fr)`
                     : 'Prix du jour indisponible : estimation à 2 € / L'}
                 </span>
+                <FuelStations profile={profile} fuel={fuel} prices={prices} onChange={(fuelStations) => setP({ fuelStations })} />
               </div>
               <div className="calc-more">
                 <label>

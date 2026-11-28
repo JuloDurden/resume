@@ -5396,6 +5396,22 @@ button.followup-badge {
 }
 
 
+/* ---------- stations habituelles (trajet) ---------- */
+.fuel-stations { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.fuel-st { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 4px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; }
+.fuel-st strong { font-variant-numeric: tabular-nums; }
+.fuel-st button { border: 0; background: transparent; padding: 0; display: grid; place-items: center; color: var(--ink-3); cursor: pointer; }
+.fuel-st.main { border-color: var(--brand-2); }
+.fuel-st.main .fuel-star { color: var(--brand-2); }
+.fuel-st.main .fuel-star svg { fill: currentColor; }
+.fuel-add { flex-basis: 100%; display: grid; gap: 6px; }
+.fuel-add .row-gap { display: flex; gap: 6px; flex-wrap: wrap; }
+.fuel-add .input { flex: 1; min-width: 160px; }
+.fuel-found { display: grid; gap: 4px; }
+.fuel-found button { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; font: inherit; font-size: 13px; color: inherit; text-align: left; cursor: pointer; }
+.fuel-found button:hover { border-color: var(--brand-2); }
+.fuel-found button > span:nth-of-type(1) { flex: 1; }
+
 /* ---------- largeur des pages ---------- */
 :root[data-width='wide'] .dashboard { max-width: 1600px; }
 :root[data-width='full'] .dashboard { max-width: none; }
